@@ -1,9 +1,19 @@
-// ABEL BOT v2.7 - FULL SCRIPT - FINAL - 3 EXCHANGE: Bybit + OKX + Gate.io
-// ALASAN: Binance ke-block 418 di Render, MEXC error 400, diganti Gate.io - UDAH TERBUKTI LIVE
+// ABEL BOT v2.8 - REVISI CORS FIX - FINAL - 3 EXCHANGE: Bybit + OKX + Gate.io
+// FIX: Vercel OFFLINE karena CORS blocked - UDAH DITAMBAHIN
 // Pair: XAUT = XAUUSD | Konfirmasi 2/3 | Entry Tembok Terdekat +3 | SL -3 | Emergency -6 | TP1/TP2 | Partial 50/50 | Re-Entry A | Warm-up 30m
 const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 10000;
+
+// === FIX CORS - INI YANG BIKIN VERCEL OFFLINE TADI ===
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+app.use(express.json());
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
@@ -129,7 +139,8 @@ function buildSignal(){
 setInterval(fetchOrderbook, 2000);
 fetchOrderbook();
 
-app.get('/', (req,res)=> res.send('ABEL BOT v2.7 FINAL Bybit+OKX+Gate jalan!'));
+app.get('/', (req,res)=> res.send('ABEL BOT v2.8 CORS FIX - Bybit+OKX+Gate jalan!'));
+app.get('/api/health', (req,res)=> res.json({ status: 'ok', uptime_menit: Math.floor((Date.now()-startTime)/60000) }));
 app.get('/api/signal', (req,res)=>{
   const s = buildSignal();
   const uptime_menit = Math.floor((Date.now()-startTime)/60000);
