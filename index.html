@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ABEL BOT v3.2 - XAUUSD</title>
+<title>ABEL BOT v3.3 - XAUUSD</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
 body{background:#0a0a0a;color:#fff;padding:12px;max-width:520px;margin:auto}
@@ -29,7 +29,7 @@ button{width:100%;padding:12px;background:#222;border:1px solid #444;color:#fff;
 </style>
 </head>
 <body>
-<h1>ABEL BOT v3.2 🔥 LOCK + SELISIH</h1>
+<h1>ABEL BOT v3.3 🔥 LOCK + SELISIH FIX</h1>
 
 <div class="card">
 <div class="label" style="text-align:center">HARGA REALTIME</div>
@@ -87,7 +87,7 @@ async function load(){
     document.getElementById('xauusd').textContent = d.harga?.xauusd_goldprice ?? '-';
     document.getElementById('selisih').textContent = (d.harga?.selisih>=0?'+':'') + (d.harga?.selisih ?? 0);
     document.getElementById('selisihText').textContent = d.harga?.selisih_text || '';
-    document.getElementById('lastGold').textContent = 'Update emas: ' + (d.harga?.last_gold_update ? new Date(d.harga.last_gold_update).toLocaleTimeString('id-ID') : '-');
+    document.getElementById('lastGold').textContent = 'Sumber: ' + (d.harga?.source || '-') + ' | Update emas: ' + (d.harga?.last_gold_update ? new Date(d.harga.last_gold_update).toLocaleTimeString('id-ID') : '-');
     const sig = document.getElementById('signal');
     sig.textContent = d.signal || '-';
     sig.className = 'big ' + (d.signal==='BUY'?'buy':d.signal==='SELL'?'sell':d.signal==='DONE'?'done':'wait');
@@ -108,7 +108,6 @@ async function load(){
     document.getElementById('ex').textContent = `BYB:${d.exchanges?.bybit?'OK':'X'} OKX:${d.exchanges?.okx?'OK':'X'} GATE:${d.exchanges?.gate?'OK':'X'}`;
     document.getElementById('lastUpdate').textContent = d.last_update ? new Date(d.last_update).toLocaleTimeString('id-ID') : '-';
     document.getElementById('uptime').textContent = `Uptime: ${d.uptime_menit}/30 menit | Auto-refresh tiap 5 detik • Jangan trade kalau masih PEMANASAN`;
-    // LEVEL ORDERBOOK - DENGAN HARGA MT5 DI SEBELAHNYA
     const wallsHtml = (d.walls||[]).map(w=>{
       const isBid = w.side==='BID';
       const ageTxt = `${w.age_menit||0}m ${w.age_detik ? (w.age_detik%60) : 0}s`;
