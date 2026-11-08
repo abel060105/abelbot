@@ -1,87 +1,129 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ABEL FX ORDERBOOK</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ABEL BOT v3.2 - XAUUSD</title>
 <style>
-  *{box-sizing:border-box} body{margin:0;background:#0a0e14;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px}
-  .top{display:flex;justify-content:space-between;align-items:center}
-  h1{font-size:22px;margin:0} h1 span{color:#00e676}
-  .pill{padding:6px 12px;border-radius:999px;font-weight:700;font-size:12px;background:#1c2530}
-  .pill.on{background:#00c853} .pill.warm{background:#ffab00;color:#000}
-  .card{background:#121a24;border:1px solid #223044;border-radius:16px;padding:16px;margin-top:14px}
-  .sig{font-size:44px;font-weight:900;letter-spacing:1px}
-  .sig.BUY{color:#00e676} .sig.SELL{color:#ff5252} .sig.WAIT{color:#ffca28}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-  .box{background:#0d131c;border:1px solid #223044;border-radius:12px;padding:12px}
-  .box small{color:#8fa3b8} .box b{font-size:18px;display:block;margin-top:4px}
-  .wall{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e2a38;font-size:14px}
-  .wall:last-child{border:0}
-  .bid{color:#00e676} .ask{color:#ff5252}
-  .btn{display:block;text-align:center;background:#00e676;color:#000;font-weight:800;padding:12px;border-radius:12px;text-decoration:none;margin-top:14px}
-  .muted{color:#8fa3b8;font-size:12px;margin-top:10px;text-align:center}
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
+body{background:#0a0a0a;color:#fff;padding:12px;max-width:520px;margin:auto}
+.card{background:#151515;border:1px solid #222;border-radius:14px;padding:14px;margin-bottom:10px}
+h1{font-size:18px;text-align:center;margin-bottom:10px}
+.big{font-size:32px;font-weight:800;text-align:center}
+.buy{color:#00ff88}.sell{color:#ff4444}.wait{color:#ffcc00}.done{color:#00ccff}
+.row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #222;font-size:14px;gap:8px}
+.row b{color:#fff;text-align:right}
+.label{color:#888;font-size:12px}
+.priceBox{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center}
+.priceBox div{background:#1c1c1c;border-radius:10px;padding:10px}
+.priceBox .v{font-size:18px;font-weight:800}
+.selisih{background:#1a2a1a!important;border:1px solid #00ff88!important}
+button{width:100%;padding:12px;background:#222;border:1px solid #444;color:#fff;border-radius:10px;font-weight:700;margin-top:8px;cursor:pointer}
+.small{font-size:11px;color:#888;text-align:center;margin-top:6px}
+.levelRow{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #222;font-size:14px}
+.levelLeft{font-weight:700}
+.levelRight{text-align:right}
+.mt5{color:#ffd700;font-weight:700;font-size:13px}
+.xautSub{color:#888;font-size:11px}
+.bidC{color:#00ff88}.askC{color:#ff4444}
+.badge{font-size:11px;padding:2px 6px;border-radius:6px;background:#222}
 </style>
 </head>
 <body>
-<div class="top"><h1>ABEL <span>FX ORDERBOOK</span></h1><div id="status" class="pill">CONNECTING...</div></div>
-<p style="color:#8fa3b8;margin:6px 0 0">XAUUSD • Orderbook Wall • Bybit + OKX + Gate.io</p>
+<h1>ABEL BOT v3.2 🔥 LOCK + SELISIH</h1>
 
 <div class="card">
-  <small style="color:#8fa3b8">SINYAL SAAT INI</small>
-  <div id="signal" class="sig WAIT">WAIT</div>
-  <div id="reason" style="color:#cbd5e1;font-size:14px">Memuat...</div>
-  <div class="grid">
-    <div class="box"><small>ENTRY</small><b id="entry">-</b></div>
-    <div class="box"><small>STOP LOSS</small><b id="sl">-</b></div>
-    <div class="box"><small>TP 1 (50%)</small><b id="tp1">-</b></div>
-    <div class="box"><small>TP 2</small><b id="tp2">-</b></div>
-  </div>
+<div class="label" style="text-align:center">HARGA REALTIME</div>
+<div class="priceBox">
+<div><div class="label">XAUT (Crypto)</div><div class="v" id="xaut">-</div></div>
+<div><div class="label">XAUUSD (MT5)</div><div class="v" id="xauusd" style="color:#ffd700">-</div></div>
+<div class="selisih"><div class="label">SELISIH</div><div class="v" id="selisih">-</div><div class="label" id="selisihText">-</div></div>
+</div>
+<div class="small" id="lastGold">-</div>
 </div>
 
 <div class="card">
-  <b>🧱 Tembok Terdekat</b>
-  <div id="walls" style="margin-top:8px">Memuat tembok...</div>
+<div class="label">SINYAL SAAT INI</div>
+<div id="signal" class="big wait">-</div>
+<div class="small" id="reason">-</div>
+<div class="row"><span>LOCK</span><b id="lock">-</b></div>
+<div class="row"><span>Hasil Terakhir</span><b id="lastDone">-</b></div>
+<div class="row"><span>ENTRY MT5</span><b id="entryMt5" style="color:#00ff88">-</b></div>
+<div class="row"><span>STOP LOSS MT5</span><b id="slMt5" style="color:#ff4444">-</b></div>
+<div class="row"><span>Emergency SL MT5</span><b id="emMt5">-</b></div>
+<div class="row"><span>TP 1 (50%) MT5</span><b id="tp1Mt5" style="color:#00ff88">-</b></div>
+<div class="row"><span>TP 2 MT5</span><b id="tp2Mt5">-</b></div>
 </div>
 
 <div class="card">
-  <div style="display:flex;justify-content:space-between;font-size:13px"><span>Supabase</span><b id="supa">-</b></div>
-  <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:8px"><span>Bybit / OKX / Gate</span><b id="ex">-</b></div>
-  <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:8px"><span>Last Update</span><b id="upd">-</b></div>
+<div class="label" style="text-align:center;margin-bottom:6px">VERSI XAUT (BUAT CEK SAJA)</div>
+<div class="row"><span>Entry XAUT</span><b id="entry">-</b></div>
+<div class="row"><span>SL XAUT</span><b id="sl">-</b></div>
+<div class="row"><span>TP1 XAUT</span><b id="tp1">-</b></div>
+<div class="row"><span>TP2 XAUT</span><b id="tp2">-</b></div>
 </div>
 
-<a class="btn" href="https://abelbot.onrender.com/api/signal" target="_blank">LIHAT JSON MENTAH</a>
-<div class="muted">Auto-refresh tiap 5 detik • Jangan trade kalau masih PEMANASAN</div>
+<div class="card">
+<div style="display:flex;justify-content:space-between;align-items:center"><b>📊 Level Orderbook</b><span class="label">Kiri: XAUT | Kanan: MT5</span></div>
+<div id="walls" style="margin-top:8px">-</div>
+<div class="small">Level yang ✅ STABIL = umur >= 3 menit. Yang ⏳ BARU jangan dipake entry.</div>
+</div>
+
+<div class="card">
+<div class="row"><span>Supabase</span><b id="supabase">-</b></div>
+<div class="row"><span>Bybit / OKX / Gate</span><b id="ex">-</b></div>
+<div class="row"><span>Last Update</span><b id="lastUpdate">-</b></div>
+</div>
+
+<button onclick="unlock()">🔓 UNLOCK DARURAT (Kalau gak jadi entry)</button>
+<div class="small" id="uptime">Auto-refresh tiap 5 detik • Jangan trade kalau masih PEMANASAN</div>
 
 <script>
-const API = "https://abelbot.onrender.com/api/signal";
+const RENDER_URL = "https://abelbot-xxxx.onrender.com"; // <-- GANTI PAKE URL RENDER LO
 async function load(){
   try{
-    const r = await fetch(API);
+    const r = await fetch(RENDER_URL + "/api/signal");
     const d = await r.json();
-    const s = d.signal || "WAIT";
-    document.getElementById("signal").textContent = s;
-    document.getElementById("signal").className = "sig " + s;
-    document.getElementById("reason").textContent = d.reason || "-";
-    document.getElementById("entry").textContent = d.entry ?? "-";
-    document.getElementById("sl").textContent = d.sl ?? "-";
-    document.getElementById("tp1").textContent = d.tp1 ?? "-";
-    document.getElementById("tp2").textContent = d.tp2 ?? "-";
-    document.getElementById("supa").textContent = d.supabase || "-";
-    const ex = d.exchanges || {};
-    document.getElementById("ex").textContent = (ex.bybit?"BYB:OK ":"BYB:X ") + (ex.okx?"OKX:OK ":"OKX:X ") + (ex.gate?"GATE:OK":"GATE:X");
-    document.getElementById("upd").textContent = new Date().toLocaleTimeString("id-ID");
-    const isWarm = (d.reason||"").includes("PEMANASAN");
-    const st = document.getElementById("status");
-    st.textContent = isWarm ? "PEMANASAN" : "NYALA • LIVE";
-    st.className = "pill " + (isWarm ? "warm" : "on");
-    const walls = d.walls || [];
-    document.getElementById("walls").innerHTML = walls.length ? walls.slice(0,8).map(w=>`<div class="wall"><span class="${w.side==="BID"?"bid":"ask"}">${w.side} ${w.price}</span><span>${w.size} XAUT • ${w.exchanges||""}</span></div>`).join("") : "Belum ada tembok valid";
-  }catch(e){
-    document.getElementById("status").textContent = "OFFLINE / TIDUR";
-    document.getElementById("reason").textContent = "Gagal nyambung ke Render. Tunggu 30 detik, UptimeRobot lagi bangunin.";
-  }
+    document.getElementById('xaut').textContent = d.harga?.xaut_mid ?? '-';
+    document.getElementById('xauusd').textContent = d.harga?.xauusd_goldprice ?? '-';
+    document.getElementById('selisih').textContent = (d.harga?.selisih>=0?'+':'') + (d.harga?.selisih ?? 0);
+    document.getElementById('selisihText').textContent = d.harga?.selisih_text || '';
+    document.getElementById('lastGold').textContent = 'Update emas: ' + (d.harga?.last_gold_update ? new Date(d.harga.last_gold_update).toLocaleTimeString('id-ID') : '-');
+    const sig = document.getElementById('signal');
+    sig.textContent = d.signal || '-';
+    sig.className = 'big ' + (d.signal==='BUY'?'buy':d.signal==='SELL'?'sell':d.signal==='DONE'?'done':'wait');
+    document.getElementById('reason').textContent = d.reason || '';
+    document.getElementById('lock').textContent = d.is_locked ? '🔒 LOCKED - ' + (d.lock_status||'') : (d.signal==='DONE' ? '✅ AUTO UNLOCK - ' + (d.last_result||'') : '🔓 BELUM LOCK');
+    document.getElementById('lastDone').textContent = d.last_done ? (d.last_done.last_result + ' - ' + d.last_done.signal) : (d.last_result || '-');
+    const fmt = v => v ? Number(v).toFixed(2) : '0';
+    document.getElementById('entryMt5').textContent = fmt(d.entry_mt5);
+    document.getElementById('slMt5').textContent = fmt(d.sl_mt5);
+    document.getElementById('emMt5').textContent = fmt(d.emergency_sl_mt5);
+    document.getElementById('tp1Mt5').textContent = fmt(d.tp1_mt5);
+    document.getElementById('tp2Mt5').textContent = fmt(d.tp2_mt5);
+    document.getElementById('entry').textContent = fmt(d.entry);
+    document.getElementById('sl').textContent = fmt(d.sl);
+    document.getElementById('tp1').textContent = fmt(d.tp1);
+    document.getElementById('tp2').textContent = fmt(d.tp2);
+    document.getElementById('supabase').textContent = d.supabase || '-';
+    document.getElementById('ex').textContent = `BYB:${d.exchanges?.bybit?'OK':'X'} OKX:${d.exchanges?.okx?'OK':'X'} GATE:${d.exchanges?.gate?'OK':'X'}`;
+    document.getElementById('lastUpdate').textContent = d.last_update ? new Date(d.last_update).toLocaleTimeString('id-ID') : '-';
+    document.getElementById('uptime').textContent = `Uptime: ${d.uptime_menit}/30 menit | Auto-refresh tiap 5 detik • Jangan trade kalau masih PEMANASAN`;
+    // LEVEL ORDERBOOK - DENGAN HARGA MT5 DI SEBELAHNYA
+    const wallsHtml = (d.walls||[]).map(w=>{
+      const isBid = w.side==='BID';
+      const ageTxt = `${w.age_menit||0}m ${w.age_detik ? (w.age_detik%60) : 0}s`;
+      const stabil = (w.age_menit||0) >= 3 ? '✅ STABIL' : '⏳ BARU';
+      const mt5 = w.price_mt5 != null ? Number(w.price_mt5).toFixed(2) : '-';
+      const xautP = w.price != null ? Number(w.price).toFixed(2) : '-';
+      return `<div class="levelRow">
+        <div class="levelLeft ${isBid?'bidC':'askC'}">${w.side} ${xautP} <span class="badge">${stabil} ${ageTxt}</span></div>
+        <div class="levelRight"><div class="mt5">MT5 ${mt5}</div><div class="xautSub">${Number(w.size).toFixed(4)} XAUT • ${w.score}x • ${w.sources||''}</div></div>
+      </div>`;
+    }).join('') || 'Belum ada level';
+    document.getElementById('walls').innerHTML = wallsHtml;
+  }catch(e){ document.getElementById('signal').textContent = 'OFFLINE'; }
 }
+async function unlock(){ await fetch(RENDER_URL + "/api/unlock"); load(); }
 load(); setInterval(load, 5000);
 </script>
 </body>
