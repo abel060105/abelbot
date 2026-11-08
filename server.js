@@ -1,4 +1,4 @@
-// ABEL BOT v2 - + Supabase Memory
+// ABEL BOT v2.1 - FULL SCRIPT - + Supabase + Fix Binance Block
 const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -33,16 +33,22 @@ async function saveToSupabase(wall){
 
 async function fetchOrderbook(){
   try{
-    const res = await fetch('https://api.binance.com/api/v3/depth?symbol=BTCUSDT&limit=100');
+    // Pake binance.us biar gak di-block Render
+    const res = await fetch('https://api.binance.us/api/v3/depth?symbol=BTCUSDT&limit=100');
     const data = await res.json();
+
+    // PENGAMAN - kalau data kosong, jangan crash
+    if(!data.bids || !data.asks){
+      console.log('Binance kosong, skip dulu. Res:', JSON.stringify(data).slice(0,200));
+      return;
+    }
+
     const bids = data.bids.map(b=>({price: parseFloat(b[0]), size: parseFloat(b[1]), side:'BID'}));
     const asks = data.asks.map(a=>({price: parseFloat(a[0]), size: parseFloat(a[1]), side:'ASK'}));
     const all = [...bids, ...asks];
-    // Cari tembok PAUS: size > 10 BTC
     const bigWalls = all.filter(w=>w.size > 10).map(w=>({...w, score: Math.floor(w.size)}));
     walls = bigWalls;
     lastFetch = Date.now();
-    // Simpen tembok gede ke Supabase
     for(let w of bigWalls.slice(0,3)){
       await saveToSupabase(w);
     }
@@ -53,7 +59,7 @@ async function fetchOrderbook(){
 setInterval(fetchOrderbook, 30000);
 fetchOrderbook();
 
-app.get('/', (req,res)=> res.send('ABEL BOT v2 + Supabase jalan!'));
+app.get('/', (req,res)=> res.send('ABEL BOT v2.1 + Supabase jalan!'));
 app.get('/api/signal', (req,res)=>{
   const uptime_menit = Math.floor((Date.now()-startTime)/60000);
   let signal = 'WAIT';
