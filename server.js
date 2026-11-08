@@ -1,5 +1,7 @@
-// ABEL BOT v3.3 - LOCK AUTO-UNLOCK + SELISIH FIX 3 SUMBER + LEVEL ORDERBOOK - FINAL
+// ABEL FX ORDERBOOK v3.4 - FULL DEPTH + NO LIMIT JARAK
+// Base: ABEL BOT v3.3 - LOCK AUTO-UNLOCK + SELISIH FIX 3 SUMBER + LEVEL ORDERBOOK
 // Pair: XAUT = XAUUSD | Konfirmasi 2/3 | Entry +3 | SL -3 | Emergency -6 | TP1/TP2 | Partial 50/50 | Re-Entry A | Warm-up 30m
+// UPDATE v3.4: Fetch 500/400/1000 (mentok bursa), Hapus slice(0,30), Filter SIZE doang, Grouping 4$ biar gak mepet, Tampil Whale Jauh 4000/4100
 const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -47,42 +49,15 @@ async function saveToSupabase(wall){
 // === HARGA XAUUSD - 3 SUMBER CADANGAN, ANTI BLOCK ===
 async function fetchGoldPrice(){
   const sources = [
-    {
-      name: 'gold-api.com',
-      url: 'https://api.gold-api.com/price/XAU',
-      parse: (d) => d.price ? parseFloat(d.price) : null
-    },
-    {
-      name: 'goldprice.org',
-      url: 'https://data-asg.goldprice.org/dbXRates/USD',
-      parse: (d) => {
-        const item = d.items?.[0];
-        return (item && item.curr === 'XAU' && item.ask) ? parseFloat(item.ask) : null;
-      }
-    },
-    {
-      name: 'Yahoo GC=F',
-      url: 'https://query1.finance.yahoo.com/v8/finance/chart/GC=F',
-      parse: (d) => {
-        const p = d.chart?.result?.[0]?.meta?.regularMarketPrice;
-        return p ? parseFloat(p) : null;
-      }
-    }
+    { name: 'gold-api.com', url: 'https://api.gold-api.com/price/XAU', parse: (d) => d.price ? parseFloat(d.price) : null },
+    { name: 'goldprice.org', url: 'https://data-asg.goldprice.org/dbXRates/USD', parse: (d) => { const item = d.items?.[0]; return (item && item.curr === 'XAU' && item.ask) ? parseFloat(item.ask) : null; } },
+    { name: 'Yahoo GC=F', url: 'https://query1.finance.yahoo.com/v8/finance/chart/GC=F', parse: (d) => { const p = d.chart?.result?.[0]?.meta?.regularMarketPrice; return p ? parseFloat(p) : null; } }
   ];
-
   for(let s of sources){
     try{
-      const res = await fetch(s.url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
-          'Accept': 'application/json'
-        }
-      });
+      const res = await fetch(s.url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36', 'Accept': 'application/json' } });
       const text = await res.text();
-      if(!text.trim().startsWith('{')) {
-        console.log(`Goldprice ${s.name} bukan JSON, skip`);
-        continue;
-      }
+      if(!text.trim().startsWith('{')) { console.log(`Goldprice ${s.name} bukan JSON, skip`); continue; }
       const data = JSON.parse(text);
       const price = s.parse(data);
       if(price && price > 1000 && price < 10000){
@@ -92,16 +67,16 @@ async function fetchGoldPrice(){
         lastGoldFetch = Date.now();
         return;
       }
-    }catch(e){
-      console.log(`Goldprice ${s.name} gagal:`, e.message);
-    }
+    }catch(e){ console.log(`Goldprice ${s.name} gagal:`, e.message); }
   }
   console.log('Semua sumber gold gagal, pake harga terakhir:', xauusdPrice);
 }
 
+// === FETCH FULL DEPTH - MENTOK MAKSIMAL BURSA ===
 async function fetchBybit(){
   try{
-    const res = await fetch('https://api.bybit.com/v5/market/orderbook?category=spot&symbol=XAUTUSDT&limit=100');
+    // DULU limit=100, SEKARANG 500 = MENTOK BYBIT
+    const res = await fetch('https://api.bybit.com/v5/market/orderbook?category=spot&symbol=XAUTUSDT&limit=500');
     const data = await res.json();
     if(!data.result || !data.result.b || !data.result.a) return null;
     return { bids: data.result.b.map(b=>({price: parseFloat(b[0]), size: parseFloat(b[1]), side:'BID'})), asks: data.result.a.map(a=>({price: parseFloat(a[0]), size: parseFloat(a[1]), side:'ASK'})) };
@@ -109,7 +84,8 @@ async function fetchBybit(){
 }
 async function fetchOKX(){
   try{
-    const res = await fetch('https://www.okx.com/api/v5/market/books?instId=XAUT-USDT&sz=100');
+    // DULU sz=100, SEKARANG 400 = MENTOK OKX
+    const res = await fetch('https://www.okx.com/api/v5/market/books?instId=XAUT-USDT&sz=400');
     const data = await res.json();
     if(!data.data || !data.data[0]) return null;
     const d = data.data[0];
@@ -118,7 +94,8 @@ async function fetchOKX(){
 }
 async function fetchGate(){
   try{
-    const res = await fetch('https://api.gateio.ws/api/v4/spot/order_book?currency_pair=XAUT_USDT&limit=100');
+    // DULU limit=100, SEKARANG 1000 = MENTOK GATE
+    const res = await fetch('https://api.gateio.ws/api/v4/spot/order_book?currency_pair=XAUT_USDT&limit=1000');
     const data = await res.json();
     if(!data.bids || !data.asks) return null;
     return { bids: data.bids.map(b=>({price: parseFloat(b[0]), size: parseFloat(b[1]), side:'BID'})), asks: data.asks.map(a=>({price: parseFloat(a[0]), size: parseFloat(a[1]), side:'ASK'})) };
@@ -140,8 +117,10 @@ async function fetchOrderbook(){
     if(mids.length>0) xautMid = mids.reduce((a,b)=>a+b,0)/mids.length;
     if(xauusdPrice>0) selisih = xautMid - xauusdPrice;
 
+    // === V3.4 FIX: DULU slice(0,30) - CUMA 30 TERDEKET, MAKANYA 4000/4100 GAK PERNAH MUNCUL ===
+    // SEKARANG: AMBIL SEMUA, DARI HARGA PALING RENDAH SAMPE PALING TINGGI
     let allLevels = [];
-    active.forEach(ex=>{ allLevels.push(...ex.bids.slice(0,30), ...ex.asks.slice(0,30)); });
+    active.forEach(ex=>{ allLevels.push(...ex.bids, ...ex.asks); });
     const avg = allLevels.reduce((s,w)=>s+w.size,0) / allLevels.length;
     lastAvg = avg;
 
@@ -150,22 +129,33 @@ async function fetchOrderbook(){
     [byb, okx, gate].forEach((ex, idx)=>{
       if(!ex) return;
       [...ex.bids, ...ex.asks].forEach(w=>{
+        // FILTER CUMA PAKE SIZE GEDE. GAK PAKE JARAK LAGI.
+        // Mau di 3950, 4050, 4100, kalau gede ya MASUK.
         if(w.size > avg * 2.5) candidates.push({...w, source: exNames[idx]});
       });
     });
 
     let confirmed = [];
     candidates.forEach(c=>{
-      const others = candidates.filter(o=> o.side===c.side && o.source!==c.source && Math.abs(o.price - c.price) <= 1.0);
+      // V3.4 FIX: DULU <=1.0 bikin level mepet-mepet 4057, 4055, 4054
+      // SEKARANG <4, yang jaraknya <4$ digabung jadi 1 tembok paling gede
+      const others = candidates.filter(o=> o.side===c.side && o.source!==c.source && Math.abs(o.price - c.price) < 4);
       const uniqueSources = new Set([c.source, ...others.map(o=>o.source)]);
       if(uniqueSources.size >= 2){
-        const exists = confirmed.find(x=> x.side===c.side && Math.abs(x.price - c.price) <= 1.0);
+        const exists = confirmed.find(x=> x.side===c.side && Math.abs(x.price - c.price) < 4);
         if(!exists){
           const totalSize = c.size + others.reduce((s,o)=>s+o.size,0);
           confirmed.push({ price: c.price, side: c.side, size: Math.floor(totalSize*10000)/10000, score: Math.floor(totalSize/avg*10)/10, sources: [...uniqueSources].join('+'), sourceCount: uniqueSources.size });
+        } else {
+          // Kalau udah ada yang mepet, gabung size-nya ke yang udah ada, ambil yang paling gede
+          if(c.size > exists.size) exists.price = c.price;
+          exists.size = Math.floor((exists.size + c.size)*10000)/10000;
         }
       }
     });
+
+    // Urutin biar rapi: BID dari tinggi ke rendah, ASK dari rendah ke tinggi
+    confirmed.sort((a,b)=> a.side==='BID' ? b.price - a.price : a.price - b.price);
 
     const now = Date.now();
     const newSeen = {};
@@ -178,6 +168,9 @@ async function fetchOrderbook(){
       w.firstSeen = first;
       w.price_mt5 = Math.floor((w.price - selisih)*100)/100;
       w.price_xaut = Math.floor(w.price*100)/100;
+      // Tandain jauh / deket buat frontend
+      w.distance = Math.abs(w.price - xautMid);
+      w.is_far = w.distance >= 20;
     });
     wallFirstSeen = newSeen;
     const stableWalls = confirmed.filter(w=> w.age_menit >= 3);
@@ -185,7 +178,7 @@ async function fetchOrderbook(){
     walls._stable = stableWalls;
     lastFetch = Date.now();
     for(let w of walls.slice(0,3)) await saveToSupabase(w);
-    console.log(`3EX [BYB:${sources.bybit?'OK':'X'} OKX:${sources.okx?'OK':'X'} GATE:${sources.gate?'OK':'X'}] Avg:${avg.toFixed(4)} | Level:${walls.length} Stabil:${stableWalls.length} | XAUT:${xautMid.toFixed(2)} XAUUSD:${xauusdPrice.toFixed(2)} (${lastGoldSource}) Selisih:${selisih.toFixed(2)} | LOCK:${lockedSignal?lockedSignal.signal:'-'}`);
+    console.log(`3EX FULL [BYB:${sources.bybit?'OK':'X'} OKX:${sources.okx?'OK':'X'} GATE:${sources.gate?'OK':'X'}] Avg:${avg.toFixed(4)} | Level:${walls.length} Stabil:${stableWalls.length} | Jauh:${walls.filter(w=>w.is_far).length} | Range:${walls.length?Math.min(...walls.map(w=>w.price)).toFixed(0)+'-'+Math.max(...walls.map(w=>w.price)).toFixed(0):'-'} | XAUT:${xautMid.toFixed(2)} XAUUSD:${xauusdPrice.toFixed(2)} (${lastGoldSource}) Selisih:${selisih.toFixed(2)} | LOCK:${lockedSignal?lockedSignal.signal:'-'}`);
   }catch(e){ console.log('Fetch gagal:', e.message); }
 }
 
@@ -282,16 +275,26 @@ setInterval(fetchGoldPrice, 5000);
 fetchOrderbook();
 fetchGoldPrice();
 
-app.get('/', (req,res)=> res.send('ABEL BOT v3.3 LOCK AUTO-UNLOCK + SELISIH FIX jalan!'));
+app.get('/', (req,res)=> res.send('ABEL FX ORDERBOOK v3.4 FULL DEPTH jalan!'));
 app.get('/api/health', (req,res)=> res.json({ status: 'ok', uptime_menit: Math.floor((Date.now()-startTime)/60000) }));
 app.get('/api/unlock', (req,res)=>{ lockedSignal = null; lockedWallGoneSince = 0; res.json({ ok:true, msg:'Lock dibatalkan manual' }); });
 app.get('/api/signal', (req,res)=>{
   const s = buildSignal();
   const uptime_menit = Math.floor((Date.now()-startTime)/60000);
-  res.json({ ...s, pair: 'XAUT = XAUUSD MT5', exchanges: lastSources, avg_xaut: lastAvg, walls: walls.slice(0,8), uptime_menit, supabase: SUPABASE_URL ? 'CONNECTED' : 'NOT SET', last_update: new Date(lastFetch).toISOString(), last_done: lastDone,
+  // Pisahin buat frontend: DEKET vs JAUH, tapi dua-duanya dari data FULL
+  const wallsNear = walls.filter(w=> !w.is_far);
+  const wallsFar = walls.filter(w=> w.is_far);
+  const allPrices = walls.map(w=>w.price);
+  res.json({ ...s, pair: 'XAUT = XAUUSD MT5', exchanges: lastSources, avg_xaut: lastAvg,
+    walls: walls.slice(0,50), // kirim 50 teratas biar gak berat, tapi tetep full di wallsFar
+    wallsNear: wallsNear.slice(0,10),
+    wallsFar: wallsFar, // INI YANG LO MAU - SEMUA WHALE JAUH, GAK DILIMIT
+    wallsFarCount: wallsFar.length,
+    range: walls.length ? { low: Math.min(...allPrices), high: Math.max(...allPrices) } : { low: 0, high: 0 },
+    uptime_menit, supabase: SUPABASE_URL ? 'CONNECTED' : 'NOT SET', last_update: new Date(lastFetch).toISOString(), last_done: lastDone,
     harga: { xaut_mid: Math.floor(xautMid*100)/100, xauusd_goldprice: Math.floor(xauusdPrice*100)/100, selisih: Math.floor(selisih*100)/100, selisih_text: selisih>=0? `XAUT +${selisih.toFixed(2)}$ lebih mahal` : `XAUT ${selisih.toFixed(2)}$ lebih murah`, last_gold_update: new Date(lastGoldFetch).toISOString(), source: lastGoldSource },
-    rules: 'V3.3: Bybit+OKX+Gate, Konfirmasi 2/3, Level Betah 3m, Lock + Auto-Unlock TP/SL, Entry +3 | SL -3 | Emergency -6 | TP1/TP2 | Partial 50/50 | Re-Entry A | Warm-up 30m | Selisih XAUT-XAUUSD 3 Sumber'
+    rules: 'V3.4: ABEL FX ORDERBOOK - Full Depth 500/400/1000, Konfirmasi 2/3, Level Betah 3m, Lock + Auto-Unlock TP/SL, Entry +3 | SL -3 | Emergency -6 | TP1/TP2 | Partial 50/50 | Re-Entry A | Warm-up 30m | Grouping 4$ | Filter SIZE doang, NO LIMIT JARAK'
   });
 });
 
-app.listen(PORT, ()=> console.log(`ABEL BOT jalan di port ${PORT}`));
+app.listen(PORT, ()=> console.log(`ABEL FX ORDERBOOK v3.4 jalan di port ${PORT}`));
