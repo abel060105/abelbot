@@ -7,13 +7,10 @@
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:#1a222e;color:#e2e8f0;font-family:Inter,Arial,sans-serif;padding:14px;max-width:520px;margin:auto}
-  /* HEADER KECIL ALA SCREENSHOT LO */
   .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
   .topbar h1{font-size:16px;letter-spacing:.5px}
   .topbar span{font-size:12px;color:#94a3b8}
   .live{font-size:11px;background:#0f172a;color:#4ade80;padding:4px 8px;border-radius:20px}
-
-  /* CARD UTAMA - SAMA KAYAK DI SCREENSHOT */
   .card{background:#232e3d;border-radius:14px;padding:16px;margin-bottom:12px}
   .label{font-size:12px;color:#94a3b8;letter-spacing:.5px;text-transform:uppercase}
   .signal{font-size:42px;font-weight:900;line-height:1;margin:6px 0 8px}
@@ -22,20 +19,14 @@
   .signal.WAIT{color:#facc15}
   .signal.DONE{color:#94a3b8}
   .reason{font-size:13px;color:#cbd5e1;line-height:1.5}
-
-  /* GRID ENTRY / SL / TP - 2x2 KOTAK DALEM, PERSIS SCREENSHOT */
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
   .mini{background:#1a222e;border-radius:10px;padding:12px}
   .mini small{font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px}
   .mini b{font-size:18px;display:block;margin-top:4px;color:#fff}
   .mini span{font-size:11px;color:#64748b}
-
-  /* HARGA ROW - SIMPLE */
   .harga{display:flex;justify-content:space-between;align-items:center;background:#232e3d;border-radius:14px;padding:14px 16px;margin-bottom:12px}
   .harga .p{font-size:24px;font-weight:800;color:#fff}
   .harga .s{font-size:12px;color:#94a3b8;line-height:1.5;text-align:right}
-
-  /* LIST TEMBOK - BERSIH, CUMA KIRI KANAN, KAYAK SCREENSHOT */
   .card h2{font-size:15px;margin-bottom:12px}
   .row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #2a3648}
   .row:last-child{border-bottom:none}
@@ -47,43 +38,33 @@
   .row .right{font-size:14px;color:#e2e8f0;text-align:right}
   .row .right small{display:block;font-size:11px;color:#64748b;margin-top:2px}
   .empty{color:#64748b;font-size:13px;text-align:center;padding:12px}
-
-  /* STATUS - KIRI KANAN, PERSIS SCREENSHOT */
   .status-row{display:flex;justify-content:space-between;font-size:13px;color:#94a3b8;padding:6px 0}
   .status-row b{color:#e2e8f0}
-
-  /* TOMBOL IJO - PERSIS SCREENSHOT */
   button{width:100%;padding:14px;border:none;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;letter-spacing:.5px}
   .btn-green{background:#00e676;color:#000;margin-top:4px}
   .btn-dark{background:#2a3648;color:#fff;margin-top:10px;font-weight:600}
   #status{text-align:center;font-size:11px;color:#64748b;margin-top:10px}
-
-  /* TABLET 768px+ : 2 KOLOM */
+  /* TABLET: 2x2 */
   @media (min-width: 768px){
     body{max-width:900px;padding:20px}
     .signal{font-size:52px}
-    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .two-col .card{margin-bottom:0}
-    .far-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .four-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .four-col .card{margin-bottom:0}
   }
-  /* LAPTOP 1024px+ : 3 KOLOM BUAT ORDERBOOK, SINYAL TETEP GEDE DI ATAS */
+  /* LAPTOP: 4 KOLOM SEJAJAR */
   @media (min-width: 1024px){
-    body{max-width:1150px;padding:24px}
-    .three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
-    .three-col .card{margin-bottom:0}
+    body{max-width:1250px;padding:24px}
+    .four-col{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px}
   }
 </style>
 </head>
 <body>
-
 <div class="topbar">
   <h1>⚡ ABEL FX ORDERBOOK</h1>
   <span id="rangeInfo">Full Depth</span>
 </div>
-
-<!-- SINYAL - PERSIS SCREENSHOT LO -->
 <div class="card" id="signalCard">
-  <div class="label">Sinyal Saat Ini <span class="live" id="liveDot">● LIVE</span></div>
+  <div class="label">Sinyal Saat Ini <span class="live">● LIVE</span></div>
   <div class="signal WAIT" id="signalText">WAIT</div>
   <div class="reason" id="signalReason">Menghubungkan ke server...</div>
   <div class="grid2">
@@ -97,25 +78,20 @@
   <div class="status-row"><span>Re-Entry A</span><b id="reentryVal">-</b></div>
   <div class="status-row"><span>Lock</span><b id="lockVal">-</b></div>
 </div>
-
-<!-- HARGA - SIMPLE -->
 <div class="harga">
-  <div>
-    <div class="label">XAUT / XAUUSD</div>
-    <div class="p" id="price">--</div>
-  </div>
-  <div class="s">
-    <div id="xauusdLine">XAUUSD: --</div>
-    <div id="selisihLine">Selisih: --</div>
-    <div id="goldSourceLine">Sumber: --</div>
-  </div>
+  <div><div class="label">XAUT / XAUUSD</div><div class="p" id="price">--</div></div>
+  <div class="s"><div id="xauusdLine">XAUUSD: --</div><div id="selisihLine">Selisih: --</div><div id="goldSourceLine">Sumber: --</div></div>
 </div>
 
-<!-- TEMBOK TERDEKAT + JAUH - 3 KOLOM DI LAPTOP -->
-<div class="three-col">
+<!-- 4 KOLOM DIPISAH TOTAL - GAK ADA LAGI YANG CAMPUR -->
+<div class="four-col">
   <div class="card">
-    <h2>🧱 Tembok Terdekat</h2>
-    <div id="nearList"><div class="empty">Loading...</div></div>
+    <h2>🟢 BID Dekat <span style="font-size:11px;color:#94a3b8">Support</span></h2>
+    <div id="bidsNear"><div class="empty">Loading...</div></div>
+  </div>
+  <div class="card">
+    <h2>🔴 ASK Dekat <span style="font-size:11px;color:#94a3b8">Resistance</span></h2>
+    <div id="asksNear"><div class="empty">Loading...</div></div>
   </div>
   <div class="card">
     <h2>🔵 BID Jauh <span style="font-size:11px;color:#94a3b8">4000 / 3900</span></h2>
@@ -127,7 +103,6 @@
   </div>
 </div>
 
-<!-- STATUS - PERSIS SCREENSHOT -->
 <div class="card" style="margin-top:12px">
   <div class="status-row"><span>Supabase</span><b id="supabaseVal">-</b></div>
   <div class="status-row"><span>Bybit / OKX / Gate</span><b id="exchangesVal">-</b></div>
@@ -135,18 +110,14 @@
   <div class="status-row"><span>Uptime</span><b id="uptimeVal">-</b></div>
   <div class="status-row"><span>Last Update</span><b id="lastUpdateVal">-</b></div>
 </div>
-
 <button class="btn-green" onclick="window.open(API_URL,'_blank')">LIHAT JSON MENTAH</button>
 <button class="btn-dark" onclick="load()">🔄 REFRESH SEKARANG</button>
 <button class="btn-dark" onclick="unlock()">🔓 BATALKAN LOCK MANUAL</button>
 <div id="status">Auto-refresh tiap 5 detik • Jangan trade kalau masih PEMANASAN</div>
-
 <script>
 const API_URL = 'https://abelbot.onrender.com/api/signal';
 const BASE_URL = API_URL.replace('/api/signal','');
-
 function fmt(n){ return n ? '$' + n.toFixed(2) : '0'; }
-
 async function load(){
   document.getElementById('status').innerText = 'Menghubungkan...';
   try{
@@ -154,12 +125,9 @@ async function load(){
     const text = await r.text();
     if(!text.trim().startsWith('{')) throw new Error('Server bales HTML, cek API_URL');
     const d = JSON.parse(text);
-
     const price = d.harga?.xaut_mid || 0;
     const xauusd = d.harga?.xauusd_goldprice || 0;
     const selisih = d.harga?.selisih || 0;
-
-    // Sinyal
     const sigEl = document.getElementById('signalText');
     sigEl.innerText = d.signal || 'WAIT';
     sigEl.className = 'signal ' + (d.signal || 'WAIT');
@@ -177,36 +145,33 @@ async function load(){
     document.getElementById('reentryVal').innerText = d.reentry ? fmt(d.reentry.entry_mt5) + ' / SL ' + fmt(d.reentry.sl_mt5) : '-';
     document.getElementById('lockVal').innerText = d.is_locked ? '🔒 ' + (d.lock_status || 'LOCKED') : 'Tidak terkunci';
     if(d.last_done) document.getElementById('lockVal').innerText = 'Last: ' + (d.last_done.last_result || '');
-
-    // Harga
     document.getElementById('price').innerText = price ? '$' + price.toFixed(2) : '--';
     document.getElementById('xauusdLine').innerText = 'XAUUSD: $' + xauusd.toFixed(2);
     document.getElementById('selisihLine').innerText = 'Selisih: ' + (selisih>=0?'+':'') + selisih.toFixed(2) + '$';
     document.getElementById('goldSourceLine').innerText = 'Sumber: ' + (d.harga?.source || '-');
     document.getElementById('rangeInfo').innerText = d.range ? 'Full $' + d.range.low.toFixed(0) + ' - $' + d.range.high.toFixed(0) : 'Full Depth';
-
-    // List - BERSIH KAYA SCREENSHOT, CUMA KIRI KANAN
-    const render = (el, arr, isFar) => {
+    const render = (el, arr, cls) => {
       if(!arr.length){ document.getElementById(el).innerHTML = '<div class="empty">Gak ada whale di area ini</div>'; return; }
       document.getElementById(el).innerHTML = arr.map(l=>{
-        let cls = l.side==='BID' ? (isFar ? 'FAR-BID' : 'BID') : (isFar ? 'FAR-ASK' : 'ASK');
         let jarak = price ? Math.abs(l.price - price).toFixed(1) + '$ dari harga' : '';
         return `<div class="row"><div class="left ${cls}">${l.side} ${l.price.toFixed(2)}</div><div class="right">${l.size.toFixed(2)} XAUT<small>${jarak} • ${l.sources||''} • ${l.age_menit||0}m</small></div></div>`;
       }).join('');
     };
-
     const wallsNear = d.wallsNear || d.walls || [];
     const wallsFar = d.wallsFar || [];
-    // Tembok Terdekat: gabung BID+ASK, urut dari yang paling deket harga
-    let near = [...wallsNear].sort((a,b)=> Math.abs(a.price-price) - Math.abs(b.price-price)).slice(0,6);
+    // === FIX: DIPISAH TOTAL, GAK DICAMPUR LAGI ===
+    // BID Dekat: cuma BID, urut dari harga tertinggi (paling deket harga) ke bawah
+    let bidsNear = wallsNear.filter(w=>w.side==='BID').sort((a,b)=>b.price-a.price).slice(0,6);
+    // ASK Dekat: cuma ASK, urut dari harga terendah (paling deket harga) ke atas
+    let asksNear = wallsNear.filter(w=>w.side==='ASK').sort((a,b)=>a.price-b.price).slice(0,6);
+    // BID Jauh: cuma BID jauh, urut dari yang paling GEDE
     let bidsFar = wallsFar.filter(w=>w.side==='BID').sort((a,b)=>b.size-a.size);
+    // ASK Jauh: cuma ASK jauh, urut dari yang paling GEDE
     let asksFar = wallsFar.filter(w=>w.side==='ASK').sort((a,b)=>b.size-a.size);
-
-    render('nearList', near, false);
-    render('bidsFar', bidsFar, true);
-    render('asksFar', asksFar, true);
-
-    // Status
+    render('bidsNear', bidsNear, 'BID');
+    render('asksNear', asksNear, 'ASK');
+    render('bidsFar', bidsFar, 'FAR-BID');
+    render('asksFar', asksFar, 'FAR-ASK');
     document.getElementById('supabaseVal').innerText = d.supabase || '-';
     document.getElementById('exchangesVal').innerText = d.exchanges ? 'BYB:' + (d.exchanges.bybit?'OK':'X') + ' OKX:' + (d.exchanges.okx?'OK':'X') + ' GATE:' + (d.exchanges.gate?'OK':'X') : '-';
     document.getElementById('totalVal').innerText = (d.walls?.length || 0) + ' level • Jauh: ' + (d.wallsFarCount || 0);
