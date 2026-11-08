@@ -31,9 +31,9 @@ async function getOrderbook() {
     }
   } catch (e) { console.log('OKX error', e.message); }
 
-  // BINANCE - SPOT
+  // BINANCE - SPOT (PAKAI data-api.binance.vision BIAR GAK KENA 418 DI RENDER)
   try {
-    const r = await axios.get('https://api.binance.com/api/v3/depth?symbol=XAUTUSDT&limit=100', { timeout: 8000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+    const r = await axios.get('https://data-api.binance.vision/api/v3/depth?symbol=XAUTUSDT&limit=100', { timeout: 8000, headers: { 'User-Agent': 'Mozilla/5.0' } });
     if (r.data.bids) {
       r.data.bids.forEach(([p, q]) => allBids.push([parseFloat(p), parseFloat(q), 'Binance']));
       r.data.asks.forEach(([p, q]) => allAsks.push([parseFloat(p), parseFloat(q), 'Binance']));
