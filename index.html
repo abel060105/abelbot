@@ -24,9 +24,13 @@
   .mini small{font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px}
   .mini b{font-size:18px;display:block;margin-top:4px;color:#fff}
   .mini span{font-size:11px;color:#64748b}
-  .harga{display:flex;justify-content:space-between;align-items:center;background:#232e3d;border-radius:14px;padding:14px 16px;margin-bottom:12px}
-  .harga .p{font-size:24px;font-weight:800;color:#fff}
-  .harga .s{font-size:12px;color:#94a3b8;line-height:1.5;text-align:right}
+  /* HARGA - SEKARANG JADI 3 KOTAK JELAS: XAUT / MT5 / SELISIH */
+  .harga-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px}
+  .harga-box{background:#232e3d;border-radius:14px;padding:14px;text-align:center}
+  .harga-box.highlight{border:2px solid #00e676}
+  .harga-box .lbl{font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px}
+  .harga-box .val{font-size:22px;font-weight:800;color:#fff;margin-top:4px}
+  .harga-box .sub{font-size:11px;color:#64748b;margin-top:2px}
   .card h2{font-size:15px;margin-bottom:12px}
   .row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #2a3648}
   .row:last-child{border-bottom:none}
@@ -35,6 +39,7 @@
   .row .left.ASK{color:#f87171}
   .row .left.FAR-BID{color:#60a5fa}
   .row .left.FAR-ASK{color:#fb923c}
+  .row .left small{display:block;font-size:11px;color:#facc15;margin-top:2px;font-weight:700}
   .row .right{font-size:14px;color:#e2e8f0;text-align:right}
   .row .right small{display:block;font-size:11px;color:#64748b;margin-top:2px}
   .empty{color:#64748b;font-size:13px;text-align:center;padding:12px}
@@ -44,17 +49,19 @@
   .btn-green{background:#00e676;color:#000;margin-top:4px}
   .btn-dark{background:#2a3648;color:#fff;margin-top:10px;font-weight:600}
   #status{text-align:center;font-size:11px;color:#64748b;margin-top:10px}
-  /* TABLET: 2x2 */
   @media (min-width: 768px){
     body{max-width:900px;padding:20px}
     .signal{font-size:52px}
     .four-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     .four-col .card{margin-bottom:0}
   }
-  /* LAPTOP: 4 KOLOM SEJAJAR */
   @media (min-width: 1024px){
     body{max-width:1250px;padding:24px}
     .four-col{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px}
+  }
+  @media (max-width: 480px){
+    .harga-grid{grid-template-columns:1fr 1fr}
+    .harga-box:last-child{grid-column:span 2}
   }
 </style>
 </head>
@@ -63,7 +70,7 @@
   <h1>⚡ ABEL FX ORDERBOOK</h1>
   <span id="rangeInfo">Full Depth</span>
 </div>
-<div class="card" id="signalCard">
+<div class="card">
   <div class="label">Sinyal Saat Ini <span class="live">● LIVE</span></div>
   <div class="signal WAIT" id="signalText">WAIT</div>
   <div class="reason" id="signalReason">Menghubungkan ke server...</div>
@@ -78,12 +85,27 @@
   <div class="status-row"><span>Re-Entry A</span><b id="reentryVal">-</b></div>
   <div class="status-row"><span>Lock</span><b id="lockVal">-</b></div>
 </div>
-<div class="harga">
-  <div><div class="label">XAUT / XAUUSD</div><div class="p" id="price">--</div></div>
-  <div class="s"><div id="xauusdLine">XAUUSD: --</div><div id="selisihLine">Selisih: --</div><div id="goldSourceLine">Sumber: --</div></div>
-</div>
 
-<!-- 4 KOLOM DIPISAH TOTAL - GAK ADA LAGI YANG CAMPUR -->
+<!-- HARGA KONVERSI - SEKARANG JELAS, 3 KOTAK -->
+<div class="harga-grid">
+  <div class="harga-box">
+    <div class="lbl">XAUT (Orderbook)</div>
+    <div class="val" id="xautPrice">--</div>
+    <div class="sub">Harga mentah Bybit/OKX/Gate</div>
+  </div>
+  <div class="harga-box highlight">
+    <div class="lbl">⭐ XAUUSD / MT5</div>
+    <div class="val" id="xauusdPrice" style="color:#00e676">--</div>
+    <div class="sub">Harga yang lo pake trading</div>
+  </div>
+  <div class="harga-box">
+    <div class="lbl">Selisih</div>
+    <div class="val" id="selisihPrice" style="font-size:18px">--</div>
+    <div class="sub" id="selisihDesc">XAUT - XAUUSD</div>
+  </div>
+</div>
+<div style="text-align:center;font-size:11px;color:#94a3b8;margin:-6px 0 12px">Rumus konversi: <b style="color:#facc15">Harga MT5 = Harga XAUT - Selisih</b> • Contoh: $4058.10 - (-13.17) = $4071.27</div>
+
 <div class="four-col">
   <div class="card">
     <h2>🟢 BID Dekat <span style="font-size:11px;color:#94a3b8">Support</span></h2>
@@ -102,13 +124,13 @@
     <div id="asksFar"><div class="empty">Loading...</div></div>
   </div>
 </div>
-
 <div class="card" style="margin-top:12px">
   <div class="status-row"><span>Supabase</span><b id="supabaseVal">-</b></div>
   <div class="status-row"><span>Bybit / OKX / Gate</span><b id="exchangesVal">-</b></div>
   <div class="status-row"><span>Total Whale Level</span><b id="totalVal">-</b></div>
   <div class="status-row"><span>Uptime</span><b id="uptimeVal">-</b></div>
   <div class="status-row"><span>Last Update</span><b id="lastUpdateVal">-</b></div>
+  <div class="status-row"><span>Sumber Gold</span><b id="goldSourceVal">-</b></div>
 </div>
 <button class="btn-green" onclick="window.open(API_URL,'_blank')">LIHAT JSON MENTAH</button>
 <button class="btn-dark" onclick="load()">🔄 REFRESH SEKARANG</button>
@@ -145,28 +167,30 @@ async function load(){
     document.getElementById('reentryVal').innerText = d.reentry ? fmt(d.reentry.entry_mt5) + ' / SL ' + fmt(d.reentry.sl_mt5) : '-';
     document.getElementById('lockVal').innerText = d.is_locked ? '🔒 ' + (d.lock_status || 'LOCKED') : 'Tidak terkunci';
     if(d.last_done) document.getElementById('lockVal').innerText = 'Last: ' + (d.last_done.last_result || '');
-    document.getElementById('price').innerText = price ? '$' + price.toFixed(2) : '--';
-    document.getElementById('xauusdLine').innerText = 'XAUUSD: $' + xauusd.toFixed(2);
-    document.getElementById('selisihLine').innerText = 'Selisih: ' + (selisih>=0?'+':'') + selisih.toFixed(2) + '$';
-    document.getElementById('goldSourceLine').innerText = 'Sumber: ' + (d.harga?.source || '-');
+
+    // === HARGA KONVERSI - 3 KOTAK JELAS ===
+    document.getElementById('xautPrice').innerText = price ? '$' + price.toFixed(2) : '--';
+    document.getElementById('xauusdPrice').innerText = xauusd ? '$' + xauusd.toFixed(2) : '--';
+    document.getElementById('selisihPrice').innerText = (selisih>=0?'+':'') + selisih.toFixed(2) + '$';
+    document.getElementById('selisihDesc').innerText = selisih < 0 ? 'XAUT lebih murah ' + Math.abs(selisih).toFixed(2) + '$ dari MT5' : 'XAUT lebih mahal ' + selisih.toFixed(2) + '$ dari MT5';
+    document.getElementById('goldSourceVal').innerText = d.harga?.source || '-';
     document.getElementById('rangeInfo').innerText = d.range ? 'Full $' + d.range.low.toFixed(0) + ' - $' + d.range.high.toFixed(0) : 'Full Depth';
+
     const render = (el, arr, cls) => {
       if(!arr.length){ document.getElementById(el).innerHTML = '<div class="empty">Gak ada whale di area ini</div>'; return; }
       document.getElementById(el).innerHTML = arr.map(l=>{
+        // === INI KUNCINYA: HARGA MT5 PER TEMBOK ===
+        // Kalau server udah ngasih price_mt5, pake itu. Kalau belum, hitung manual: XAUT - Selisih
+        let mt5 = l.price_mt5 || (l.price - selisih);
         let jarak = price ? Math.abs(l.price - price).toFixed(1) + '$ dari harga' : '';
-        return `<div class="row"><div class="left ${cls}">${l.side} ${l.price.toFixed(2)}</div><div class="right">${l.size.toFixed(2)} XAUT<small>${jarak} • ${l.sources||''} • ${l.age_menit||0}m</small></div></div>`;
+        return `<div class="row"><div class="left ${cls}">${l.side} ${l.price.toFixed(2)}<small>MT5 ${mt5.toFixed(2)}</small></div><div class="right">${l.size.toFixed(2)} XAUT<small>${jarak} • ${l.sources||''} • ${l.age_menit||0}m</small></div></div>`;
       }).join('');
     };
     const wallsNear = d.wallsNear || d.walls || [];
     const wallsFar = d.wallsFar || [];
-    // === FIX: DIPISAH TOTAL, GAK DICAMPUR LAGI ===
-    // BID Dekat: cuma BID, urut dari harga tertinggi (paling deket harga) ke bawah
     let bidsNear = wallsNear.filter(w=>w.side==='BID').sort((a,b)=>b.price-a.price).slice(0,6);
-    // ASK Dekat: cuma ASK, urut dari harga terendah (paling deket harga) ke atas
     let asksNear = wallsNear.filter(w=>w.side==='ASK').sort((a,b)=>a.price-b.price).slice(0,6);
-    // BID Jauh: cuma BID jauh, urut dari yang paling GEDE
     let bidsFar = wallsFar.filter(w=>w.side==='BID').sort((a,b)=>b.size-a.size);
-    // ASK Jauh: cuma ASK jauh, urut dari yang paling GEDE
     let asksFar = wallsFar.filter(w=>w.side==='ASK').sort((a,b)=>b.size-a.size);
     render('bidsNear', bidsNear, 'BID');
     render('asksNear', asksNear, 'ASK');
