@@ -31,15 +31,15 @@ async function getOrderbook() {
     }
   } catch (e) { console.log('OKX error', e.message); }
 
-  // MEXC - SPOT (PENGGANTI BINANCE, KARENA BINANCE BLOCK IP RENDER KENA 418)
+  // GATE.IO - SPOT (PENGGANTI MEXC / BINANCE, KARENA MEXC 400 & BINANCE 418 DI RENDER)
   try {
-    const r = await axios.get('https://api.mexc.com/api/v3/depth?symbol=XAUTUSDT&limit=100', { timeout: 8000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+    const r = await axios.get('https://api.gateio.ws/api/v4/spot/order_book?currency_pair=XAUT_USDT&limit=100', { timeout: 8000, headers: { 'User-Agent': 'Mozilla/5.0' } });
     if (r.data.bids) {
-      r.data.bids.forEach(([p, q]) => allBids.push([parseFloat(p), parseFloat(q), 'MEXC']));
-      r.data.asks.forEach(([p, q]) => allAsks.push([parseFloat(p), parseFloat(q), 'MEXC']));
-      exchangesOk.push('MEXC');
+      r.data.bids.forEach(([p, q]) => allBids.push([parseFloat(p), parseFloat(q), 'Gate']));
+      r.data.asks.forEach(([p, q]) => allAsks.push([parseFloat(p), parseFloat(q), 'Gate']));
+      exchangesOk.push('Gate');
     }
-  } catch (e) { console.log('MEXC error', e.message); }
+  } catch (e) { console.log('Gate error', e.message); }
 
   // BYBIT - SPOT
   try {
