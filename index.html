@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ABEL FX ORDERBOOK</title>
+<style>
+  *{box-sizing:border-box} body{margin:0;background:#0a0e14;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px}
+  .top{display:flex;justify-content:space-between;align-items:center}
+  h1{font-size:22px;margin:0} h1 span{color:#00e676}
+  .pill{padding:6px 12px;border-radius:999px;font-weight:700;font-size:12px;background:#1c2530}
+  .pill.on{background:#00c853} .pill.warm{background:#ffab00;color:#000}
+  .card{background:#121a24;border:1px solid #223044;border-radius:16px;padding:16px;margin-top:14px}
+  .sig{font-size:44px;font-weight:900;letter-spacing:1px}
+  .sig.BUY{color:#00e676} .sig.SELL{color:#ff5252} .sig.WAIT{color:#ffca28}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  .box{background:#0d131c;border:1px solid #223044;border-radius:12px;padding:12px}
+  .box small{color:#8fa3b8} .box b{font-size:18px;display:block;margin-top:4px}
+  .wall{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e2a38;font-size:14px}
+  .wall:last-child{border:0}
+  .bid{color:#00e676} .ask{color:#ff5252}
+  .btn{display:block;text-align:center;background:#00e676;color:#000;font-weight:800;padding:12px;border-radius:12px;text-decoration:none;margin-top:14px}
+  .muted{color:#8fa3b8;font-size:12px;margin-top:10px;text-align:center}
+</style>
+</head>
+<body>
+<div class="top"><h1>ABEL <span>FX ORDERBOOK</span></h1><div id="status" class="pill">CONNECTING...</div></div>
+<p style="color:#8fa3b8;margin:6px 0 0">XAUUSD • Orderbook Wall • Bybit + OKX + Gate.io</p>
+
+<div class="card">
+  <small style="color:#8fa3b8">SINYAL SAAT INI</small>
+  <div id="signal" class="sig WAIT">WAIT</div>
+  <div id="reason" style="color:#cbd5e1;font-size:14px">Memuat...</div>
+  <div class="grid">
+    <div class="box"><small>ENTRY</small><b id="entry">-</b></div>
+    <div class="box"><small>STOP LOSS</small><b id="sl">-</b></div>
+    <div class="box"><small>TP 1 (50%)</small><b id="tp1">-</b></div>
+    <div class="box"><small>TP 2</small><b id="tp2">-</b></div>
+  </div>
+</div>
+
+<div class="card">
+  <b>🧱 Tembok Terdekat</b>
+  <div id="walls" style="margin-top:8px">Memuat tembok...</div>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;font-size:13px"><span>Supabase</span><b id="supa">-</b></div>
+  <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:8px"><span>Bybit / OKX / Gate</span><b id="ex">-</b></div>
+  <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:8px"><span>Last Update</span><b id="upd">-</b></div>
+</div>
+
+<a class="btn" href="https://abelbot.onrender.com/api/signal" target="_blank">LIHAT JSON MENTAH</a>
+<div class="muted">Auto-refresh tiap 5 detik • Jangan trade kalau masih PEMANASAN</div>
+
+<script>
+const API = "https://abelbot.onrender.com/api/signal";
+async function load(){
+  try{
+    const r = await fetch(API);
+    const d = await r.json();
+    const s = d.signal || "WAIT";
+    document.getElementById("signal").textContent = s;
+    document.getElementById("signal").className = "sig " + s;
+    document.getElementById("reason").textContent = d.reason || "-";
+    document.getElementById("entry").textContent = d.entry ?? "-";
+    document.getElementById("sl").textContent = d.sl ?? "-";
+    document.getElementById("tp1").textContent = d.tp1 ?? "-";
+    document.getElementById("tp2").textContent = d.tp2 ?? "-";
+    document.getElementById("supa").textContent = d.supabase || "-";
+    const ex = d.exchanges || {};
+    document.getElementById("ex").textContent = (ex.bybit?"BYB:OK ":"BYB:X ") + (ex.okx?"OKX:OK ":"OKX:X ") + (ex.gate?"GATE:OK":"GATE:X");
+    document.getElementById("upd").textContent = new Date().toLocaleTimeString("id-ID");
+    const isWarm = (d.reason||"").includes("PEMANASAN");
+    const st = document.getElementById("status");
+    st.textContent = isWarm ? "PEMANASAN" : "NYALA • LIVE";
+    st.className = "pill " + (isWarm ? "warm" : "on");
+    const walls = d.walls || [];
+    document.getElementById("walls").innerHTML = walls.length ? walls.slice(0,8).map(w=>`<div class="wall"><span class="${w.side==="BID"?"bid":"ask"}">${w.side} ${w.price}</span><span>${w.size} XAUT • ${w.exchanges||""}</span></div>`).join("") : "Belum ada tembok valid";
+  }catch(e){
+    document.getElementById("status").textContent = "OFFLINE / TIDUR";
+    document.getElementById("reason").textContent = "Gagal nyambung ke Render. Tunggu 30 detik, UptimeRobot lagi bangunin.";
+  }
+}
+load(); setInterval(load, 5000);
+</script>
+</body>
+</html>
