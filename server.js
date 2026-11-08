@@ -1,4 +1,4 @@
-// ABEL BOT v3.2 - LOCK AUTO-UNLOCK + SELISIH + LEVEL ORDERBOOK - FINAL
+// ABEL BOT v3.3 - LOCK AUTO-UNLOCK + SELISIH FIX 3 SUMBER + LEVEL ORDERBOOK - FINAL
 // Pair: XAUT = XAUUSD | Konfirmasi 2/3 | Entry +3 | SL -3 | Emergency -6 | TP1/TP2 | Partial 50/50 | Re-Entry A | Warm-up 30m
 const express = require('express');
 const app = express();
@@ -26,6 +26,7 @@ let xauusdPrice = 0;
 let xautMid = 0;
 let selisih = 0;
 let lastGoldFetch = 0;
+let lastGoldSource = '-';
 
 let wallFirstSeen = {};
 let lockedSignal = null;
@@ -43,16 +44,59 @@ async function saveToSupabase(wall){
   }catch(e){ console.log('Supabase save gagal:', e.message); }
 }
 
+// === HARGA XAUUSD - 3 SUMBER CADANGAN, ANTI BLOCK ===
 async function fetchGoldPrice(){
-  try{
-    const res = await fetch('https://data-asg.goldprice.org/dbXRates/USD');
-    const data = await res.json();
-    const item = data.items?.[0];
-    if(item && item.curr === 'XAU' && item.ask){
-      xauusdPrice = parseFloat(item.ask);
-      lastGoldFetch = Date.now();
+  const sources = [
+    {
+      name: 'gold-api.com',
+      url: 'https://api.gold-api.com/price/XAU',
+      parse: (d) => d.price ? parseFloat(d.price) : null
+    },
+    {
+      name: 'goldprice.org',
+      url: 'https://data-asg.goldprice.org/dbXRates/USD',
+      parse: (d) => {
+        const item = d.items?.[0];
+        return (item && item.curr === 'XAU' && item.ask) ? parseFloat(item.ask) : null;
+      }
+    },
+    {
+      name: 'Yahoo GC=F',
+      url: 'https://query1.finance.yahoo.com/v8/finance/chart/GC=F',
+      parse: (d) => {
+        const p = d.chart?.result?.[0]?.meta?.regularMarketPrice;
+        return p ? parseFloat(p) : null;
+      }
     }
-  }catch(e){ console.log('Goldprice gagal:', e.message); }
+  ];
+
+  for(let s of sources){
+    try{
+      const res = await fetch(s.url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+          'Accept': 'application/json'
+        }
+      });
+      const text = await res.text();
+      if(!text.trim().startsWith('{')) {
+        console.log(`Goldprice ${s.name} bukan JSON, skip`);
+        continue;
+      }
+      const data = JSON.parse(text);
+      const price = s.parse(data);
+      if(price && price > 1000 && price < 10000){
+        if(xauusdPrice !== price) console.log(`GOLD OK dari ${s.name}: ${price}`);
+        xauusdPrice = price;
+        lastGoldSource = s.name;
+        lastGoldFetch = Date.now();
+        return;
+      }
+    }catch(e){
+      console.log(`Goldprice ${s.name} gagal:`, e.message);
+    }
+  }
+  console.log('Semua sumber gold gagal, pake harga terakhir:', xauusdPrice);
 }
 
 async function fetchBybit(){
@@ -132,7 +176,6 @@ async function fetchOrderbook(){
       w.age_menit = Math.floor((now - first)/60000);
       w.age_detik = Math.floor((now - first)/1000);
       w.firstSeen = first;
-      // HARGA MT5 BUAT TIAP LEVEL - UDAH DIKURANG SELISIH
       w.price_mt5 = Math.floor((w.price - selisih)*100)/100;
       w.price_xaut = Math.floor(w.price*100)/100;
     });
@@ -142,7 +185,7 @@ async function fetchOrderbook(){
     walls._stable = stableWalls;
     lastFetch = Date.now();
     for(let w of walls.slice(0,3)) await saveToSupabase(w);
-    console.log(`3EX [BYB:${sources.bybit?'OK':'X'} OKX:${sources.okx?'OK':'X'} GATE:${sources.gate?'OK':'X'}] Avg:${avg.toFixed(4)} | Level:${walls.length} Stabil:${stableWalls.length} | XAUT:${xautMid.toFixed(2)} XAUUSD:${xauusdPrice.toFixed(2)} Selisih:${selisih.toFixed(2)} | LOCK:${lockedSignal?lockedSignal.signal:'-'}`);
+    console.log(`3EX [BYB:${sources.bybit?'OK':'X'} OKX:${sources.okx?'OK':'X'} GATE:${sources.gate?'OK':'X'}] Avg:${avg.toFixed(4)} | Level:${walls.length} Stabil:${stableWalls.length} | XAUT:${xautMid.toFixed(2)} XAUUSD:${xauusdPrice.toFixed(2)} (${lastGoldSource}) Selisih:${selisih.toFixed(2)} | LOCK:${lockedSignal?lockedSignal.signal:'-'}`);
   }catch(e){ console.log('Fetch gagal:', e.message); }
 }
 
@@ -152,7 +195,6 @@ function buildSignal(){
 
   const stableWalls = walls._stable || walls;
 
-  // === LOCK + AUTO UNLOCK KALAU UDAH TP/SL ===
   if(lockedSignal){
     const cur = xauusdPrice;
     let hit = null;
@@ -240,15 +282,15 @@ setInterval(fetchGoldPrice, 5000);
 fetchOrderbook();
 fetchGoldPrice();
 
-app.get('/', (req,res)=> res.send('ABEL BOT v3.2 LOCK AUTO-UNLOCK + SELISIH jalan!'));
+app.get('/', (req,res)=> res.send('ABEL BOT v3.3 LOCK AUTO-UNLOCK + SELISIH FIX jalan!'));
 app.get('/api/health', (req,res)=> res.json({ status: 'ok', uptime_menit: Math.floor((Date.now()-startTime)/60000) }));
 app.get('/api/unlock', (req,res)=>{ lockedSignal = null; lockedWallGoneSince = 0; res.json({ ok:true, msg:'Lock dibatalkan manual' }); });
 app.get('/api/signal', (req,res)=>{
   const s = buildSignal();
   const uptime_menit = Math.floor((Date.now()-startTime)/60000);
   res.json({ ...s, pair: 'XAUT = XAUUSD MT5', exchanges: lastSources, avg_xaut: lastAvg, walls: walls.slice(0,8), uptime_menit, supabase: SUPABASE_URL ? 'CONNECTED' : 'NOT SET', last_update: new Date(lastFetch).toISOString(), last_done: lastDone,
-    harga: { xaut_mid: Math.floor(xautMid*100)/100, xauusd_goldprice: Math.floor(xauusdPrice*100)/100, selisih: Math.floor(selisih*100)/100, selisih_text: selisih>=0? `XAUT +${selisih.toFixed(2)}$ lebih mahal` : `XAUT ${selisih.toFixed(2)}$ lebih murah`, last_gold_update: new Date(lastGoldFetch).toISOString() },
-    rules: 'V3.2: Bybit+OKX+Gate, Konfirmasi 2/3, Level Betah 3m, Lock + Auto-Unlock TP/SL, Entry +3 | SL -3 | Emergency -6 | TP1/TP2 | Partial 50/50 | Re-Entry A | Warm-up 30m | Selisih XAUT-XAUUSD'
+    harga: { xaut_mid: Math.floor(xautMid*100)/100, xauusd_goldprice: Math.floor(xauusdPrice*100)/100, selisih: Math.floor(selisih*100)/100, selisih_text: selisih>=0? `XAUT +${selisih.toFixed(2)}$ lebih mahal` : `XAUT ${selisih.toFixed(2)}$ lebih murah`, last_gold_update: new Date(lastGoldFetch).toISOString(), source: lastGoldSource },
+    rules: 'V3.3: Bybit+OKX+Gate, Konfirmasi 2/3, Level Betah 3m, Lock + Auto-Unlock TP/SL, Entry +3 | SL -3 | Emergency -6 | TP1/TP2 | Partial 50/50 | Re-Entry A | Warm-up 30m | Selisih XAUT-XAUUSD 3 Sumber'
   });
 });
 
