@@ -94,7 +94,6 @@
 <button onclick="unlock()" style="background:#222;color:#fff;margin-top:8px">🔓 BATALKAN LOCK MANUAL</button>
 <div id="status"></div>
 <script>
-// UDAH GUE ISIIN LANGSUNG PAKE ALAMAT LO DARI SCREENSHOT, TINGGAL COPY, GAK USAH GANTI LAGI
 const API_URL = 'https://abelbot.onrender.com/api/signal';
 const BASE_URL = API_URL.replace('/api/signal','');
 async function load(){
@@ -105,7 +104,10 @@ async function load(){
     const r = await fetch(API_URL, { cache: 'no-store' });
     const text = await r.text();
     if(!text.trim().startsWith('{')) throw new Error('Server bales HTML, bukan JSON. Balasan: ' + text.slice(0,120));
-    const d = await r.json();
+    // === FIX V3.4.1: JANGAN PAKE r.json() LAGI, KARENA text UDAH DIBACA DI ATAS ===
+    // DULU: const d = await r.json(); -> ERROR body stream already read
+    // SEKARANG: parse dari text yang udah dipegang
+    const d = JSON.parse(text);
     const price = d.harga?.xaut_mid || d.price || 0;
     const xauusd = d.harga?.xauusd_goldprice || 0;
     const selisih = d.harga?.selisih || 0;
@@ -156,7 +158,7 @@ async function load(){
   } finally { btn.disabled = false; }
 }
 async function unlock(){
-  try{ const r = await fetch(BASE_URL + '/api/unlock'); const d = await r.json(); alert(d.msg || 'Lock dibatalkan'); load(); }catch(e){ alert('Gagal unlock: ' + e.message); }
+  try{ const r = await fetch(BASE_URL + '/api/unlock'); const d = JSON.parse(await r.text()); alert(d.msg || 'Lock dibatalkan'); load(); }catch(e){ alert('Gagal unlock: ' + e.message); }
 }
 load();
 setInterval(load, 5000);
