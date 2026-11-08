@@ -1,11 +1,10 @@
-// ABEL BOT v2.8 - REVISI CORS FIX - FINAL - 3 EXCHANGE: Bybit + OKX + Gate.io
-// FIX: Vercel OFFLINE karena CORS blocked - UDAH DITAMBAHIN
-// Pair: XAUT = XAUUSD | Konfirmasi 2/3 | Entry Tembok Terdekat +3 | SL -3 | Emergency -6 | TP1/TP2 | Partial 50/50 | Re-Entry A | Warm-up 30m
+// ABEL BOT v2.9 - ANTI MEPET - FINAL - 3 EXCHANGE: Bybit + OKX + Gate.io
+// FIX: CORS + Tembok min jarak 6$ + TP1 min 10$ + Score 3.5x - BIAR GAK MEPET
+// Pair: XAUT = XAUUSD | Konfirmasi 2/3 | Entry +3 | SL -4 | Emergency -7 | TP1 min 10$ | TP2 min 18$ | Partial 50/50 | Re-Entry A | Warm-up 30m
 const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// === FIX CORS - INI YANG BIKIN VERCEL OFFLINE TADI ===
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
@@ -79,16 +78,18 @@ async function fetchOrderbook(){
     [byb, okx, gate].forEach((ex, idx)=>{
       if(!ex) return;
       [...ex.bids, ...ex.asks].forEach(w=>{
-        if(w.size > avg * 2.5) candidates.push({...w, source: exNames[idx]});
+        // NAIKIN DARI 2.5 JADI 3.5 BIAR TEMBOK PALSU KE-FILTER
+        if(w.size > avg * 3.5) candidates.push({...w, source: exNames[idx]});
       });
     });
 
     let confirmed = [];
     candidates.forEach(c=>{
-      const others = candidates.filter(o=> o.side===c.side && o.source!==c.source && Math.abs(o.price - c.price) <= 1.0);
+      const others = candidates.filter(o=> o.side===c.side && o.source!==c.source && Math.abs(o.price - c.price) <= 2.0);
       const uniqueSources = new Set([c.source, ...others.map(o=>o.source)]);
       if(uniqueSources.size >= 2){
-        const exists = confirmed.find(x=> x.side===c.side && Math.abs(x.price - c.price) <= 1.0);
+        // ANTI MEPET: Tembok baru harus beda min 6$ dari tembok yang udah ada
+        const exists = confirmed.find(x=> x.side===c.side && Math.abs(x.price - c.price) <= 6.0);
         if(!exists){
           const totalSize = c.size + others.reduce((s,o)=>s+o.size,0);
           confirmed.push({ price: c.price, side: c.side, size: Math.floor(totalSize*10000)/10000, score: Math.floor(totalSize/avg*10)/10, sources: [...uniqueSources].join('+'), sourceCount: uniqueSources.size });
@@ -111,40 +112,47 @@ function buildSignal(){
   const askWalls = [...walls].filter(w=>w.side==='ASK').sort((a,b)=>a.price-b.price);
   if(bidWalls.length===0 || askWalls.length===0) return { signal:'WAIT', reason:'Tembok terkonfirmasi satu sisi doang, skip', entry:0, sl:0, emergency_sl:0, tp1:0, tp2:0, partial:'50/50', reentry:null };
   const mid = (bidWalls[0].price + askWalls[0].price) / 2;
-  const nearestBid = bidWalls.find(w=> (mid - w.price) >= 5 && (mid - w.price) <= 15) || bidWalls[0];
-  const nearestAsk = askWalls.find(w=> (w.price - mid) >= 5 && (w.price - mid) <= 15) || askWalls[0];
+  const nearestBid = bidWalls.find(w=> (mid - w.price) >= 5 && (mid - w.price) <= 20) || bidWalls[0];
+  const nearestAsk = askWalls.find(w=> (w.price - mid) >= 5 && (w.price - mid) <= 20) || askWalls[0];
+
+  // FILTER ANTI MEPET: Jarak BID ke ASK harus min 10$, kalau mepet SKIP
+  if((nearestAsk.price - nearestBid.price) < 10) return { signal:'WAIT', reason:`Jarak BID ${nearestBid.price} ke ASK ${nearestAsk.price} cuma ${(nearestAsk.price - nearestBid.price).toFixed(2)}$ - TERLALU MEPET, skip biar gak boncos`, entry:0, sl:0, emergency_sl:0, tp1:0, tp2:0, partial:'50/50', reentry:null };
+
   if(nearestBid.score >= nearestAsk.score){
     const wall = nearestBid;
     const entry = wall.price + 3;
-    const sl = wall.price - 3;
-    const emergency_sl = wall.price - 6;
+    const sl = wall.price - 4;
+    const emergency_sl = wall.price - 7;
     const tp1 = nearestAsk.price - 3;
     const tp2 = (askWalls[askWalls.length-1]?.price || nearestAsk.price) - 3;
+    // TP1 WAJIB MIN 10$ DARI ENTRY, KALAU KURANG SKIP
+    if((tp1 - entry) < 10) return { signal:'WAIT', reason:`TP1 cuma ${(tp1-entry).toFixed(2)}$ dari Entry - TERLALU MEPET, skip`, entry:0, sl:0, emergency_sl:0, tp1:0, tp2:0, partial:'50/50', reentry:null };
     const backup = bidWalls[bidWalls.length-1];
-    const reentry = backup && backup.price !== wall.price ? { entry: backup.price + 3, sl: backup.price - 3, wall: backup.price } : null;
-    return { signal:'BUY', reason:`Tembok BID ${wall.price} size ${wall.size} XAUT (${wall.score}x avg) TERKONFIRMASI [${wall.sources}] | TP1 depan ASK ${nearestAsk.price}`, entry, sl, emergency_sl, tp1, tp2, partial:'50/50 - 50% di TP1, 50% ke TP2', reentry, wall: wall.price, avg: lastAvg };
+    const reentry = backup && backup.price !== wall.price ? { entry: backup.price + 3, sl: backup.price - 4, wall: backup.price } : null;
+    return { signal:'BUY', reason:`Tembok BID ${wall.price} size ${wall.size} XAUT (${wall.score}x avg) TERKONFIRMASI [${wall.sources}] | TP1 depan ASK ${nearestAsk.price} (+${(tp1-entry).toFixed(1)}$)`, entry, sl, emergency_sl, tp1, tp2, partial:'50/50 - 50% di TP1, 50% ke TP2', reentry, wall: wall.price, avg: lastAvg };
   } else {
     const wall = nearestAsk;
     const entry = wall.price - 3;
-    const sl = wall.price + 3;
-    const emergency_sl = wall.price + 6;
+    const sl = wall.price + 4;
+    const emergency_sl = wall.price + 7;
     const tp1 = nearestBid.price + 3;
     const tp2 = (bidWalls[bidWalls.length-1]?.price || nearestBid.price) + 3;
+    if((entry - tp1) < 10) return { signal:'WAIT', reason:`TP1 cuma ${(entry-tp1).toFixed(2)}$ dari Entry - TERLALU MEPET, skip`, entry:0, sl:0, emergency_sl:0, tp1:0, tp2:0, partial:'50/50', reentry:null };
     const backup = askWalls[askWalls.length-1];
-    const reentry = backup && backup.price !== wall.price ? { entry: backup.price - 3, sl: backup.price + 3, wall: backup.price } : null;
-    return { signal:'SELL', reason:`Tembok ASK ${wall.price} size ${wall.size} XAUT (${wall.score}x avg) TERKONFIRMASI [${wall.sources}] | TP1 depan BID ${nearestBid.price}`, entry, sl, emergency_sl, tp1, tp2, partial:'50/50 - 50% di TP1, 50% ke TP2', reentry, wall: wall.price, avg: lastAvg };
+    const reentry = backup && backup.price !== wall.price ? { entry: backup.price - 3, sl: backup.price + 4, wall: backup.price } : null;
+    return { signal:'SELL', reason:`Tembok ASK ${wall.price} size ${wall.size} XAUT (${wall.score}x avg) TERKONFIRMASI [${wall.sources}] | TP1 depan BID ${nearestBid.price} (+${(entry-tp1).toFixed(1)}$)`, entry, sl, emergency_sl, tp1, tp2, partial:'50/50 - 50% di TP1, 50% ke TP2', reentry, wall: wall.price, avg: lastAvg };
   }
 }
 
 setInterval(fetchOrderbook, 2000);
 fetchOrderbook();
 
-app.get('/', (req,res)=> res.send('ABEL BOT v2.8 CORS FIX - Bybit+OKX+Gate jalan!'));
+app.get('/', (req,res)=> res.send('ABEL BOT v2.9 ANTI MEPET - Bybit+OKX+Gate jalan!'));
 app.get('/api/health', (req,res)=> res.json({ status: 'ok', uptime_menit: Math.floor((Date.now()-startTime)/60000) }));
 app.get('/api/signal', (req,res)=>{
   const s = buildSignal();
   const uptime_menit = Math.floor((Date.now()-startTime)/60000);
-  res.json({ ...s, pair: 'XAUT = XAUUSD MT5', exchanges: lastSources, avg_xaut: lastAvg, walls: walls.slice(0,8), uptime_menit, supabase: SUPABASE_URL ? 'CONNECTED' : 'NOT SET', last_update: new Date(lastFetch).toISOString(), rules: 'FINAL: Bybit+OKX+Gate.io, Konfirmasi 2/3, Entry +3 | SL -3 | Emergency -6 | TP1/TP2 | Partial 50/50 | Re-Entry A | Warm-up 30m' });
+  res.json({ ...s, pair: 'XAUT = XAUUSD MT5', exchanges: lastSources, avg_xaut: lastAvg, walls: walls.slice(0,8), uptime_menit, supabase: SUPABASE_URL ? 'CONNECTED' : 'NOT SET', last_update: new Date(lastFetch).toISOString(), rules: 'FINAL v2.9: Bybit+OKX+Gate.io, Konfirmasi 2/3, Tembok min 6$, TP1 min 10$, Entry +3 | SL -4 | Emergency -7 | TP1/TP2 | Partial 50/50 | Re-Entry A | Warm-up 30m' });
 });
 
 app.listen(PORT, ()=> console.log(`ABEL BOT jalan di port ${PORT}`));
