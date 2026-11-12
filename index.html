@@ -3,316 +3,409 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ABEL FX - XAUT Wall Hunter V7</title>
+<title>ABEL FX ORDERBOOK</title>
+<link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0f172a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ABEL FX">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="icon" type="image/png" href="/icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
-  *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Arial,sans-serif}
-  body{background:#0f172a;color:#e2e8f0;padding:12px;padding-bottom:50px}
-  .wrap{max-width:980px;margin:0 auto}
-  .top{display:flex;justify-content:space-between;align-items:center;background:#1e293b;padding:10px 14px;border-radius:10px;margin-bottom:12px;font-size:13px;flex-wrap:wrap;gap:6px}
-  .live{color:#22c55e;font-weight:700}
-  .card{background:#1e293b;border-radius:14px;padding:16px;margin-bottom:12px}
-  .card h3{font-size:14px;color:#94a3b8;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
-  .signal-title{font-size:44px;font-weight:900;line-height:1.05;word-break:break-word}
-  .buy{color:#22c55e}.sell{color:#ef4444}.wait{color:#facc15}.done{color:#38bdf8}
-  .lock{font-size:13px;color:#cbd5e1;margin-top:8px;line-height:1.5}
-  .info-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #334155;font-size:13px;gap:10px}
-  .info-row:last-child{border:none}
-  .info-row b{font-size:13px;text-align:right}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
-  .box{background:#0f172a;border-radius:10px;padding:14px;border:1px solid #334155}
-  .box small{color:#94a3b8;font-size:12px}
-  .box b{font-size:26px;display:block;margin-top:4px}
-  .box.sl{border-color:#ef4444}.box.tp1{border-color:#22c55e}.box.tp2{border-color:#0ea5e9}
-  .price-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:12px}
-  .price-box{background:#1e293b;border-radius:10px;padding:12px;text-align:center}
-  .price-box small{color:#94a3b8;font-size:11px}
-  .price-box b{font-size:20px;display:block;margin-top:4px}
-  .price-box.active{border:2px solid #22c55e}
-  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
-  th{text-align:left;color:#94a3b8;padding:7px;border-bottom:1px solid #334155;white-space:nowrap}
-  td{padding:7px;border-bottom:1px solid #1e293b;white-space:nowrap}
-  .btn{background:#0ea5e9;color:#fff;border:none;padding:11px 14px;border-radius:8px;font-weight:700;cursor:pointer;width:100%;margin-top:10px;font-size:14px}
-  .btn.red{background:#ef4444}.btn.green{background:#22c55e}.btn.ghost{background:#334155}
-  .badge{font-size:11px;background:#facc15;color:#000;padding:3px 8px;border-radius:20px;font-weight:700;white-space:nowrap}
-  .badge.green{background:#22c55e;color:#fff}.badge.red{background:#ef4444;color:#fff}.badge.gray{background:#475569;color:#fff}
-  .muted{color:#94a3b8;font-size:12px;line-height:1.5}
-  .pill{font-size:11px;padding:3px 8px;border-radius:20px;font-weight:700}
-  .pill.bid{background:#14532d;color:#bbf7d0}.pill.ask{background:#7f1d1d;color:#fecaca}
-  .flex-between{display:flex;justify-content:space-between;align-items:center;gap:10px}
-  .stat-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px}
-  .stat{background:#0f172a;border-radius:10px;padding:12px;text-align:center}
-  .stat b{font-size:20px;display:block}.stat small{color:#94a3b8;font-size:11px}
-  .alert{border:1px solid #facc15;border-radius:10px;padding:10px;font-size:12px;line-height:1.6;margin-top:12px;background:#422006}
-  .alert.green{border-color:#22c55e;background:#052e16}.alert.red{border-color:#ef4444;background:#450a0a}
-  .tabs{display:flex;gap:8px;margin-bottom:10px}
-  .tab{padding:8px 14px;border-radius:20px;background:#334155;font-size:12px;font-weight:700;cursor:pointer;border:none;color:#e2e8f0}
-  .tab.on{background:#0ea5e9;color:#fff}
-  .scroll{overflow-x:auto}
-  @media(max-width:640px){.signal-title{font-size:32px}.price-row{grid-template-columns:1fr}.grid{grid-template-columns:1fr}.stat-grid{grid-template-columns:1fr 1fr}.box b{font-size:22px}}
+  *{box-sizing:border-box}
+  body{margin:0;background:#0f172a;color:#e2e8f0;font-family:Arial,sans-serif;padding:12px}
+  .topbar{display:flex;justify-content:space-between;align-items:center;max-width:1100px;margin:0 auto 12px}
+  .topbar h1{font-size:18px;margin:0}
+  .card{background:#1a222e;border-radius:12px;padding:14px;margin:0 auto 12px;max-width:1100px}
+  .card-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .card-head h2{margin:0;font-size:15px}
+  .btn-dl{background:#0ea5e9;color:#fff;border:0;padding:6px 10px;border-radius:8px;font-size:11px;cursor:pointer;font-weight:bold}
+  .btn-dark{background:#334155;color:#fff;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:bold}
+  .btn-green{background:#16a34a;color:#fff;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:bold}
+  .btn-yellow{background:#facc15;color:#000;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:bold}
+  .btn-center{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;max-width:1100px;margin:16px auto 8px;text-align:center}
+  .btn-install{background:#facc15;color:#000;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:900;display:none}
+  .label{font-size:11px;color:#94a3b8}
+  .live{color:#00e676;border:1px solid #00e676;padding:2px 6px;border-radius:20px;font-size:10px}
+  .signal{font-size:52px;font-weight:900;line-height:1;margin:8px 0}
+  .signal.BUY{color:#00e676}.signal.SELL{color:#ff5252}.signal.WAIT{color:#facc15}.signal.DONE{color:#94a3b8}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  .mini{background:#0b1118;border-radius:10px;padding:10px}
+  .mini small{color:#94a3b8;font-size:11px}
+  .mini b{display:block;font-size:20px;margin:4px 0 2px}
+  .mini span{font-size:11px;color:#94a3b8}
+  .status-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #1e293b;font-size:13px}
+  .harga-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;max-width:1100px;margin:0 auto 12px}
+  .harga-box{background:#1a222e;border-radius:12px;padding:12px;text-align:center}
+  .harga-box.highlight{border:2px solid #00e676}
+  .harga-box .lbl{font-size:11px;color:#94a3b8}
+  .harga-box .val{font-size:22px;font-weight:900;margin:6px 0}
+  .harga-box .sub{font-size:11px;color:#94a3b8}
+  .four-col{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;max-width:1100px;margin:0 auto 12px}
+  .four-col .card{margin:0}
+  .row{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #1e293b}
+  .row .left{font-weight:900;font-size:14px;line-height:1.3}
+  .row .left small{display:block;font-size:14px;font-weight:900;color:#facc15;margin-top:2px}
+  .row .left.BID{color:#60a5fa}.row .left.ASK{color:#f87171}
+  .row .left.FAR-BID{color:#38bdf8}.row .left.FAR-ASK{color:#fb923c}
+  .row .right{text-align:right;font-size:13px;font-weight:700}
+  .row .right small{display:block;font-size:11px;color:#94a3b8;font-weight:400}
+  .empty{color:#64748b;font-size:12px;padding:10px 0}
+  .pending-split{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  .pending-col{border-radius:10px;padding:10px;background:#0b1118}
+  .pending-col.bid-col{border:2px solid #00e676}
+  .pending-col.ask-col{border:2px solid #ff5252}
+  .pending-col h3{margin:0 0 8px;font-size:13px}
+  .pending-col.bid-col h3{color:#00e676}
+  .pending-col.ask-col h3{color:#ff5252}
+  .pending-item{border-radius:10px;padding:12px;background:#1a222e;border:2px solid #1e293b;margin-bottom:10px}
+  .pending-item.buy{border-color:#00e676}
+  .pending-item.sell{border-color:#ff5252}
+  .pending-item.touched{border-color:#facc15;background:#2a2a00}
+  .pending-top{display:flex;justify-content:space-between;align-items:center}
+  .pending-top b{font-size:16px}
+  .badge{font-size:11px;font-weight:900;padding:4px 8px;border-radius:20px}
+  .badge.buy{background:#00e676;color:#000}.badge.sell{background:#ff5252;color:#fff}.badge.touched{background:#facc15;color:#000}
+  .pending-item .mt5{font-size:14px;font-weight:900;color:#facc15;margin-top:4px}
+  .pending-item .meta{font-size:11px;color:#94a3b8;margin-top:6px;line-height:1.5}
+  .jam-box{background:#0b1118;border:1px solid #facc15;border-radius:10px;padding:10px;margin-top:12px;display:flex;justify-content:space-between}
+  .jam-box b{font-size:16px;color:#facc15}
+  .hist-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
+  .hist-table th,.hist-table td{padding:8px 6px;border-bottom:1px solid #1e293b;text-align:left;vertical-align:top}
+  .hist-table th{color:#94a3b8;font-size:11px}
+  .hist-note{width:100%;background:#0b1118;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px}
+  .notif-on{color:#00e676}
+  @media(max-width:700px){.four-col{grid-template-columns:1fr 1fr}.harga-grid{grid-template-columns:1fr}.pending-split{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}.signal{font-size:38px}.hist-table{font-size:11px}}
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="topbar"><h1>⚡ ABEL FX ORDERBOOK</h1><button class="btn-yellow" id="notifBtn" onclick="enableNotif()">🔔 AKTIFKAN NOTIF</button></div>
 
-  <!-- HEADER -->
-  <div class="top">
-    <div><b>ABEL FX</b> <span class="muted">• XAUT Wall Hunter V7 MARKET</span></div>
-    <div>Total Pending <b id="totalPending">-</b> &nbsp;|&nbsp; <span id="pendingCount">-</span> pending • <span id="touchedCount">-</span> tersentuh • <span class="live">● LIVE</span> <span id="lastUpdate">-</span></div>
+<div class="card" id="pendingCard">
+  <div class="card-head">
+    <h2>📌 PENDING ORDER</h2>
+    <button class="btn-dl" onclick="downloadCard('pendingCard','pending-order')">⬇ Download Gambar</button>
   </div>
-
-  <!-- STATS -->
-  <div class="card">
-    <div class="stat-grid">
-      <div class="stat"><b id="statWalls">-</b><small>Total Tembok</small></div>
-      <div class="stat"><b id="statWallsFar">-</b><small>Tembok Jauh</small></div>
-      <div class="stat"><b id="statHistory">-</b><small>Total Sinyal</small></div>
-      <div class="stat"><b id="statUptime">-</b><small>Uptime (mnt)</small></div>
+  <div class="pending-split">
+    <div class="pending-col bid-col">
+      <h3>🟢 BID - BUY LIMIT (Support)</h3>
+      <div id="pendingBidList"><div class="empty">Loading BID...</div></div>
     </div>
-    <div class="flex-between" style="margin-top:12px;font-size:12px">
-      <div>Bybit: <span id="exBybit">-</span> • OKX: <span id="exOkx">-</span> • Binance: <span id="exBinance">-</span></div>
-      <div>Telegram: <span id="telegramStatus">-</span> • Source: <span id="goldSource">-</span></div>
+    <div class="pending-col ask-col">
+      <h3>🔴 ASK - SELL LIMIT (Resistance)</h3>
+      <div id="pendingAskList"><div class="empty">Loading ASK...</div></div>
     </div>
   </div>
-
-  <!-- SINYAL AKTIF -->
-  <div class="card">
-    <h3>🎯 SINYAL AKTIF <span class="badge">Sinyal Saat Ini <span class="live">● LIVE</span></span></h3>
-    <div id="signalTitle" class="signal-title wait">WAIT</div>
-    <div id="lockStatus" class="lock">Nunggu sinyal... Tembok betah &gt;5 menit + jarak &lt;15$ baru trigger MARKET.</div>
-
-    <div style="display:flex;justify-content:space-between;gap:10px;margin-top:12px;border:1px solid #facc15;border-radius:10px;padding:12px;font-size:12px;flex-wrap:wrap">
-      <div>🕐 Sinyal Aktif Sejak<br><b id="lockedSince" style="font-size:16px">-</b><br><span class="muted" id="lockedSinceSub">Belum ada sinyal aktif</span></div>
-      <div style="text-align:right">⏳ Udah Jalan<br><b id="runningTime" style="font-size:16px">-</b><br><span class="muted" id="runningSub">Nunggu sinyal...</span></div>
-      <div style="text-align:right">📌 State<br><b id="lockedState" style="font-size:16px">IDLE</b><br><span class="muted" id="lockedId">-</span></div>
-    </div>
-
-    <div id="stateAlert" class="alert" style="display:none"></div>
-
-    <div class="grid">
-      <div class="box"><small>Entry (MARKET - MT5)</small><b id="entry">-</b><span class="muted">Harga MT5 pas trigger</span></div>
-      <div class="box sl"><small>Stop Loss (MT5)</small><b id="sl">-</b><span class="muted">Loss -5$</span></div>
-      <div class="box tp1"><small>TP 1 (50%) (MT5)</small><b id="tp1">-</b><span class="muted">Profit +5$ • SL ke BE</span></div>
-      <div class="box tp2"><small>TP 2 (MT5)</small><b id="tp2">-</b><span class="muted">Profit +10$</span></div>
-    </div>
-
-    <div class="info-row"><span>Emergency SL (MT5)</span><b id="emergency">-</b></div>
-    <div class="info-row"><span>Partial</span><b>50/50 • TP1 tutup 50%, sisa ke TP2</b></div>
-    <div class="info-row"><span>Re-Entry A</span><b id="reentry">-</b></div>
-    <div class="info-row"><span>Re-Entry B</span><b id="reentryB">-</b></div>
-    <div class="info-row"><span>Lock Status</span><b id="lockInfo">-</b></div>
-    <div class="info-row"><span>Level TERSENTUH</span><b id="touchedInfo">-</b></div>
-    <div class="info-row"><span>Last Done</span><b id="lastDone">-</b></div>
-  </div>
-
-  <!-- HARGA LIVE -->
-  <div class="price-row">
-    <div class="price-box"><small>XAUT (Orderbook)</small><b id="xautPrice">-</b><span class="muted" id="xautSub"></span></div>
-    <div class="price-box active"><small>⭐ XAUUSD / MT5 (Gold-API)</small><b id="xauusdPrice" style="color:#22c55e">-</b><span class="muted" id="xauusdSub"></span></div>
-    <div class="price-box"><small>Selisih XAUT - MT5</small><b id="selisih">-</b><small id="selisihInfo" class="muted"></small></div>
-  </div>
-
-  <!-- RANGE -->
-  <div class="card" style="margin-top:12px">
-    <h3>📐 Range Hari Ini <span class="muted" id="rangeText">3893 - 4060</span></h3>
-    <div class="info-row"><span>Range Low (Support Kuat)</span><b id="rangeLow">-</b></div>
-    <div class="info-row"><span>Range High (Resistance Kuat)</span><b id="rangeHigh">-</b></div>
-    <div class="info-row"><span>Posisi Harga di Range</span><b id="rangePos">-</b></div>
-  </div>
-
-  <!-- TABS TEMBOK -->
-  <div class="card">
-    <h3>🧱 Tembok XAUT <span class="muted">Betah &gt;5 menit = valid</span></h3>
-    <div class="tabs">
-      <button class="tab on" id="tabPending" onclick="switchTab('pending')">📋 Pending Orders</button>
-      <button class="tab" id="tabTouched" onclick="switchTab('touched')">👆 Tersentuh</button>
-      <button class="tab" id="tabWalls" onclick="switchTab('walls')">🧱 Semua Tembok</button>
-      <button class="tab" id="tabFar" onclick="switchTab('far')">🔭 Tembok Jauh</button>
-    </div>
-    <div id="pendingList"><p class="muted">Loading...</p></div>
-  </div>
-
-  <!-- HISTORY -->
-  <div class="card">
-    <h3>📜 Riwayat Sinyal <span><button class="tab" onclick="loadData()">🔄 Refresh</button></span></h3>
-    <div class="scroll">
-    <table>
-      <thead><tr><th>Waktu</th><th>Sinyal</th><th>Entry MT5</th><th>SL MT5</th><th>TP1</th><th>TP2</th><th>Hasil</th><th>Durasi</th></tr></thead>
-      <tbody id="historyBody"><tr><td colspan="8" class="muted">Belum ada riwayat</td></tr></tbody>
-    </table>
-    </div>
-    <button class="btn green" onclick="testTelegram()">🔔 Test Telegram</button>
-    <button class="btn" onclick="loadData()">🔄 Refresh Manual</button>
-    <button class="btn red" onclick="unlockSignal()">❌ Batalkan Sinyal Aktif (Unlock)</button>
-    <button class="btn ghost" onclick="clearHistoryLocal()">🗑️ Clear Tampilan History (Lokal)</button>
-  </div>
-
-  <!-- CARA PAKAI -->
-  <div class="card">
-    <h3>📖 Cara Pakai V7 MARKET</h3>
-    <p class="muted" style="font-size:13px;line-height:1.7">
-      1. Telegram bunyi <b style="color:#fff">🚀 TRIGGER MARKET</b> = langsung BUY/SELL MARKET di MT5 detik itu juga.<br>
-      2. Pasang SL / TP1 / TP2 sesuai angka di kotak SINYAL AKTIF. Semua angka itu <b style="color:#fff">MT5</b>, bukan XAUT.<br>
-      3. TP1 kena = tutup 50%, pindah SL sisa ke BE (entry).<br>
-      4. TP2 kena = +10$. SL kena = -5$. BE kena abis TP1 = +5$.<br>
-      5. Rekap cuma keluar kalau udah lewat MARKET dulu. Gak ada rekap palsu.<br>
-      6. Level dikunci pas sinyal muncul, gak akan berubah walaupun selisih XAUT goyang.
-    </p>
-  </div>
-
-  <p class="muted" style="text-align:center;margin-top:10px">ABEL BOT V7 MARKET - Entry / SL / TP semua MT5, dikunci pas sinyal muncul.<br>Update tiap 2 detik dari Render • <span id="apiUrl">abelbot.onrender.com</span></p>
+  <div class="status-row" style="margin-top:8px"><span>Total Pending</span><b id="pendingCount">-</b></div>
 </div>
 
+<div class="card" id="signalCard">
+  <div class="card-head">
+    <h2>🎯 SINYAL AKTIF</h2>
+    <button class="btn-dl" onclick="downloadCard('signalCard','sinyal-aktif')">⬇ Download Gambar</button>
+  </div>
+  <div class="label" style="margin-top:8px">Sinyal Saat Ini <span class="live">● LIVE</span></div>
+  <div class="signal WAIT" id="signalText">WAIT</div>
+  <div class="jam-box">
+    <div><div style="font-size:11px;color:#94a3b8">🕐 Sinyal Aktif Sejak</div><b id="jamAktif">-</b><div id="jamTanggal" style="font-size:11px;color:#94a3b8">-</div></div>
+    <div style="text-align:right"><div style="font-size:11px;color:#94a3b8">⏳ Udah Jalan</div><b id="jamTelat">-</b><div id="jamStatus" style="font-size:11px;color:#00e676">Masih fresh, gas masuk</div></div>
+  </div>
+  <div class="grid2">
+    <div class="mini"><small>Entry (Limit)</small><b id="entryVal">0</b></div>
+    <div class="mini"><small>Stop Loss</small><b id="slVal">0</b></div>
+    <div class="mini"><small>TP 1 (50%)</small><b id="tp1Val">0</b></div>
+    <div class="mini"><small>TP 2</small><b id="tp2Val">0</b></div>
+  </div>
+  <div class="status-row" style="margin-top:12px"><span>Emergency SL</span><b id="emergencyVal">-</b></div>
+  <div class="status-row"><span>Partial</span><b id="partialVal">50/50</b></div>
+  <div class="status-row"><span>Re-Entry A</span><b id="reentryVal">-</b></div>
+  <div class="status-row"><span>Lock</span><b id="lockVal">-</b></div>
+  <div class="status-row"><span>Level TERSENTUH</span><b id="touchedVal" style="color:#facc15">-</b></div>
+</div>
+
+<div class="harga-grid">
+  <div class="harga-box"><div class="lbl">XAUT (Orderbook)</div><div class="val" id="xautPrice">--</div><div class="sub">Harga mentah Bybit/OKX/Binance</div></div>
+  <div class="harga-box highlight"><div class="lbl">⭐ XAUUSD / MT5</div><div class="val" id="xauusdPrice" style="color:#00e676">--</div><div class="sub">Harga yang lo pake trading</div></div>
+  <div class="harga-box"><div class="lbl">Selisih</div><div class="val" id="selisihPrice" style="font-size:18px">--</div><div class="sub" id="selisihDesc">XAUT - XAUUSD</div></div>
+</div>
+
+<div class="four-col" id="wallsCard">
+  <div class="card"><div class="card-head"><h2>🟢 BID Dekat</h2></div><div id="bidsNear"><div class="empty">Loading...</div></div></div>
+  <div class="card"><div class="card-head"><h2>🔴 ASK Dekat</h2></div><div id="asksNear"><div class="empty">Loading...</div></div></div>
+  <div class="card"><div class="card-head"><h2>🔵 BID Jauh</h2></div><div id="bidsFar"><div class="empty">Loading...</div></div></div>
+  <div class="card"><div class="card-head"><h2>🟠 ASK Jauh</h2></div><div id="asksFar"><div class="empty">Loading...</div></div></div>
+</div>
+
+<div class="card" id="historyCard">
+  <div class="card-head">
+    <h2>📚 RIWAYAT SINYAL - JURNALING</h2>
+    <div style="display:flex;gap:6px"><button class="btn-dl" onclick="downloadCSV()">⬇ CSV</button><button class="btn-dl" onclick="downloadCard('historyCard','riwayat')">⬇ Gambar</button></div>
+  </div>
+  <div style="font-size:12px;color:#94a3b8;margin-top:6px">Server nyala terus, riwayat kesimpen sampe 100 sinyal terakhir. Tulis catatan di kolom Catatan, ke-save otomatis di HP / laptop lo.</div>
+  <div style="overflow-x:auto"><table class="hist-table"><thead><tr><th>Tanggal / Jam</th><th>Sinyal</th><th>Entry</th><th>SL / TP</th><th>Hasil</th><th>Catatan (Jurnal)</th></tr></thead><tbody id="historyBody"><tr><td colspan="6" class="empty">Belum ada riwayat...</td></tr></tbody></table></div>
+  <div class="status-row" style="margin-top:8px"><span>Winrate TP2</span><b id="winrateVal">-</b></div>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between"><h2 style="font-size:13px;margin:0">📥 Download Semua Dashboard</h2><button class="btn-dl" onclick="downloadCard('wallsCard','bid-ask')">⬇ Download BID/ASK</button></div>
+  <div class="status-row" style="margin-top:10px"><span>Supabase</span><b id="supabaseVal">-</b></div>
+  <div class="status-row"><span>Bybit / OKX / Binance</span><b id="exchangesVal">-</b></div>
+  <div class="status-row"><span>Total Whale Level</span><b id="totalVal">-</b></div>
+  <div class="status-row"><span>Uptime</span><b id="uptimeVal">-</b></div>
+  <div class="status-row"><span>Last Update</span><b id="lastUpdateVal">-</b></div>
+  <div class="status-row"><span>Sumber Gold</span><b id="goldSourceVal">-</b></div>
+</div>
+
+<div class="btn-center">
+  <button class="btn-green" onclick="window.open(API_URL,'_blank')">LIHAT JSON MENTAH</button>
+  <button class="btn-dark" onclick="load()">🔄 REFRESH SEKARANG</button>
+  <button class="btn-dark" onclick="unlock()">🔓 BATALKAN LOCK MANUAL</button>
+  <button class="btn-install" id="installBtn" onclick="installPWA()">📲 INSTALL APLIKASI</button>
+</div>
+<div id="status" style="text-align:center;font-size:11px;color:#94a3b8;margin-bottom:20px">Auto-refresh tiap 5 detik • Sinyal LIMIT, bukan market • Jangan kejar harga</div>
+
 <script>
-const API = 'https://abelbot.onrender.com';
-let lockedAtMs = 0;
-let currentTab = 'pending';
-let lastData = null;
+const API_URL = 'https://abelbot.onrender.com/api/signal';
+const BASE_URL = API_URL.replace('/api/signal','');
+function fmt(n){ return n ? '$' + n.toFixed(2) : '0'; }
+let deferredPrompt = null;
+let lastSignal = 'WAIT';
+let notifEnabled = false;
+let lastNotifId = '';
 
-function fmt(n){ if(n===undefined||n===null||n===''||isNaN(n)) return '-'; return '$' + Number(n).toFixed(2); }
-function fmtNum(n,d){ if(n===undefined||n===null||isNaN(n)) return '-'; return Number(n).toFixed(d||2); }
-function fmtTime(ms){ if(!ms) return '-'; const d=new Date(ms); return d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) + ' WIB'; }
-function fmtDate(ms){ if(!ms) return '-'; const d=new Date(ms); return d.toLocaleDateString('id-ID',{day:'2-digit',month:'short'}) + ' ' + d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}); }
-
-function switchTab(t){
-  currentTab = t;
-  ['pending','touched','walls','far'].forEach(x=> document.getElementById('tab'+x.charAt(0).toUpperCase()+x.slice(1)).classList.remove('on'));
-  document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1)).classList.add('on');
-  renderList();
-}
-function renderList(){
-  if(!lastData) return;
-  const box = document.getElementById('pendingList');
-  let list = [], title = '';
-  if(currentTab==='pending'){ list = lastData.pendingOrders || lastData.pending || []; title='Pending Orders'; }
-  if(currentTab==='touched'){ list = lastData.touchedLevels || lastData.touched || []; title='Tersentuh'; }
-  if(currentTab==='walls'){ list = lastData.walls || lastData.wallsNear || []; title='Semua Tembok'; }
-  if(currentTab==='far'){ list = lastData.wallsFar || []; title='Tembok Jauh'; }
-  if(!list.length){ box.innerHTML = '<p class="muted">Gak ada data '+title+'. Tembok harus betah >5 menit dulu baru muncul di Pending.</p>'; return; }
-  let html = '<div class="scroll"><table><thead><tr><th>Side</th><th>Harga XAUT</th><th>Harga MT5</th><th>Size XAUT</th><th>Notional</th><th>Betah</th><th>Jarak MT5</th><th>Exchange</th><th>Status</th></tr></thead><tbody>';
-  list.forEach(p=>{
-    const mt5 = p.price_mt5 || (p.price - (lastData.harga?.selisih||0));
-    html += `<tr><td><span class="pill ${p.side==='BID'?'bid':'ask'}">${p.side}</span> ${p.instruction||(p.side==='BID'?'BUY':'SELL')}</td><td>${fmt(p.price)}</td><td>${fmt(mt5)}</td><td>${fmtNum(p.size,2)}</td><td>${fmt(p.notional||p.size*p.price)}</td><td>${p.age_menit||0}m</td><td>${fmtNum(p.distance_mt5,1)}$</td><td>${p.sources||''}</td><td>${p.status||''}</td></tr>`;
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('/sw.js').then(()=> console.log('SW OK')).catch(e=> console.log('SW gagal', e));
   });
-  html += '</tbody></table></div>';
-  box.innerHTML = html;
+}
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('installBtn').style.display = 'inline-block';
+});
+window.addEventListener('appinstalled', ()=>{ document.getElementById('installBtn').style.display = 'none'; });
+async function installPWA(){
+  if(deferredPrompt){
+    deferredPrompt.prompt();
+    const r = await deferredPrompt.userChoice;
+    if(r.outcome === 'accepted') document.getElementById('installBtn').style.display = 'none';
+    deferredPrompt = null;
+  } else {
+    alert('Di Chrome HP: klik titik 3 di kanan atas > Tambahkan ke Layar Utama / Install App.\nDi Chrome Laptop: klik ikon Install di address bar (kanan).');
+  }
 }
 
-async function loadData(){
+// NOTIF
+async function enableNotif(){
+  if(!('Notification' in window)){ alert('Browser ini gak support notif'); return; }
+  const perm = await Notification.requestPermission();
+  if(perm === 'granted'){
+    notifEnabled = true;
+    localStorage.setItem('abel_notif','1');
+    document.getElementById('notifBtn').innerText = '🔔 NOTIF AKTIF ✅';
+    document.getElementById('notifBtn').classList.add('notif-on');
+    new Notification('ABEL FX - Notif Aktif', { body: 'Sinyal baru bakal bunyi + muncul notif di sini. Biarin PWA kebuka di background ya.', icon: '/icon-192.png' });
+    if(navigator.vibrate) navigator.vibrate(200);
+  } else {
+    alert('Notif ditolak. Buka Settings browser > Site Settings > Notifications > Allow buat abelbot.vercel.app');
+  }
+}
+if(localStorage.getItem('abel_notif') === '1' && 'Notification' in window && Notification.permission === 'granted'){
+  notifEnabled = true;
+  document.getElementById('notifBtn').innerText = '🔔 NOTIF AKTIF ✅';
+}
+function playBeep(){
   try{
-    const r = await fetch(API + '/api/signal');
-    const d = await r.json();
-    lastData = d;
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.value = 880; o.type = 'sine';
+    g.gain.value = 0.15;
+    o.start(); o.stop(ctx.currentTime + 0.4);
+    setTimeout(()=>{ const o2 = ctx.createOscillator(); const g2 = ctx.createGain(); o2.connect(g2); g2.connect(ctx.destination); o2.frequency.value = 880; g2.gain.value = 0.15; o2.start(); o2.stop(ctx.currentTime + 0.4); }, 500);
+  }catch(e){}
+}
+function sendNotif(title, body){
+  if(!notifEnabled) return;
+  playBeep();
+  if(navigator.vibrate) navigator.vibrate([200,100,200]);
+  if('Notification' in window && Notification.permission === 'granted'){
+    try{ new Notification(title, { body, icon: '/icon-192.png', tag: 'abel-signal', requireInteraction: true }); }catch(e){}
+  }
+  document.title = '🔔 ' + title;
+  setTimeout(()=>{ document.title = 'ABEL FX ORDERBOOK'; }, 5000);
+}
 
-    const title = document.getElementById('signalTitle');
-    title.textContent = d.signal || 'WAIT';
-    let cls = 'wait';
-    if(d.signal && d.signal.includes('BUY')) cls='buy';
-    else if(d.signal && d.signal.includes('SELL')) cls='sell';
-    else if(d.signal && d.signal.includes('DONE')) cls='done';
-    title.className = 'signal-title ' + cls;
-    document.getElementById('lockStatus').textContent = d.lock_status || d.lockStatus || 'Nunggu sinyal...';
-    document.getElementById('lockInfo').textContent = d.lock_status || '-';
-    document.getElementById('lockedState').textContent = d.lockedState || d.lock_state || 'IDLE';
-    document.getElementById('lockedId').textContent = d.lockedId ? 'ID: ' + d.lockedId : '-';
+async function downloadCard(cardId, fileName){
+  const el = document.getElementById(cardId);
+  if(!el) return;
+  try{
+    const canvas = await html2canvas(el, { backgroundColor: '#1a222e', scale: 2, useCORS: true });
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+    a.download = `abel-${fileName}-${ts}.png`;
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  }catch(e){ alert('Gagal download: ' + e.message); }
+}
 
-    // LEVEL MT5 - TANPA BARIS MT5 -
-    document.getElementById('entry').textContent = fmt(d.entry_mt5);
-    document.getElementById('sl').textContent = fmt(d.sl_mt5);
-    document.getElementById('tp1').textContent = fmt(d.tp1_mt5);
-    document.getElementById('tp2').textContent = fmt(d.tp2_mt5);
-    document.getElementById('emergency').textContent = fmt(d.emergency_sl_mt5);
-    document.getElementById('reentry').textContent = d.reentry ? fmt(d.reentry.entry_mt5) + ' / SL ' + fmt(d.reentry.sl_mt5) : '-';
-    document.getElementById('reentryB').textContent = d.reentry ? fmt(d.reentry.entry_mt5) + ' (sama kayak A di V7)' : '-';
+function getNote(id){ return localStorage.getItem('abel_note_' + id) || ''; }
+function saveNote(id, val){ localStorage.setItem('abel_note_' + id, val); }
+function downloadCSV(){
+  const rows = [['Tanggal','Jam','Sinyal','Entry_MT5','SL_MT5','TP1_MT5','TP2_MT5','Size','Hasil','Catatan']];
+  const hist = window._lastHistory || [];
+  hist.forEach(h=>{
+    const dt = new Date(h.created_at);
+    rows.push([dt.toLocaleDateString('id-ID'), dt.toLocaleTimeString('id-ID'), h.signal, h.entry_mt5, h.sl_mt5, h.tp1_mt5, h.tp2_mt5, h.size, h.result, getNote(h.id).replace(/,/g,';')]);
+  });
+  const csv = rows.map(r=> r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'abel-jurnal-' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+}
 
-    if(d.lockedAt){ lockedAtMs = d.lockedAt; document.getElementById('lockedSince').textContent = fmtTime(d.lockedAt); document.getElementById('lockedSinceSub').textContent = fmtDate(d.lockedAt); } else { lockedAtMs = 0; document.getElementById('lockedSince').textContent = '-'; document.getElementById('lockedSinceSub').textContent = 'Belum ada sinyal aktif'; }
+async function load(){
+  document.getElementById('status').innerText = 'Menghubungkan...';
+  try{
+    const r = await fetch(API_URL, { cache: 'no-store' });
+    const text = await r.text();
+    if(!text.trim().startsWith('{')) throw new Error('Server bales HTML');
+    const d = JSON.parse(text);
+    const price = d.harga?.xaut_mid || 0;
+    const xauusd = d.harga?.xauusd_goldprice || 0;
+    const selisih = d.harga?.selisih || 0;
+    const sigRaw = d.signal || 'WAIT';
+    const sigEl = document.getElementById('signalText');
+    sigEl.innerText = sigRaw;
+    let sigCls = 'WAIT';
+    if(sigRaw.includes('BUY')) sigCls = 'BUY';
+    else if(sigRaw.includes('SELL')) sigCls = 'SELL';
+    else if(sigRaw === 'DONE') sigCls = 'DONE';
+    sigEl.className = 'signal ' + sigCls;
 
-    // ALERT STATE
-    const alertBox = document.getElementById('stateAlert');
-    if(d.lockedState === 'IN_POSITION'){
-      alertBox.style.display='block'; alertBox.className='alert green'; alertBox.innerHTML='🚀 <b>POSISI AKTIF - MARKET</b> • Entry '+fmt(d.entry_mt5)+' • Jaga SL '+fmt(d.sl_mt5)+' • Target TP1 '+fmt(d.tp1_mt5);
-    } else if(d.lockedState === 'TP1_HIT'){
-      alertBox.style.display='block'; alertBox.className='alert green'; alertBox.innerHTML='🟢 <b>TP1 KENA</b> • 50% udah profit +5$ • SL sisa pindah ke BE '+fmt(d.entry_mt5)+' • Tunggu TP2 '+fmt(d.tp2_mt5);
-    } else if(d.signal && d.signal.includes('DONE')){
-      alertBox.style.display='block'; alertBox.className='alert'; alertBox.innerHTML='✅ <b>DONE</b> • Cek REKAP di Telegram & History di bawah.';
-    } else { alertBox.style.display='none'; }
-
-    // STATS & EXCHANGE
-    document.getElementById('statWalls').textContent = (d.walls||[]).length;
-    document.getElementById('statWallsFar').textContent = d.wallsFarCount || (d.wallsFar||[]).length;
-    document.getElementById('statHistory').textContent = (d.history||[]).length;
-    document.getElementById('statUptime').textContent = d.uptime_menit || '-';
-    document.getElementById('exBybit').textContent = d.exchanges?.bybit ? '🟢 ON' : '🔴 OFF';
-    document.getElementById('exOkx').textContent = d.exchanges?.okx ? '🟢 ON' : '🔴 OFF';
-    document.getElementById('exBinance').textContent = d.exchanges?.binance ? '🟢 ON' : '🔴 OFF';
-    document.getElementById('telegramStatus').textContent = d.telegram || '-';
-    document.getElementById('goldSource').textContent = d.harga?.source || '-';
-    document.getElementById('lastUpdate').textContent = d.last_update ? '• update ' + fmtTime(d.last_update) : '';
-    document.getElementById('lastDone').textContent = d.last_done?.last_result || '-';
-
-    // HARGA LIVE
-    if(d.harga){
-      document.getElementById('xautPrice').textContent = fmt(d.harga.xaut_mid);
-      document.getElementById('xauusdPrice').textContent = fmt(d.harga.xauusd_goldprice);
-      document.getElementById('selisih').textContent = (d.harga.selisih>=0?'+':'') + Number(d.harga.selisih).toFixed(2) + '$';
-      document.getElementById('selisihInfo').textContent = 'XAUT ' + (d.harga.selisih<0?'lebih murah ':'lebih mahal ') + Math.abs(d.harga.selisih).toFixed(2) + '$ dari MT5';
-      document.getElementById('xautSub').textContent = 'Orderbook mid';
-      document.getElementById('xauusdSub').textContent = 'Harga eksekusi MT5';
-    }
-    if(d.range){
-      document.getElementById('rangeLow').textContent = fmt(d.range.low);
-      document.getElementById('rangeHigh').textContent = fmt(d.range.high);
-      document.getElementById('rangeText').textContent = fmt(d.range.low) + ' - ' + fmt(d.range.high);
-      if(d.harga?.xauusd_goldprice){
-        const pct = ((d.harga.xauusd_goldprice - d.range.low)/(d.range.high-d.range.low)*100);
-        document.getElementById('rangePos').textContent = pct.toFixed(1) + '% dari Low';
+    // NOTIF: kalau sinyal berubah WAIT -> BUY LIMIT / SELL LIMIT, atau jadi DONE
+    const notifKey = sigRaw + '-' + (d.lockedId || d.lockedAt || '');
+    if(notifKey !== lastNotifId){
+      if(lastSignal === 'WAIT' && (sigRaw.includes('BUY') || sigRaw.includes('SELL'))){
+        sendNotif('🎯 ' + sigRaw + ' di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : ''), 'Pasang LIMIT di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : '') + ' | SL ' + (d.sl_mt5 ? '$' + d.sl_mt5.toFixed(2) : '') + ' | TP1 ' + (d.tp1_mt5 ? '$' + d.tp1_mt5.toFixed(2) : '') + ' | TP2 ' + (d.tp2_mt5 ? '$' + d.tp2_mt5.toFixed(2) : '') + '. Jangan market sekarang.');
+      } else if(sigRaw === 'DONE' && (lastSignal.includes('BUY') || lastSignal.includes('SELL'))){
+        sendNotif('✅ Sinyal DONE - ' + (d.last_done?.last_result || ''), 'Cek riwayat buat jurnaling.');
       }
+      lastNotifId = notifKey;
     }
+    lastSignal = sigRaw;
 
-    // COUNTS
-    const pending = d.pendingOrders || d.pending || [];
-    const touched = d.touchedLevels || d.touched || [];
-    document.getElementById('totalPending').textContent = pending.length;
-    document.getElementById('pendingCount').textContent = pending.length;
-    document.getElementById('touchedCount').textContent = touched.length;
-    document.getElementById('touchedInfo').textContent = touched.length ? touched.length + ' level tersentuh' : '-';
-
-    renderList();
-
-    // HISTORY
-    const hist = d.history || [];
-    let hHtml = '';
-    if(!hist.length) hHtml = '<tr><td colspan="8" class="muted">Belum ada riwayat</td></tr>';
-    else hist.slice(0,20).forEach(h=>{
-      hHtml += `<tr><td>${fmtDate(h.created_at)}</td><td>${h.signal}</td><td>${fmt(h.entry_mt5)}</td><td>${fmt(h.sl_mt5)}</td><td>${fmt(h.tp1_mt5)}</td><td>${fmt(h.tp2_mt5)}</td><td>${h.result||'AKTIF'}</td><td>${h.duration_menit||0}m</td></tr>`;
-    });
-    document.getElementById('historyBody').innerHTML = hHtml;
-
-    if(lockedAtMs){
-      const diff = Math.floor((Date.now()-lockedAtMs)/60000);
-      document.getElementById('runningTime').textContent = diff + ' menit';
-      document.getElementById('runningSub').textContent = 'Sejak ' + fmtTime(lockedAtMs);
+    document.getElementById('entryVal').innerText = fmt(d.entry_mt5);
+    document.getElementById('slVal').innerText = fmt(d.sl_mt5);
+    document.getElementById('tp1Val').innerText = fmt(d.tp1_mt5);
+    document.getElementById('tp2Val').innerText = fmt(d.tp2_mt5);
+    document.getElementById('emergencyVal').innerText = d.emergency_sl_mt5 ? fmt(d.emergency_sl_mt5) : '-';
+    document.getElementById('partialVal').innerText = d.partial || '50/50';
+    document.getElementById('reentryVal').innerText = d.reentry ? fmt(d.reentry.entry_mt5) + ' / SL ' + fmt(d.reentry.sl_mt5) : '-';
+    document.getElementById('lockVal').innerText = d.is_locked ? '🔒 ' + (d.lock_status || 'LOCKED') : 'Tidak terkunci';
+    if(d.last_done) document.getElementById('lockVal').innerText = 'Last: ' + (d.last_done.last_result || '');
+    const lockedAt = d.lockedAt || d.signal_started_at || (d.is_locked ? Date.now() : null);
+    const isActiveLimit = sigRaw.includes('BUY') || sigRaw.includes('SELL');
+    if(isActiveLimit){
+      if(lockedAt){
+        const dt = new Date(lockedAt);
+        document.getElementById('jamAktif').innerText = dt.toLocaleTimeString('id-ID');
+        document.getElementById('jamTanggal').innerText = dt.toLocaleDateString('id-ID');
+        const diffMenit = Math.floor((Date.now() - dt.getTime())/60000);
+        const diffDetik = Math.floor((Date.now() - dt.getTime())/1000) % 60;
+        document.getElementById('jamTelat').innerText = diffMenit + 'm ' + diffDetik + 'd';
+        const statusEl = document.getElementById('jamStatus');
+        if(diffMenit <= 2){ statusEl.innerText = 'Limit baru pasang, tunggu kejemput'; statusEl.style.color = '#00e676'; }
+        else if(diffMenit <= 10){ statusEl.innerText = 'Limit udah jalan ' + diffMenit + 'm, cek udah kejemput belum'; statusEl.style.color = '#facc15'; }
+        else { statusEl.innerText = 'Limit udah ' + diffMenit + 'm gak kejemput, pertimbangin cancel'; statusEl.style.color = '#ff5252'; }
+      }
     } else {
-      document.getElementById('runningTime').textContent = '-';
-      document.getElementById('runningSub').textContent = 'Nunggu sinyal...';
+      document.getElementById('jamAktif').innerText = '-';
+      document.getElementById('jamTanggal').innerText = 'Belum ada sinyal aktif';
+      document.getElementById('jamTelat').innerText = '-';
+      document.getElementById('jamStatus').innerText = 'Nunggu sinyal...';
+      document.getElementById('jamStatus').style.color = '#94a3b8';
     }
-  }catch(e){ console.log('Gagal load:', e); }
-}
-async function unlockSignal(){
-  if(!confirm('Batalkan sinyal aktif?')) return;
-  await fetch(API + '/api/unlock');
-  loadData();
-}
-async function testTelegram(){
-  const r = await fetch(API + '/api/test-telegram');
-  const d = await r.json();
-  alert('Test Telegram: ' + (d.telegram || 'cek Telegram lo'));
-}
-function clearHistoryLocal(){ document.getElementById('historyBody').innerHTML = '<tr><td colspan="8" class="muted">Dibersihkan di tampilan aja, data di server tetep ada.</td></tr>'; }
+    document.getElementById('xautPrice').innerText = price ? '$' + price.toFixed(2) : '--';
+    document.getElementById('xauusdPrice').innerText = xauusd ? '$' + xauusd.toFixed(2) : '--';
+    document.getElementById('selisihPrice').innerText = (selisih>=0?'+':'') + selisih.toFixed(2) + '$';
+    document.getElementById('selisihDesc').innerText = selisih < 0 ? 'XAUT lebih murah ' + Math.abs(selisih).toFixed(2) + '$ dari MT5' : 'XAUT lebih mahal ' + selisih.toFixed(2) + '$ dari MT5';
+    document.getElementById('goldSourceVal').innerText = d.harga?.source || '-';
+    const render = (el, arr, cls) => {
+      if(!arr.length){ document.getElementById(el).innerHTML = '<div class="empty">Gak ada whale di area ini</div>'; return; }
+      document.getElementById(el).innerHTML = arr.map(l=>{
+        let mt5 = l.price_mt5 || (l.price - selisih);
+        let jarak = price ? Math.abs(l.price - price).toFixed(1) + '$ dari harga' : '';
+        return `<div class="row"><div class="left ${cls}">${l.side} ${l.price.toFixed(2)}<small>MT5 ${mt5.toFixed(2)}</small></div><div class="right">${l.size.toFixed(4)} XAUT<small>$${(l.size * l.price).toFixed(0)} • ${jarak} • ${l.sources||''} • ${l.age_menit||0}m</small></div></div>`;
+      }).join('');
+    };
+    const wallsNear = d.wallsNear || d.walls || [];
+    const wallsFar = d.wallsFar || [];
+    render('bidsNear', wallsNear.filter(w=>w.side==='BID').sort((a,b)=>b.price-a.price).slice(0,6), 'BID');
+    render('asksNear', wallsNear.filter(w=>w.side==='ASK').sort((a,b)=>a.price-b.price).slice(0,6), 'ASK');
+    render('bidsFar', wallsFar.filter(w=>w.side==='BID').sort((a,b)=>b.size-a.size), 'FAR-BID');
+    render('asksFar', wallsFar.filter(w=>w.side==='ASK').sort((a,b)=>b.size-a.size), 'FAR-ASK');
+    let pendingSource;
+    let touchedSource;
+    if(Array.isArray(d.pendingOrders)){
+      pendingSource = d.pendingOrders;
+      touchedSource = Array.isArray(d.touchedLevels) ? d.touchedLevels : [];
+    } else {
+      const sorted = [...(d.walls || [])].sort((a,b)=> b.size - a.size).slice(0,20);
+      const filteredBetah = sorted.filter(w=> (w.age_menit||0) >= 5);
+      pendingSource = filteredBetah.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY LIMIT':'SELL LIMIT', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='PENDING');
+      touchedSource = filteredBetah.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY LIMIT':'SELL LIMIT', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='TERSENTUH');
+    }
+    const renderPendingItem = (w)=>{
+      const mt5 = w.price_mt5 || (w.price - selisih);
+      const isTouched = w.status === 'TERSENTUH';
+      const isBuy = w.side === 'BID';
+      const cls = isTouched ? 'touched' : (isBuy ? 'buy' : 'sell');
+      const badgeCls = isTouched ? 'touched' : (isBuy ? 'buy' : 'sell');
+      const badgeText = isTouched ? '🔥 TERSENTUH' : (isBuy ? 'BUY LIMIT' : 'SELL LIMIT');
+      return `<div class="pending-item ${cls}"><div class="pending-top"><b>${w.side} ${w.price.toFixed(2)}</b><span class="badge ${badgeCls}">${badgeText}</span></div><div class="mt5">MT5 ${mt5.toFixed(2)} • ${isBuy?'BUY LIMIT':'SELL LIMIT'} di ${mt5.toFixed(2)}</div><div class="meta">${w.size.toFixed(4)} XAUT • $${(w.size * w.price).toFixed(0)} • ${w.sources||''} • Umur ${w.age_menit||0}m<br>Jarak ke harga MT5: ${(w.distance_mt5 ?? (xauusd?Math.abs(mt5-xauusd):0)).toFixed(1)}$ ${isTouched?'• UDAH KENA!':'• Belum kena'}</div></div>`;
+    };
+    document.getElementById('pendingBidList').innerHTML = pendingSource.filter(w=> w.side==='BID').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada BID pending yang betah 5 menit - lagi nunggu...</div>';
+    document.getElementById('pendingAskList').innerHTML = pendingSource.filter(w=> w.side==='ASK').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada ASK pending yang betah 5 menit - lagi nunggu...</div>';
+    document.getElementById('pendingCount').innerText = pendingSource.length + ' pending • ' + touchedSource.length + ' tersentuh';
+    document.getElementById('touchedVal').innerText = touchedSource.length ? touchedSource.map(w=> `${w.side} ${w.price.toFixed(2)} (MT5 ${(w.price_mt5||w.price-selisih).toFixed(2)})`).join(' | ') : '-';
+    document.getElementById('supabaseVal').innerText = d.supabase || '-';
+    document.getElementById('exchangesVal').innerText = d.exchanges ? 'BYB:' + (d.exchanges.bybit?'OK':'X') + ' OKX:' + (d.exchanges.okx?'OK':'X') + ' BIN:' + (d.exchanges.binance?'OK':'X') : '-';
+    document.getElementById('totalVal').innerText = (d.walls?.length || 0) + ' level • Jauh: ' + (d.wallsFarCount || 0);
+    document.getElementById('uptimeVal').innerText = (d.uptime_menit || 0) + ' menit';
+    document.getElementById('lastUpdateVal').innerText = d.last_update ? new Date(d.last_update).toLocaleTimeString('id-ID') : '-';
+    document.getElementById('status').innerText = 'Update: ' + new Date().toLocaleTimeString('id-ID') + ' • Sinyal LIMIT, bukan market • Jangan kejar harga';
 
-loadData();
-setInterval(loadData, 2000);
-setInterval(()=>{ if(lockedAtMs) document.getElementById('runningTime').textContent = Math.floor((Date.now()-lockedAtMs)/60000)+' menit'; }, 10000);
+    // RIWAYAT
+    const hist = d.history || [];
+    window._lastHistory = hist;
+    if(hist.length){
+      document.getElementById('historyBody').innerHTML = hist.map(h=>{
+        const dt = new Date(h.created_at);
+        const resultColor = h.result === 'TP2 KENA' ? '#00e676' : h.result === 'SL KENA' ? '#ff5252' : h.result === 'AKTIF' ? '#facc15' : '#94a3b8';
+        return `<tr><td>${dt.toLocaleDateString('id-ID')}<br><small style="color:#94a3b8">${dt.toLocaleTimeString('id-ID')}</small></td><td style="font-weight:900;color:${h.signal.includes('BUY')?'#00e676':'#ff5252'}">${h.signal}</td><td>$${h.entry_mt5.toFixed(2)}<br><small style="color:#94a3b8">${h.size.toFixed(2)} XAUT • ${h.sources||''}</small></td><td>SL $${h.sl_mt5.toFixed(2)}<br>TP1 $${h.tp1_mt5.toFixed(2)}<br>TP2 $${h.tp2_mt5.toFixed(2)}</td><td style="font-weight:900;color:${resultColor}">${h.result}${h.result_price ? '<br><small style="color:#94a3b8">$'+h.result_price.toFixed(2)+'</small>' : ''}${h.duration_menit ? '<br><small style="color:#94a3b8">'+h.duration_menit+'m</small>' : ''}</td><td><input class="hist-note" value="${getNote(h.id).replace(/"/g,'&quot;')}" placeholder="Tulis jurnal... misal: kejemput, TP1, dll" oninput="saveNote('${h.id}', this.value)" /></td></tr>`;
+      }).join('');
+      const closed = hist.filter(h=> h.result !== 'AKTIF');
+      const win = hist.filter(h=> h.result === 'TP2 KENA').length;
+      document.getElementById('winrateVal').innerText = closed.length ? win + ' TP2 / ' + closed.length + ' closed = ' + Math.floor(win/closed.length*100) + '% winrate' : '-';
+    } else {
+      document.getElementById('historyBody').innerHTML = '<tr><td colspan="6" class="empty">Belum ada riwayat...</td></tr>';
+    }
+  }catch(e){
+    document.getElementById('status').innerText = 'Gagal: ' + e.message;
+  }
+}
+async function unlock(){
+  try{ const r = await fetch(BASE_URL + '/api/unlock'); const d = JSON.parse(await r.text());
+    alert(d.msg || 'Unlocked'); load();
+  }catch(e){ alert('Gagal unlock: ' + e.message); }
+}
+load();
+setInterval(load, 5000);
 </script>
 </body>
 </html>
