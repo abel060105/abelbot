@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ABEL FX ORDERBOOK</title>
+<!-- PWA -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0f172a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ABEL FX">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="icon" type="image/png" href="/icon-192.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   *{box-sizing:border-box}
@@ -14,9 +23,12 @@
   .card-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
   .card-head h2{margin:0;font-size:15px}
   .btn-dl{background:#0ea5e9;color:#fff;border:0;padding:6px 10px;border-radius:8px;font-size:11px;cursor:pointer;font-weight:bold}
-  .btn-dl:hover{background:#0284c7}
-  .btn-dark{background:#334155;color:#fff;border:0;padding:10px;border-radius:8px;cursor:pointer;font-weight:bold;margin-right:6px}
-  .btn-green{background:#16a34a;color:#fff;border:0;padding:10px;border-radius:8px;cursor:pointer;font-weight:bold;margin-right:6px}
+  .btn-dark{background:#334155;color:#fff;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:bold}
+  .btn-green{background:#16a34a;color:#fff;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:bold}
+  /* 3 TOMBOL DI TENGAH - INI FIX-NYA */
+  .btn-center{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;max-width:1100px;margin:16px auto 8px;text-align:center}
+  .btn-center button{margin:0}
+  .btn-install{background:#facc15;color:#000;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:900;display:none}
   .label{font-size:11px;color:#94a3b8}
   .live{color:#00e676;border:1px solid #00e676;padding:2px 6px;border-radius:20px;font-size:10px}
   .signal{font-size:52px;font-weight:900;line-height:1;margin:8px 0}
@@ -44,7 +56,6 @@
   .row .right{text-align:right;font-size:13px;font-weight:700}
   .row .right small{display:block;font-size:11px;color:#94a3b8;font-weight:400}
   .empty{color:#64748b;font-size:12px;padding:10px 0}
-  /* PENDING - DIPISAH KIRI BID, KANAN ASK */
   .pending-split{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
   .pending-col{border-radius:10px;padding:10px;background:#0b1118}
   .pending-col.bid-col{border:2px solid #00e676}
@@ -64,43 +75,18 @@
   .pending-item .meta{font-size:11px;color:#94a3b8;margin-top:6px;line-height:1.5}
   .jam-box{background:#0b1118;border:1px solid #facc15;border-radius:10px;padding:10px;margin-top:12px;display:flex;justify-content:space-between}
   .jam-box b{font-size:16px;color:#facc15}
-  /* BOOKMAP */
-  #bookmapCanvas{width:100%;height:320px;background:#070a0f;border-radius:10px;display:block}
-  .bookmap-legend{display:flex;gap:12px;font-size:11px;color:#94a3b8;margin-top:8px;flex-wrap:wrap}
-  .bookmap-legend span{display:flex;align-items:center;gap:4px}
-  .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
   @media(max-width:700px){.four-col{grid-template-columns:1fr 1fr}.harga-grid{grid-template-columns:1fr}.pending-split{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}.signal{font-size:38px}}
 </style>
 </head>
 <body>
 <div class="topbar"><h1>⚡ ABEL FX ORDERBOOK</h1><span id="rangeInfo">Full Depth</span></div>
 
-<!-- ============ 1. PALING ATAS: BOOKMAP ============ -->
-<div class="card" id="bookmapCard">
-  <div class="card-head">
-    <h2>🔥 BOOKMAP - Liquidity Heatmap</h2>
-    <button class="btn-dl" onclick="downloadCard('bookmapCard','bookmap')">⬇ Download Gambar</button>
-  </div>
-  <div style="display:flex;justify-content:space-between;font-size:12px;color:#94a3b8;margin-top:8px"><span>Harga (Y) vs Waktu (X) • Yang terang = Big Order</span><span id="bookmapInfo">Mengumpulkan...</span></div>
-  <canvas id="bookmapCanvas" width="1000" height="320" style="margin-top:10px"></canvas>
-  <div class="bookmap-legend">
-    <span><i class="dot" style="background:#1e3a8a"></i> Kecil</span>
-    <span><i class="dot" style="background:#0891b2"></i> Sedang</span>
-    <span><i class="dot" style="background:#facc15"></i> Gede</span>
-    <span><i class="dot" style="background:#ef4444"></i> Whale</span>
-    <span><i class="dot" style="background:#00e676"></i> Garis Harga MT5 Sekarang</span>
-    <span>• Tembok yang betah = garis horizontal panjang. Tembok spoof = titik doang, bentar ilang.</span>
-  </div>
-  <div class="status-row" style="margin-top:8px"><span>Zona Paling Panas (Big Order Terbesar)</span><b id="bookmapHot" style="color:#facc15">-</b></div>
-</div>
-
-<!-- ============ 2. PENDING ORDER - DIPISAH KIRI BID, KANAN ASK ============ -->
+<!-- 1. PENDING ORDER - DIPISAH KIRI BID, KANAN ASK -->
 <div class="card" id="pendingCard">
   <div class="card-head">
     <h2>📌 PENDING ORDER</h2>
     <button class="btn-dl" onclick="downloadCard('pendingCard','pending-order')">⬇ Download Gambar</button>
   </div>
-  <!-- TEKS YANG LO BLOCK UDAH GUE HAPUS, JADI BERSIH, GAK ADA PENJELASAN PANJANG LAGI -->
   <div class="pending-split">
     <div class="pending-col bid-col">
       <h3>🟢 BID - BUY (Support)</h3>
@@ -114,7 +100,7 @@
   <div class="status-row" style="margin-top:8px"><span>Total Pending</span><b id="pendingCount">-</b></div>
 </div>
 
-<!-- ============ 3. TENGAH: SINYAL AKTIF ============ -->
+<!-- 2. SINYAL AKTIF -->
 <div class="card" id="signalCard">
   <div class="card-head">
     <h2>🎯 SINYAL AKTIF</h2>
@@ -123,7 +109,7 @@
   <div class="label" style="margin-top:8px">Sinyal Saat Ini <span class="live">● LIVE</span></div>
   <div class="signal WAIT" id="signalText">WAIT</div>
   <div class="reason" id="signalReason">Menghubungkan ke server...</div>
-  <div class="jam-box" id="jamBox">
+  <div class="jam-box">
     <div><div style="font-size:11px;color:#94a3b8">🕐 Sinyal Aktif Sejak</div><b id="jamAktif">-</b><div id="jamTanggal" style="font-size:11px;color:#94a3b8">-</div></div>
     <div style="text-align:right"><div style="font-size:11px;color:#94a3b8">⏳ Udah Jalan</div><b id="jamTelat">-</b><div id="jamStatus" style="font-size:11px;color:#00e676">Masih fresh, gas masuk</div></div>
   </div>
@@ -137,22 +123,22 @@
   <div class="status-row"><span>Partial</span><b id="partialVal">50/50</b></div>
   <div class="status-row"><span>Re-Entry A</span><b id="reentryVal">-</b></div>
   <div class="status-row"><span>Lock</span><b id="lockVal">-</b></div>
-  <div class="status-row"><span>Level TERSENTUH (pindahan dari Pending)</span><b id="touchedVal" style="color:#facc15">-</b></div>
+  <div class="status-row"><span>Level TERSENTUH</span><b id="touchedVal" style="color:#facc15">-</b></div>
 </div>
 
 <!-- HARGA -->
-<div class="harga-grid" id="hargaCard">
+<div class="harga-grid">
   <div class="harga-box"><div class="lbl">XAUT (Orderbook)</div><div class="val" id="xautPrice">--</div><div class="sub">Harga mentah Bybit/OKX/Binance</div></div>
   <div class="harga-box highlight"><div class="lbl">⭐ XAUUSD / MT5</div><div class="val" id="xauusdPrice" style="color:#00e676">--</div><div class="sub">Harga yang lo pake trading</div></div>
   <div class="harga-box"><div class="lbl">Selisih</div><div class="val" id="selisihPrice" style="font-size:18px">--</div><div class="sub" id="selisihDesc">XAUT - XAUUSD</div></div>
 </div>
 
-<!-- ============ 4. BAWAH: BID / ASK BIASA ============ -->
+<!-- 3. BID / ASK -->
 <div class="four-col" id="wallsCard">
-  <div class="card"><div class="card-head"><h2>🟢 BID Dekat <span style="font-size:11px;color:#94a3b8">Support</span></h2></div><div id="bidsNear"><div class="empty">Loading...</div></div></div>
-  <div class="card"><div class="card-head"><h2>🔴 ASK Dekat <span style="font-size:11px;color:#94a3b8">Resistance</span></h2></div><div id="asksNear"><div class="empty">Loading...</div></div></div>
-  <div class="card"><div class="card-head"><h2>🔵 BID Jauh <span style="font-size:11px;color:#94a3b8">4000 / 3900</span></h2></div><div id="bidsFar"><div class="empty">Loading...</div></div></div>
-  <div class="card"><div class="card-head"><h2>🟠 ASK Jauh <span style="font-size:11px;color:#94a3b8">4100 / 4200</span></h2></div><div id="asksFar"><div class="empty">Loading...</div></div></div>
+  <div class="card"><div class="card-head"><h2>🟢 BID Dekat</h2></div><div id="bidsNear"><div class="empty">Loading...</div></div></div>
+  <div class="card"><div class="card-head"><h2>🔴 ASK Dekat</h2></div><div id="asksNear"><div class="empty">Loading...</div></div></div>
+  <div class="card"><div class="card-head"><h2>🔵 BID Jauh</h2></div><div id="bidsFar"><div class="empty">Loading...</div></div></div>
+  <div class="card"><div class="card-head"><h2>🟠 ASK Jauh</h2></div><div id="asksFar"><div class="empty">Loading...</div></div></div>
 </div>
 
 <div class="card">
@@ -164,76 +150,43 @@
   <div class="status-row"><span>Last Update</span><b id="lastUpdateVal">-</b></div>
   <div class="status-row"><span>Sumber Gold</span><b id="goldSourceVal">-</b></div>
 </div>
-<button class="btn-green" onclick="window.open(API_URL,'_blank')">LIHAT JSON MENTAH</button>
-<button class="btn-dark" onclick="load()">🔄 REFRESH SEKARANG</button>
-<button class="btn-dark" onclick="unlock()">🔓 BATALKAN LOCK MANUAL</button>
-<div id="status">Auto-refresh tiap 5 detik • Jangan trade kalau masih PEMANASAN</div>
+
+<!-- 3 TOMBOL - UDAH DI TENGAH, BUKAN DI PINGGIR LAGI -->
+<div class="btn-center">
+  <button class="btn-green" onclick="window.open(API_URL,'_blank')">LIHAT JSON MENTAH</button>
+  <button class="btn-dark" onclick="load()">🔄 REFRESH SEKARANG</button>
+  <button class="btn-dark" onclick="unlock()">🔓 BATALKAN LOCK MANUAL</button>
+  <button class="btn-install" id="installBtn" onclick="installPWA()">📲 INSTALL APLIKASI</button>
+</div>
+<div id="status" style="text-align:center;font-size:11px;color:#94a3b8;margin-bottom:20px">Auto-refresh tiap 5 detik • Jangan trade kalau masih PEMANASAN</div>
 
 <script>
 const API_URL = 'https://abelbot.onrender.com/api/signal';
 const BASE_URL = API_URL.replace('/api/signal','');
 function fmt(n){ return n ? '$' + n.toFixed(2) : '0'; }
 
-// === BOOKMAP HISTORY - SIMPAN 40 SNAPSHOT TERAKHIR ===
-let bookmapHistory = []; // tiap item: { time: "12:01:05", walls: [...], mid: 3970, maxSize: 27 }
-let bookmapMaxSize = 1;
-
-function drawBookmap(){
-  const canvas = document.getElementById('bookmapCanvas');
-  if(!canvas || !bookmapHistory.length) return;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0,0,W,H);
-  ctx.fillStyle = '#070a0f'; ctx.fillRect(0,0,W,H);
-
-  // Cari range harga dari semua history
-  let allPrices = [];
-  bookmapHistory.forEach(h=> h.walls.forEach(w=> allPrices.push(w.price_mt5 || w.price)));
-  if(!allPrices.length) return;
-  let pMin = Math.min(...allPrices), pMax = Math.max(...allPrices);
-  // Kasih padding biar gak mentok
-  const pad = (pMax - pMin) * 0.1 || 10;
-  pMin -= pad; pMax += pad;
-
-  const colW = W / Math.max(bookmapHistory.length, 1);
-  // Gambar tiap snapshot sebagai 1 kolom vertikal
-  bookmapHistory.forEach((h, colIdx)=>{
-    const x = colIdx * colW;
-    h.walls.forEach(w=>{
-      const p = w.price_mt5 || w.price;
-      const y = H - ((p - pMin) / (pMax - pMin)) * H;
-      // Warna berdasar size: kecil = biru gelap, gede = kuning, whale = merah
-      const ratio = Math.min(w.size / Math.max(bookmapMaxSize, 1), 1);
-      let color = '#1e3a8a';
-      if(ratio > 0.7) color = '#ef4444';
-      else if(ratio > 0.4) color = '#facc15';
-      else if(ratio > 0.2) color = '#0891b2';
-      // Ukuran kotak berdasar size juga: makin gede makin tinggi kotaknya
-      const boxH = 4 + ratio * 14;
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.35 + ratio * 0.65;
-      ctx.fillRect(x+1, y - boxH/2, Math.max(colW-2, 2), boxH);
-    });
-    ctx.globalAlpha = 1;
-    // Jam di bawah tiap 5 kolom
-    if(colIdx % 5 === 0){
-      ctx.fillStyle = '#64748b'; ctx.font = '10px Arial'; ctx.fillText(h.time, x+2, H-4);
-    }
+// === PWA: DAFTAR SERVICE WORKER + TOMBOL INSTALL ===
+let deferredPrompt = null;
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('/sw.js').then(()=> console.log('SW OK')).catch(e=> console.log('SW gagal', e));
   });
-
-  // Garis harga MT5 sekarang (hijau)
-  const last = bookmapHistory[bookmapHistory.length-1];
-  if(last && last.mid){
-    const y = H - ((last.mid - pMin) / (pMax - pMin)) * H;
-    ctx.strokeStyle = '#00e676'; ctx.lineWidth = 2; ctx.setLineDash([6,4]);
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = '#00e676'; ctx.font = 'bold 12px Arial';
-    ctx.fillText('MT5 ' + last.mid.toFixed(2), 8, Math.max(y-6, 12));
+}
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('installBtn').style.display = 'inline-block';
+});
+window.addEventListener('appinstalled', ()=>{ document.getElementById('installBtn').style.display = 'none'; });
+async function installPWA(){
+  if(deferredPrompt){
+    deferredPrompt.prompt();
+    const r = await deferredPrompt.userChoice;
+    if(r.outcome === 'accepted') document.getElementById('installBtn').style.display = 'none';
+    deferredPrompt = null;
+  } else {
+    alert('Di Chrome HP: klik titik 3 di kanan atas > Tambahkan ke Layar Utama / Install App.\nDi Chrome Laptop: klik ikon Install di address bar (kanan).');
   }
-  // Label harga kiri atas / bawah
-  ctx.fillStyle = '#94a3b8'; ctx.font = '11px Arial';
-  ctx.fillText('$' + pMax.toFixed(0), 8, 14);
-  ctx.fillText('$' + pMin.toFixed(0), 8, H-18);
 }
 
 async function downloadCard(cardId, fileName){
@@ -254,7 +207,7 @@ async function load(){
   try{
     const r = await fetch(API_URL, { cache: 'no-store' });
     const text = await r.text();
-    if(!text.trim().startsWith('{')) throw new Error('Server bales HTML, cek API_URL');
+    if(!text.trim().startsWith('{')) throw new Error('Server bales HTML');
     const d = JSON.parse(text);
     const price = d.harga?.xaut_mid || 0;
     const xauusd = d.harga?.xauusd_goldprice || 0;
@@ -276,7 +229,6 @@ async function load(){
     document.getElementById('reentryVal').innerText = d.reentry ? fmt(d.reentry.entry_mt5) + ' / SL ' + fmt(d.reentry.sl_mt5) : '-';
     document.getElementById('lockVal').innerText = d.is_locked ? '🔒 ' + (d.lock_status || 'LOCKED') : 'Tidak terkunci';
     if(d.last_done) document.getElementById('lockVal').innerText = 'Last: ' + (d.last_done.last_result || '');
-
     const lockedAt = d.lockedAt || d.signal_started_at || (d.is_locked ? Date.now() : null);
     if(d.signal === 'BUY' || d.signal === 'SELL'){
       if(lockedAt){
@@ -298,14 +250,12 @@ async function load(){
       document.getElementById('jamStatus').innerText = 'Nunggu sinyal...';
       document.getElementById('jamStatus').style.color = '#94a3b8';
     }
-
     document.getElementById('xautPrice').innerText = price ? '$' + price.toFixed(2) : '--';
     document.getElementById('xauusdPrice').innerText = xauusd ? '$' + xauusd.toFixed(2) : '--';
     document.getElementById('selisihPrice').innerText = (selisih>=0?'+':'') + selisih.toFixed(2) + '$';
     document.getElementById('selisihDesc').innerText = selisih < 0 ? 'XAUT lebih murah ' + Math.abs(selisih).toFixed(2) + '$ dari MT5' : 'XAUT lebih mahal ' + selisih.toFixed(2) + '$ dari MT5';
     document.getElementById('goldSourceVal').innerText = d.harga?.source || '-';
     document.getElementById('rangeInfo').innerText = d.range ? 'Full $' + d.range.low.toFixed(0) + ' - $' + d.range.high.toFixed(0) : 'Full Depth';
-
     const render = (el, arr, cls) => {
       if(!arr.length){ document.getElementById(el).innerHTML = '<div class="empty">Gak ada whale di area ini</div>'; return; }
       document.getElementById(el).innerHTML = arr.map(l=>{
@@ -316,49 +266,16 @@ async function load(){
     };
     const wallsNear = d.wallsNear || d.walls || [];
     const wallsFar = d.wallsFar || [];
-    let bidsNear = wallsNear.filter(w=>w.side==='BID').sort((a,b)=>b.price-a.price).slice(0,6);
-    let asksNear = wallsNear.filter(w=>w.side==='ASK').sort((a,b)=>a.price-b.price).slice(0,6);
-    let bidsFar = wallsFar.filter(w=>w.side==='BID').sort((a,b)=>b.size-a.size);
-    let asksFar = wallsFar.filter(w=>w.side==='ASK').sort((a,b)=>b.size-a.size);
-    render('bidsNear', bidsNear, 'BID');
-    render('asksNear', asksNear, 'ASK');
-    render('bidsFar', bidsFar, 'FAR-BID');
-    render('asksFar', asksFar, 'FAR-ASK');
-
-    // === BOOKMAP: SIMPAN SNAPSHOT TIAP LOAD ===
-    const allWallsForBookmap = d.walls || [];
-    if(allWallsForBookmap.length){
-      const nowStr = new Date().toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
-      // Normalisasi price_mt5 biar Bookmap pake harga MT5 (yang lo tradingin)
-      const normalized = allWallsForBookmap.map(w=>({ ...w, price_mt5: w.price_mt5 || (w.price - selisih) }));
-      bookmapHistory.push({ time: nowStr, walls: normalized, mid: xauusd });
-      if(bookmapHistory.length > 40) bookmapHistory.shift();
-      const maxInHist = Math.max(...bookmapHistory.flatMap(h=> h.walls.map(w=> w.size)));
-      bookmapMaxSize = Math.max(bookmapMaxSize, maxInHist);
-      // Zona paling panas = big order terbesar di snapshot terakhir
-      const hottest = [...normalized].sort((a,b)=> b.size - a.size)[0];
-      if(hottest) document.getElementById('bookmapHot').innerText = `${hottest.side} ${hottest.price.toFixed(2)} (MT5 ${hottest.price_mt5.toFixed(2)}) - ${hottest.size.toFixed(2)} XAUT`;
-      document.getElementById('bookmapInfo').innerText = bookmapHistory.length + ' snapshot • ' + nowStr;
-      drawBookmap();
-    }
-
-    // === PENDING ORDER - DIPISAH KIRI BID, KANAN ASK ===
-    // Pakai d.pendingOrders dari server kalau ada, kalau gak ada hitung dari d.walls (fallback)
+    render('bidsNear', wallsNear.filter(w=>w.side==='BID').sort((a,b)=>b.price-a.price).slice(0,6), 'BID');
+    render('asksNear', wallsNear.filter(w=>w.side==='ASK').sort((a,b)=>a.price-b.price).slice(0,6), 'ASK');
+    render('bidsFar', wallsFar.filter(w=>w.side==='BID').sort((a,b)=>b.size-a.size), 'FAR-BID');
+    render('asksFar', wallsFar.filter(w=>w.side==='ASK').sort((a,b)=>b.size-a.size), 'FAR-ASK');
     let pendingSource = d.pendingOrders && d.pendingOrders.length ? d.pendingOrders : null;
     let touchedSource = d.touchedLevels || [];
     if(!pendingSource){
-      // Fallback lama: ambil 6 terbesar dari walls
       const sorted = [...(d.walls || [])].sort((a,b)=> b.size - a.size).slice(0,6);
-      pendingSource = sorted.map(w=>{
-        const mt5 = w.price_mt5 || (w.price - selisih);
-        const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999;
-        return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY':'SELL', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 };
-      }).filter(w=> w.status==='PENDING');
-      touchedSource = sorted.map(w=>{
-        const mt5 = w.price_mt5 || (w.price - selisih);
-        const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999;
-        return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY':'SELL', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 };
-      }).filter(w=> w.status==='TERSENTUH');
+      pendingSource = sorted.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY':'SELL', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='PENDING');
+      touchedSource = sorted.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY':'SELL', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='TERSENTUH');
     }
     const renderPendingItem = (w)=>{
       const mt5 = w.price_mt5 || (w.price - selisih);
@@ -367,19 +284,12 @@ async function load(){
       const cls = isTouched ? 'touched' : (isBuy ? 'buy' : 'sell');
       const badgeCls = isTouched ? 'touched' : (isBuy ? 'buy' : 'sell');
       const badgeText = isTouched ? '🔥 TERSENTUH' : (isBuy ? 'BUY' : 'SELL');
-      return `<div class="pending-item ${cls}">
-        <div class="pending-top"><b>${w.side} ${w.price.toFixed(2)}</b><span class="badge ${badgeCls}">${badgeText}</span></div>
-        <div class="mt5">MT5 ${mt5.toFixed(2)} • ${isBuy?'BUY':'SELL'} di ${mt5.toFixed(2)}</div>
-        <div class="meta">${w.size.toFixed(4)} XAUT • $${(w.size * w.price).toFixed(0)} • ${w.sources||''} • Umur ${w.age_menit||0}m<br>Jarak ke harga MT5: ${(w.distance_mt5 ?? (xauusd?Math.abs(mt5-xauusd):0)).toFixed(1)}$ ${isTouched?'• UDAH KENA!':'• Belum kena'}</div>
-      </div>`;
+      return `<div class="pending-item ${cls}"><div class="pending-top"><b>${w.side} ${w.price.toFixed(2)}</b><span class="badge ${badgeCls}">${badgeText}</span></div><div class="mt5">MT5 ${mt5.toFixed(2)} • ${isBuy?'BUY':'SELL'} di ${mt5.toFixed(2)}</div><div class="meta">${w.size.toFixed(4)} XAUT • $${(w.size * w.price).toFixed(0)} • ${w.sources||''} • Umur ${w.age_menit||0}m<br>Jarak ke harga MT5: ${(w.distance_mt5 ?? (xauusd?Math.abs(mt5-xauusd):0)).toFixed(1)}$ ${isTouched?'• UDAH KENA!':'• Belum kena'}</div></div>`;
     };
-    const bidPending = pendingSource.filter(w=> w.side==='BID').sort((a,b)=> b.size - a.size);
-    const askPending = pendingSource.filter(w=> w.side==='ASK').sort((a,b)=> b.size - a.size);
-    document.getElementById('pendingBidList').innerHTML = bidPending.length ? bidPending.map(renderPendingItem).join('') : '<div class="empty">Gak ada BID pending</div>';
-    document.getElementById('pendingAskList').innerHTML = askPending.length ? askPending.map(renderPendingItem).join('') : '<div class="empty">Gak ada ASK pending</div>';
+    document.getElementById('pendingBidList').innerHTML = pendingSource.filter(w=> w.side==='BID').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada BID pending</div>';
+    document.getElementById('pendingAskList').innerHTML = pendingSource.filter(w=> w.side==='ASK').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada ASK pending</div>';
     document.getElementById('pendingCount').innerText = pendingSource.length + ' pending • ' + touchedSource.length + ' tersentuh';
-    document.getElementById('touchedVal').innerText = touchedSource.length ? touchedSource.map(w=> `${w.side} ${w.price.toFixed(2)} (MT5 ${(w.price_mt5||w.price-selisih).toFixed(2)}) - ${w.instruction|| (w.side==='BID'?'BUY':'SELL')}`).join(' | ') : '-';
-
+    document.getElementById('touchedVal').innerText = touchedSource.length ? touchedSource.map(w=> `${w.side} ${w.price.toFixed(2)} (MT5 ${(w.price_mt5||w.price-selisih).toFixed(2)})`).join(' | ') : '-';
     document.getElementById('supabaseVal').innerText = d.supabase || '-';
     document.getElementById('exchangesVal').innerText = d.exchanges ? 'BYB:' + (d.exchanges.bybit?'OK':'X') + ' OKX:' + (d.exchanges.okx?'OK':'X') + ' BIN:' + (d.exchanges.binance?'OK':'X') : '-';
     document.getElementById('totalVal').innerText = (d.walls?.length || 0) + ' level • Jauh: ' + (d.wallsFarCount || 0);
