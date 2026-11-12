@@ -24,14 +24,13 @@
   .btn-dl{background:#0ea5e9;color:#fff;border:0;padding:6px 10px;border-radius:8px;font-size:11px;cursor:pointer;font-weight:bold}
   .btn-dark{background:#334155;color:#fff;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:bold}
   .btn-green{background:#16a34a;color:#fff;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:bold}
+  .btn-yellow{background:#facc15;color:#000;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:bold}
   .btn-center{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;max-width:1100px;margin:16px auto 8px;text-align:center}
-  .btn-center button{margin:0}
   .btn-install{background:#facc15;color:#000;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:900;display:none}
   .label{font-size:11px;color:#94a3b8}
   .live{color:#00e676;border:1px solid #00e676;padding:2px 6px;border-radius:20px;font-size:10px}
   .signal{font-size:52px;font-weight:900;line-height:1;margin:8px 0}
   .signal.BUY{color:#00e676}.signal.SELL{color:#ff5252}.signal.WAIT{color:#facc15}.signal.DONE{color:#94a3b8}
-  .reason{font-size:13px;color:#cbd5e1;line-height:1.5}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
   .mini{background:#0b1118;border-radius:10px;padding:10px}
   .mini small{color:#94a3b8;font-size:11px}
@@ -73,11 +72,16 @@
   .pending-item .meta{font-size:11px;color:#94a3b8;margin-top:6px;line-height:1.5}
   .jam-box{background:#0b1118;border:1px solid #facc15;border-radius:10px;padding:10px;margin-top:12px;display:flex;justify-content:space-between}
   .jam-box b{font-size:16px;color:#facc15}
-  @media(max-width:700px){.four-col{grid-template-columns:1fr 1fr}.harga-grid{grid-template-columns:1fr}.pending-split{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}.signal{font-size:38px}}
+  .hist-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
+  .hist-table th,.hist-table td{padding:8px 6px;border-bottom:1px solid #1e293b;text-align:left;vertical-align:top}
+  .hist-table th{color:#94a3b8;font-size:11px}
+  .hist-note{width:100%;background:#0b1118;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px}
+  .notif-on{color:#00e676}
+  @media(max-width:700px){.four-col{grid-template-columns:1fr 1fr}.harga-grid{grid-template-columns:1fr}.pending-split{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}.signal{font-size:38px}.hist-table{font-size:11px}}
 </style>
 </head>
 <body>
-<div class="topbar"><h1>⚡ ABEL FX ORDERBOOK</h1></div>
+<div class="topbar"><h1>⚡ ABEL FX ORDERBOOK</h1><button class="btn-yellow" id="notifBtn" onclick="enableNotif()">🔔 AKTIFKAN NOTIF</button></div>
 
 <div class="card" id="pendingCard">
   <div class="card-head">
@@ -104,7 +108,6 @@
   </div>
   <div class="label" style="margin-top:8px">Sinyal Saat Ini <span class="live">● LIVE</span></div>
   <div class="signal WAIT" id="signalText">WAIT</div>
-  <div class="reason" id="signalReason">Menghubungkan ke server...</div>
   <div class="jam-box">
     <div><div style="font-size:11px;color:#94a3b8">🕐 Sinyal Aktif Sejak</div><b id="jamAktif">-</b><div id="jamTanggal" style="font-size:11px;color:#94a3b8">-</div></div>
     <div style="text-align:right"><div style="font-size:11px;color:#94a3b8">⏳ Udah Jalan</div><b id="jamTelat">-</b><div id="jamStatus" style="font-size:11px;color:#00e676">Masih fresh, gas masuk</div></div>
@@ -135,6 +138,16 @@
   <div class="card"><div class="card-head"><h2>🟠 ASK Jauh</h2></div><div id="asksFar"><div class="empty">Loading...</div></div></div>
 </div>
 
+<div class="card" id="historyCard">
+  <div class="card-head">
+    <h2>📚 RIWAYAT SINYAL - JURNALING</h2>
+    <div style="display:flex;gap:6px"><button class="btn-dl" onclick="downloadCSV()">⬇ CSV</button><button class="btn-dl" onclick="downloadCard('historyCard','riwayat')">⬇ Gambar</button></div>
+  </div>
+  <div style="font-size:12px;color:#94a3b8;margin-top:6px">Server nyala terus, riwayat kesimpen sampe 100 sinyal terakhir. Tulis catatan di kolom Catatan, ke-save otomatis di HP / laptop lo.</div>
+  <div style="overflow-x:auto"><table class="hist-table"><thead><tr><th>Tanggal / Jam</th><th>Sinyal</th><th>Entry</th><th>SL / TP</th><th>Hasil</th><th>Catatan (Jurnal)</th></tr></thead><tbody id="historyBody"><tr><td colspan="6" class="empty">Belum ada riwayat...</td></tr></tbody></table></div>
+  <div class="status-row" style="margin-top:8px"><span>Winrate TP2</span><b id="winrateVal">-</b></div>
+</div>
+
 <div class="card">
   <div style="display:flex;justify-content:space-between"><h2 style="font-size:13px;margin:0">📥 Download Semua Dashboard</h2><button class="btn-dl" onclick="downloadCard('wallsCard','bid-ask')">⬇ Download BID/ASK</button></div>
   <div class="status-row" style="margin-top:10px"><span>Supabase</span><b id="supabaseVal">-</b></div>
@@ -158,6 +171,10 @@ const API_URL = 'https://abelbot.onrender.com/api/signal';
 const BASE_URL = API_URL.replace('/api/signal','');
 function fmt(n){ return n ? '$' + n.toFixed(2) : '0'; }
 let deferredPrompt = null;
+let lastSignal = 'WAIT';
+let notifEnabled = false;
+let lastNotifId = '';
+
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
     navigator.serviceWorker.register('/sw.js').then(()=> console.log('SW OK')).catch(e=> console.log('SW gagal', e));
@@ -179,6 +196,48 @@ async function installPWA(){
     alert('Di Chrome HP: klik titik 3 di kanan atas > Tambahkan ke Layar Utama / Install App.\nDi Chrome Laptop: klik ikon Install di address bar (kanan).');
   }
 }
+
+// NOTIF
+async function enableNotif(){
+  if(!('Notification' in window)){ alert('Browser ini gak support notif'); return; }
+  const perm = await Notification.requestPermission();
+  if(perm === 'granted'){
+    notifEnabled = true;
+    localStorage.setItem('abel_notif','1');
+    document.getElementById('notifBtn').innerText = '🔔 NOTIF AKTIF ✅';
+    document.getElementById('notifBtn').classList.add('notif-on');
+    new Notification('ABEL FX - Notif Aktif', { body: 'Sinyal baru bakal bunyi + muncul notif di sini. Biarin PWA kebuka di background ya.', icon: '/icon-192.png' });
+    if(navigator.vibrate) navigator.vibrate(200);
+  } else {
+    alert('Notif ditolak. Buka Settings browser > Site Settings > Notifications > Allow buat abelbot.vercel.app');
+  }
+}
+if(localStorage.getItem('abel_notif') === '1' && 'Notification' in window && Notification.permission === 'granted'){
+  notifEnabled = true;
+  document.getElementById('notifBtn').innerText = '🔔 NOTIF AKTIF ✅';
+}
+function playBeep(){
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.value = 880; o.type = 'sine';
+    g.gain.value = 0.15;
+    o.start(); o.stop(ctx.currentTime + 0.4);
+    setTimeout(()=>{ const o2 = ctx.createOscillator(); const g2 = ctx.createGain(); o2.connect(g2); g2.connect(ctx.destination); o2.frequency.value = 880; g2.gain.value = 0.15; o2.start(); o2.stop(ctx.currentTime + 0.4); }, 500);
+  }catch(e){}
+}
+function sendNotif(title, body){
+  if(!notifEnabled) return;
+  playBeep();
+  if(navigator.vibrate) navigator.vibrate([200,100,200]);
+  if('Notification' in window && Notification.permission === 'granted'){
+    try{ new Notification(title, { body, icon: '/icon-192.png', tag: 'abel-signal', requireInteraction: true }); }catch(e){}
+  }
+  document.title = '🔔 ' + title;
+  setTimeout(()=>{ document.title = 'ABEL FX ORDERBOOK'; }, 5000);
+}
+
 async function downloadCard(cardId, fileName){
   const el = document.getElementById(cardId);
   if(!el) return;
@@ -191,6 +250,24 @@ async function downloadCard(cardId, fileName){
     a.click();
   }catch(e){ alert('Gagal download: ' + e.message); }
 }
+
+function getNote(id){ return localStorage.getItem('abel_note_' + id) || ''; }
+function saveNote(id, val){ localStorage.setItem('abel_note_' + id, val); }
+function downloadCSV(){
+  const rows = [['Tanggal','Jam','Sinyal','Entry_MT5','SL_MT5','TP1_MT5','TP2_MT5','Size','Hasil','Catatan']];
+  const hist = window._lastHistory || [];
+  hist.forEach(h=>{
+    const dt = new Date(h.created_at);
+    rows.push([dt.toLocaleDateString('id-ID'), dt.toLocaleTimeString('id-ID'), h.signal, h.entry_mt5, h.sl_mt5, h.tp1_mt5, h.tp2_mt5, h.size, h.result, getNote(h.id).replace(/,/g,';')]);
+  });
+  const csv = rows.map(r=> r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'abel-jurnal-' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+}
+
 async function load(){
   document.getElementById('status').innerText = 'Menghubungkan...';
   try{
@@ -204,13 +281,24 @@ async function load(){
     const sigRaw = d.signal || 'WAIT';
     const sigEl = document.getElementById('signalText');
     sigEl.innerText = sigRaw;
-    // Warna tetep ngikutin BUY / SELL, walau judulnya BUY LIMIT / SELL LIMIT
     let sigCls = 'WAIT';
     if(sigRaw.includes('BUY')) sigCls = 'BUY';
     else if(sigRaw.includes('SELL')) sigCls = 'SELL';
     else if(sigRaw === 'DONE') sigCls = 'DONE';
     sigEl.className = 'signal ' + sigCls;
-    document.getElementById('signalReason').innerText = d.reason || d.lock_status || '-';
+
+    // NOTIF: kalau sinyal berubah WAIT -> BUY LIMIT / SELL LIMIT, atau jadi DONE
+    const notifKey = sigRaw + '-' + (d.lockedId || d.lockedAt || '');
+    if(notifKey !== lastNotifId){
+      if(lastSignal === 'WAIT' && (sigRaw.includes('BUY') || sigRaw.includes('SELL'))){
+        sendNotif('🎯 ' + sigRaw + ' di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : ''), 'Pasang LIMIT di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : '') + ' | SL ' + (d.sl_mt5 ? '$' + d.sl_mt5.toFixed(2) : '') + ' | TP1 ' + (d.tp1_mt5 ? '$' + d.tp1_mt5.toFixed(2) : '') + ' | TP2 ' + (d.tp2_mt5 ? '$' + d.tp2_mt5.toFixed(2) : '') + '. Jangan market sekarang.');
+      } else if(sigRaw === 'DONE' && (lastSignal.includes('BUY') || lastSignal.includes('SELL'))){
+        sendNotif('✅ Sinyal DONE - ' + (d.last_done?.last_result || ''), 'Cek riwayat buat jurnaling.');
+      }
+      lastNotifId = notifKey;
+    }
+    lastSignal = sigRaw;
+
     document.getElementById('entryVal').innerText = fmt(d.entry_mt5);
     document.getElementById('entryMt5').innerText = d.entry ? 'XAUT ' + fmt(d.entry) : 'MT5 -';
     document.getElementById('slVal').innerText = fmt(d.sl_mt5);
@@ -295,9 +383,24 @@ async function load(){
     document.getElementById('uptimeVal').innerText = (d.uptime_menit || 0) + ' menit';
     document.getElementById('lastUpdateVal').innerText = d.last_update ? new Date(d.last_update).toLocaleTimeString('id-ID') : '-';
     document.getElementById('status').innerText = 'Update: ' + new Date().toLocaleTimeString('id-ID') + ' • Sinyal LIMIT, bukan market • Jangan kejar harga';
+
+    // RIWAYAT
+    const hist = d.history || [];
+    window._lastHistory = hist;
+    if(hist.length){
+      document.getElementById('historyBody').innerHTML = hist.map(h=>{
+        const dt = new Date(h.created_at);
+        const resultColor = h.result === 'TP2 KENA' ? '#00e676' : h.result === 'SL KENA' ? '#ff5252' : h.result === 'AKTIF' ? '#facc15' : '#94a3b8';
+        return `<tr><td>${dt.toLocaleDateString('id-ID')}<br><small style="color:#94a3b8">${dt.toLocaleTimeString('id-ID')}</small></td><td style="font-weight:900;color:${h.signal.includes('BUY')?'#00e676':'#ff5252'}">${h.signal}</td><td>$${h.entry_mt5.toFixed(2)}<br><small style="color:#94a3b8">${h.size.toFixed(2)} XAUT • ${h.sources||''}</small></td><td>SL $${h.sl_mt5.toFixed(2)}<br>TP1 $${h.tp1_mt5.toFixed(2)}<br>TP2 $${h.tp2_mt5.toFixed(2)}</td><td style="font-weight:900;color:${resultColor}">${h.result}${h.result_price ? '<br><small style="color:#94a3b8">$'+h.result_price.toFixed(2)+'</small>' : ''}${h.duration_menit ? '<br><small style="color:#94a3b8">'+h.duration_menit+'m</small>' : ''}</td><td><input class="hist-note" value="${getNote(h.id).replace(/"/g,'&quot;')}" placeholder="Tulis jurnal... misal: kejemput, TP1, dll" oninput="saveNote('${h.id}', this.value)" /></td></tr>`;
+      }).join('');
+      const closed = hist.filter(h=> h.result !== 'AKTIF');
+      const win = hist.filter(h=> h.result === 'TP2 KENA').length;
+      document.getElementById('winrateVal').innerText = closed.length ? win + ' TP2 / ' + closed.length + ' closed = ' + Math.floor(win/closed.length*100) + '% winrate' : '-';
+    } else {
+      document.getElementById('historyBody').innerHTML = '<tr><td colspan="6" class="empty">Belum ada riwayat...</td></tr>';
+    }
   }catch(e){
     document.getElementById('status').innerText = 'Gagal: ' + e.message;
-    document.getElementById('signalReason').innerText = 'Gagal konek: ' + e.message;
   }
 }
 async function unlock(){
