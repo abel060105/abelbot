@@ -1,9 +1,10 @@
-// ABEL FX ORDERBOOK v4.1 - BOOKMAP STYLE
-// Prinsip: TAMPILKAN BIG ORDER. Bukan gabung-gabungin harga yang deket.
-// - NO grouping 4$, NO grouping 0.1, NO konfirmasi 2/3 dalam X$
-// - Yang digabung CUMA kalau harganya PERSIS SAMA (misal OKX 3965.60 + Binance 3965.60 = dijumlah, karena itu 1 level yang sama)
-// - Filter CUMA pake SIZE: size gede = tampil, size kecil = buang. Jarak gak peduli, mau di 3950, 3965, 4100, kalau gede ya tampil.
-// Pair: XAUT = XAUUSD | Entry +3 | SL -3 | Emergency -6 | TP1/TP2 | Partial 50/50 | Re-Entry A | Warm-up 30m
+// ABEL FX ORDERBOOK v4.2 - BOOKMAP + PENDING ORDER + JAM SINYAL
+// Base: V4.1 BOOKMAP SIZE ONLY - NO grouping jarak
+// UPDATE V4.2 (buat nyambung ke index.html baru):
+// 1. Tambah pendingOrders di /api/signal (6 big order terbesar + status PENDING / TERSENTUH + instruksi BUY/SELL)
+// 2. Tambah signal_started_at + signal_age di /api/signal (buat jam sinyal aktif di frontend)
+// 3. Tambah touchedLevels (level pending yang udah kesentuh, pindahan ke sinyal aktif)
+// LOGIKA LAINNYA SAMA PERSIS KAYAK V4.1: Spot OKX+Binance+Bybit, Filter SIZE doang, NO grouping jarak
 const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -48,7 +49,6 @@ async function saveToSupabase(wall){
   }catch(e){ console.log('Supabase save gagal:', e.message); }
 }
 
-// === HARGA XAUUSD - SPOT MURNI, NO FUTURES GC=F ===
 async function fetchGoldPrice(){
   const sources = [
     { name: 'goldprice.dev SPOT', url: 'https://api.goldprice.dev/v1/prices?symbol=XAU-USD-SPOT', parse: (d) => (d.symbols && d.symbols[0] && d.symbols[0].price) ? parseFloat(d.symbols[0].price) : null },
@@ -72,7 +72,6 @@ async function fetchGoldPrice(){
   }
 }
 
-// === FETCH SPOT - OKX + BINANCE + BYBIT ===
 async function fetchOKX(){
   try{
     const res = await fetch('https://www.okx.com/api/v5/market/books?instId=XAUT-USDT&sz=400');
@@ -107,6 +106,34 @@ async function fetchBybit(){
   }catch(e){ return null; }
 }
 
+// === BARU V4.2: HITUNG PENDING ORDER DI SERVER ===
+// Ambil dari walls yang udah ke-filter SIZE gede (Bookmap).
+// Urut size terbesar, ambil 6 teratas.
+// BID = BUY, ASK = SELL.
+// PENDING = jarak MT5 ke harga sekarang > 3$. TERSENTUH = jarak <= 3$.
+function buildPendingOrders(){
+  if(!walls.length || !xauusdPrice) return { pending: [], touched: [] };
+  const sorted = [...walls].sort((a,b)=> b.size - a.size).slice(0, 6);
+  const pending = [];
+  const touched = [];
+  sorted.forEach(w=>{
+    const mt5 = w.price_mt5 || (w.price - selisih);
+    const jarak = Math.abs(mt5 - xauusdPrice);
+    const isTouched = jarak <= 3;
+    const item = {
+      ...w,
+      price_mt5: Math.floor(mt5*100)/100,
+      instruction: w.side === 'BID' ? 'BUY' : 'SELL',
+      status: isTouched ? 'TERSENTUH' : 'PENDING',
+      distance_mt5: Math.floor(jarak*100)/100,
+      notional: Math.floor(w.size * w.price)
+    };
+    if(isTouched) touched.push(item);
+    else pending.push(item);
+  });
+  return { pending, touched };
+}
+
 async function fetchOrderbook(){
   try{
     const [okx, binance, byb] = await Promise.all([fetchOKX(), fetchBinance(), fetchBybit()]);
@@ -120,15 +147,12 @@ async function fetchOrderbook(){
     if(mids.length>0) xautMid = mids.reduce((a,b)=>a+b,0)/mids.length;
     if(xauusdPrice>0) selisih = xautMid - xauusdPrice;
 
-    // === BOOKMAP STYLE: NO GROUPING JARAK ===
-    // Cuma gabung kalau HARGA PERSIS SAMA. Contoh: OKX 3965.60 + Binance 3965.60 = 1 level size dijumlah.
-    // Kalau OKX 3965.60 + Binance 3965.50, itu 2 level beda, JANGAN digabung. Biarin sendiri-sendiri kayak Bookmap.
+    // BOOKMAP: NO GROUPING JARAK - cuma gabung kalau harga PERSIS SAMA
     let mergedMap = {};
     const exNames = ['OKX','BINANCE','BYBIT'];
     [okx, binance, byb].forEach((ex, idx)=>{
       if(!ex) return;
       [...ex.bids, ...ex.asks].forEach(w=>{
-        // Kunci = harga persis 2 desimal + side. BUKAN dibulatkan ke 0.1, BUKAN < 4$.
         const key = `${w.side}-${w.price.toFixed(2)}`;
         if(!mergedMap[key]) mergedMap[key] = { price: w.price, side: w.side, size: 0, sources: new Set() };
         mergedMap[key].size += w.size;
@@ -140,13 +164,9 @@ async function fetchOrderbook(){
     const avg = allLevels.length ? allLevels.reduce((s,w)=>s+w.size,0) / allLevels.length : 0;
     lastAvg = avg;
 
-    // === FILTER CUMA PAKE SIZE, NO JARAK ===
-    // Kayak Bookmap: yang keliatan itu yang size-nya gede.
-    // Mau jaraknya 1$ dari harga, mau 100$ dari harga, kalau size-nya gede ya TAMPIL.
-    // Yang kecil dibuang, biar gak berisik kayak screenshot kemarin yang isinya 1.18, 1.10, 1.93 semua.
+    // FILTER SIZE DOANG
     let confirmed = [];
     allLevels.forEach(w=>{
-      // Threshold: 2.5x rata-rata. Ini SATU-SATUNYA filter. Bukan jarak.
       if(w.size < avg * 2.5) return;
       const score = avg > 0 ? w.size / avg : 0;
       confirmed.push({
@@ -160,8 +180,6 @@ async function fetchOrderbook(){
       });
     });
 
-    // Urutin kayak Bookmap: yang PALING GEDE di atas, bukan yang paling deket harga.
-    // Jadi lo langsung liat mana big order-nya, gak perlu scroll.
     confirmed.sort((a,b)=> b.size - a.size);
 
     const now = Date.now();
@@ -176,12 +194,12 @@ async function fetchOrderbook(){
       w.price_mt5 = Math.floor((w.price - selisih)*100)/100;
       w.price_xaut = Math.floor(w.price*100)/100;
       w.distance = Math.abs(w.price - xautMid);
-      w.is_far = w.distance >= 20; // ini cuma buat misahin tampilan di frontend (Deket vs Jauh), BUKAN buat filter / grouping
+      w.is_far = w.distance >= 20;
     });
     wallFirstSeen = newSeen;
 
     walls = confirmed;
-    walls._stable = confirmed; // di Bookmap, gak perlu nunggu betah 3 menit. Kalau size-nya gede sekarang, ya gede sekarang.
+    walls._stable = confirmed;
     lastFetch = Date.now();
     for(let w of walls.slice(0,3)) await saveToSupabase(w);
     console.log(`3EX SPOT BOOKMAP [OKX:${sources.okx?'OK':'X'} BIN:${sources.binance?'OK':'X'} BYB:${sources.bybit?'OK':'X'}] Avg:${avg.toFixed(4)} | BigOrder:${walls.length} | XAUT:${xautMid.toFixed(2)} XAUUSD:${xauusdPrice.toFixed(2)} (${lastGoldSource}) Selisih:${selisih.toFixed(2)} | LOCK:${lockedSignal?lockedSignal.signal:'-'}`);
@@ -223,7 +241,8 @@ function buildSignal(){
       else { return { ...lockedSignal, lock_status: `LOCKED - Level goyang`, is_locked: true }; }
     } else {
       lockedWallGoneSince = 0;
-      return { ...lockedSignal, is_locked: true, lock_status: 'LOCKED - Sinyal dikunci', lock_age_menit: Math.floor((Date.now()-lockedSignal.lockedAt)/60000), current_xauusd: cur };
+      // BARU V4.2: balikin lockedAt + jam mulai, biar frontend bisa hitung telat berapa menit
+      return { ...lockedSignal, is_locked: true, lock_status: 'LOCKED - Sinyal dikunci', lock_age_menit: Math.floor((Date.now()-lockedSignal.lockedAt)/60000), current_xauusd: cur, signal_started_at: lockedSignal.lockedAt, signal_age_menit: Math.floor((Date.now()-lockedSignal.lockedAt)/60000) };
     }
   }
 
@@ -232,12 +251,8 @@ function buildSignal(){
   const askWalls = [...stableWalls].filter(w=>w.side==='ASK').sort((a,b)=>b.size-a.size);
   if(bidWalls.length===0 || askWalls.length===0) return { signal:'WAIT', reason:'Big order satu sisi doang', entry:0, sl:0, emergency_sl:0, tp1:0, tp2:0, entry_mt5:0, sl_mt5:0, emergency_sl_mt5:0, tp1_mt5:0, tp2_mt5:0, partial:'50/50', reentry:null, last_done: lastDone };
 
-  // === SINYAL ALA BOOKMAP: YANG MENANG = YANG SIZE-NYA PALING GEDE, BUKAN YANG PALING DEKET ===
-  // V3.4 / V4.0 dulu nyari yang jaraknya 5-15$ dari harga. Itu salah, itu grouping jarak lagi.
-  // Sekarang: BID terbesar vs ASK terbesar, yang size-nya lebih gede yang menang.
   const biggestBid = bidWalls[0];
   const biggestAsk = askWalls[0];
-  const mid = (biggestBid.price + biggestAsk.price) / 2;
 
   let newSignal = null;
   if(biggestBid.size >= biggestAsk.size){
@@ -249,7 +264,7 @@ function buildSignal(){
     const tp2 = (askWalls[askWalls.length-1]?.price || biggestAsk.price) - 3;
     const backup = bidWalls[1];
     const reentry = backup && backup.price !== wall.price ? { entry: backup.price + 3, sl: backup.price - 3, wall: backup.price, entry_mt5: (backup.price + 3) - selisih, sl_mt5: (backup.price - 3) - selisih } : null;
-    newSignal = { signal:'BUY', reason:`BOOKMAP: BIG ORDER BID ${wall.price} size ${wall.size} XAUT (${wall.score}x avg) [${wall.sources}] | ASK terbesar ${biggestAsk.price} size ${biggestAsk.size} XAUT | BID menang karena size lebih gede`, entry, sl, emergency_sl, tp1, tp2, partial:'50/50 - 50% di TP1, 50% ke TP2', reentry, wall: wall.price, avg: lastAvg };
+    newSignal = { signal:'BUY', reason:`BOOKMAP: BIG ORDER BID ${wall.price} size ${wall.size} XAUT (${wall.score}x avg) [${wall.sources}] | ASK terbesar ${biggestAsk.price} size ${biggestAsk.size} XAUT`, entry, sl, emergency_sl, tp1, tp2, partial:'50/50 - 50% di TP1, 50% ke TP2', reentry, wall: wall.price, avg: lastAvg };
   } else {
     const wall = biggestAsk;
     const entry = wall.price - 3;
@@ -259,7 +274,7 @@ function buildSignal(){
     const tp2 = (bidWalls[bidWalls.length-1]?.price || biggestBid.price) + 3;
     const backup = askWalls[1];
     const reentry = backup && backup.price !== wall.price ? { entry: backup.price - 3, sl: backup.price + 3, wall: backup.price, entry_mt5: (backup.price - 3) - selisih, sl_mt5: (backup.price + 3) - selisih } : null;
-    newSignal = { signal:'SELL', reason:`BOOKMAP: BIG ORDER ASK ${wall.price} size ${wall.size} XAUT (${wall.score}x avg) [${wall.sources}] | BID terbesar ${biggestBid.price} size ${biggestBid.size} XAUT | ASK menang karena size lebih gede`, entry, sl, emergency_sl, tp1, tp2, partial:'50/50 - 50% di TP1, 50% ke TP2', reentry, wall: wall.price, avg: lastAvg };
+    newSignal = { signal:'SELL', reason:`BOOKMAP: BIG ORDER ASK ${wall.price} size ${wall.size} XAUT (${wall.score}x avg) [${wall.sources}] | BID terbesar ${biggestBid.price} size ${biggestBid.size} XAUT`, entry, sl, emergency_sl, tp1, tp2, partial:'50/50 - 50% di TP1, 50% ke TP2', reentry, wall: wall.price, avg: lastAvg };
   }
 
   newSignal.entry_mt5 = newSignal.entry - selisih;
@@ -278,7 +293,7 @@ setInterval(fetchGoldPrice, 5000);
 fetchOrderbook();
 fetchGoldPrice();
 
-app.get('/', (req,res)=> res.send('ABEL FX ORDERBOOK v4.1 BOOKMAP SIZE ONLY jalan!'));
+app.get('/', (req,res)=> res.send('ABEL FX ORDERBOOK v4.2 BOOKMAP + PENDING jalan!'));
 app.get('/api/health', (req,res)=> res.json({ status: 'ok', uptime_menit: Math.floor((Date.now()-startTime)/60000) }));
 app.get('/api/unlock', (req,res)=>{ lockedSignal = null; lockedWallGoneSince = 0; res.json({ ok:true, msg:'Lock dibatalkan manual' }); });
 app.get('/api/signal', (req,res)=>{
@@ -287,16 +302,33 @@ app.get('/api/signal', (req,res)=>{
   const wallsNear = walls.filter(w=> !w.is_far);
   const wallsFar = walls.filter(w=> w.is_far);
   const allPrices = walls.map(w=>w.price);
-  res.json({ ...s, pair: 'XAUT = XAUUSD MT5', exchanges: lastSources, avg_xaut: lastAvg,
+
+  // === BARU V4.2: PENDING + TOUCHED + JAM SINYAL ===
+  const { pending, touched } = buildPendingOrders();
+  const signal_started_at = lockedSignal ? lockedSignal.lockedAt : (s.lockedAt || null);
+  const signal_age_menit = signal_started_at ? Math.floor((Date.now() - signal_started_at)/60000) : 0;
+  const signal_age_detik = signal_started_at ? Math.floor((Date.now() - signal_started_at)/1000) % 60 : 0;
+
+  res.json({ ...s,
+    pair: 'XAUT = XAUUSD MT5', exchanges: lastSources, avg_xaut: lastAvg,
     walls: walls.slice(0,50),
     wallsNear: wallsNear.slice(0,10),
     wallsFar: wallsFar,
     wallsFarCount: wallsFar.length,
+    // INI YANG DIPAKE FRONTEND BARU - JANGAN DIHAPUS
+    pendingOrders: pending,
+    pendingCount: pending.length,
+    touchedLevels: touched,
+    touchedCount: touched.length,
+    signal_started_at,
+    signal_age_menit,
+    signal_age_detik,
+    signal_age_text: signal_started_at ? `${signal_age_menit}m ${signal_age_detik}d` : '-',
     range: walls.length ? { low: Math.min(...allPrices), high: Math.max(...allPrices) } : { low: 0, high: 0 },
     uptime_menit, supabase: SUPABASE_URL ? 'CONNECTED' : 'NOT SET', last_update: new Date(lastFetch).toISOString(), last_done: lastDone,
     harga: { xaut_mid: Math.floor(xautMid*100)/100, xauusd_goldprice: Math.floor(xauusdPrice*100)/100, selisih: Math.floor(selisih*100)/100, selisih_text: selisih>=0? `XAUT +${selisih.toFixed(2)}$ lebih mahal` : `XAUT ${selisih.toFixed(2)}$ lebih murah`, last_gold_update: new Date(lastGoldFetch).toISOString(), source: lastGoldSource },
-    rules: 'V4.1 BOOKMAP: NO grouping jarak, Filter SIZE doang (size > 2.5x avg), Urut size terbesar, Sinyal = Big Order terbesar'
+    rules: 'V4.2 BOOKMAP: NO grouping jarak, Filter SIZE doang, Pending Order 6 terbesar, Sinyal = Big Order terbesar, Jam Sinyal Aktif'
   });
 });
 
-app.listen(PORT, ()=> console.log(`ABEL FX ORDERBOOK v4.1 BOOKMAP jalan di port ${PORT}`));
+app.listen(PORT, ()=> console.log(`ABEL FX ORDERBOOK v4.2 BOOKMAP + PENDING jalan di port ${PORT}`));
