@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ABEL FX ORDERBOOK</title>
-<!-- PWA -->
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0f172a">
 <meta name="mobile-web-app-capable" content="yes">
@@ -23,9 +22,9 @@
   .card-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
   .card-head h2{margin:0;font-size:15px}
   .btn-dl{background:#0ea5e9;color:#fff;border:0;padding:6px 10px;border-radius:8px;font-size:11px;cursor:pointer;font-weight:bold}
+  .btn-dl:hover{background:#0284c7}
   .btn-dark{background:#334155;color:#fff;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:bold}
   .btn-green{background:#16a34a;color:#fff;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:bold}
-  /* 3 TOMBOL DI TENGAH - INI FIX-NYA */
   .btn-center{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;max-width:1100px;margin:16px auto 8px;text-align:center}
   .btn-center button{margin:0}
   .btn-install{background:#facc15;color:#000;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:900;display:none}
@@ -79,9 +78,9 @@
 </style>
 </head>
 <body>
-<div class="topbar"><h1>⚡ ABEL FX ORDERBOOK</h1><span id="rangeInfo">Full Depth</span></div>
+<div class="topbar"><h1>⚡ ABEL FX ORDERBOOK</h1></div>
 
-<!-- 1. PENDING ORDER - DIPISAH KIRI BID, KANAN ASK -->
+<!-- 1. PENDING ORDER - DIPISAH KIRI BID, KANAN ASK - BETAH 5 MENIT -->
 <div class="card" id="pendingCard">
   <div class="card-head">
     <h2>📌 PENDING ORDER</h2>
@@ -151,7 +150,7 @@
   <div class="status-row"><span>Sumber Gold</span><b id="goldSourceVal">-</b></div>
 </div>
 
-<!-- 3 TOMBOL - UDAH DI TENGAH, BUKAN DI PINGGIR LAGI -->
+<!-- 3 TOMBOL - UDAH DI TENGAH -->
 <div class="btn-center">
   <button class="btn-green" onclick="window.open(API_URL,'_blank')">LIHAT JSON MENTAH</button>
   <button class="btn-dark" onclick="load()">🔄 REFRESH SEKARANG</button>
@@ -165,7 +164,6 @@ const API_URL = 'https://abelbot.onrender.com/api/signal';
 const BASE_URL = API_URL.replace('/api/signal','');
 function fmt(n){ return n ? '$' + n.toFixed(2) : '0'; }
 
-// === PWA: DAFTAR SERVICE WORKER + TOMBOL INSTALL ===
 let deferredPrompt = null;
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
@@ -255,7 +253,6 @@ async function load(){
     document.getElementById('selisihPrice').innerText = (selisih>=0?'+':'') + selisih.toFixed(2) + '$';
     document.getElementById('selisihDesc').innerText = selisih < 0 ? 'XAUT lebih murah ' + Math.abs(selisih).toFixed(2) + '$ dari MT5' : 'XAUT lebih mahal ' + selisih.toFixed(2) + '$ dari MT5';
     document.getElementById('goldSourceVal').innerText = d.harga?.source || '-';
-    document.getElementById('rangeInfo').innerText = d.range ? 'Full $' + d.range.low.toFixed(0) + ' - $' + d.range.high.toFixed(0) : 'Full Depth';
     const render = (el, arr, cls) => {
       if(!arr.length){ document.getElementById(el).innerHTML = '<div class="empty">Gak ada whale di area ini</div>'; return; }
       document.getElementById(el).innerHTML = arr.map(l=>{
@@ -273,9 +270,10 @@ async function load(){
     let pendingSource = d.pendingOrders && d.pendingOrders.length ? d.pendingOrders : null;
     let touchedSource = d.touchedLevels || [];
     if(!pendingSource){
-      const sorted = [...(d.walls || [])].sort((a,b)=> b.size - a.size).slice(0,6);
-      pendingSource = sorted.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY':'SELL', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='PENDING');
-      touchedSource = sorted.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY':'SELL', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='TERSENTUH');
+      const sorted = [...(d.walls || [])].sort((a,b)=> b.size - a.size).slice(0,20);
+      const filteredBetah = sorted.filter(w=> (w.age_menit||0) >= 5);
+      pendingSource = filteredBetah.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY':'SELL', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='PENDING');
+      touchedSource = filteredBetah.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY':'SELL', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='TERSENTUH');
     }
     const renderPendingItem = (w)=>{
       const mt5 = w.price_mt5 || (w.price - selisih);
@@ -286,8 +284,8 @@ async function load(){
       const badgeText = isTouched ? '🔥 TERSENTUH' : (isBuy ? 'BUY' : 'SELL');
       return `<div class="pending-item ${cls}"><div class="pending-top"><b>${w.side} ${w.price.toFixed(2)}</b><span class="badge ${badgeCls}">${badgeText}</span></div><div class="mt5">MT5 ${mt5.toFixed(2)} • ${isBuy?'BUY':'SELL'} di ${mt5.toFixed(2)}</div><div class="meta">${w.size.toFixed(4)} XAUT • $${(w.size * w.price).toFixed(0)} • ${w.sources||''} • Umur ${w.age_menit||0}m<br>Jarak ke harga MT5: ${(w.distance_mt5 ?? (xauusd?Math.abs(mt5-xauusd):0)).toFixed(1)}$ ${isTouched?'• UDAH KENA!':'• Belum kena'}</div></div>`;
     };
-    document.getElementById('pendingBidList').innerHTML = pendingSource.filter(w=> w.side==='BID').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada BID pending</div>';
-    document.getElementById('pendingAskList').innerHTML = pendingSource.filter(w=> w.side==='ASK').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada ASK pending</div>';
+    document.getElementById('pendingBidList').innerHTML = pendingSource.filter(w=> w.side==='BID').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada BID pending yang betah 5 menit</div>';
+    document.getElementById('pendingAskList').innerHTML = pendingSource.filter(w=> w.side==='ASK').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada ASK pending yang betah 5 menit</div>';
     document.getElementById('pendingCount').innerText = pendingSource.length + ' pending • ' + touchedSource.length + ' tersentuh';
     document.getElementById('touchedVal').innerText = touchedSource.length ? touchedSource.map(w=> `${w.side} ${w.price.toFixed(2)} (MT5 ${(w.price_mt5||w.price-selisih).toFixed(2)})`).join(' | ') : '-';
     document.getElementById('supabaseVal').innerText = d.supabase || '-';
