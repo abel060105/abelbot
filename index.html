@@ -68,6 +68,7 @@
   .pending-top b{font-size:16px}
   .badge{font-size:11px;font-weight:900;padding:4px 8px;border-radius:20px}
   .badge.buy{background:#00e676;color:#000}.badge.sell{background:#ff5252;color:#fff}.badge.touched{background:#facc15;color:#000}
+  .badge.setup{background:#facc15;color:#000}
   .pending-item .mt5{font-size:14px;font-weight:900;color:#facc15;margin-top:4px}
   .pending-item .meta{font-size:11px;color:#94a3b8;margin-top:6px;line-height:1.5}
   .jam-box{background:#0b1118;border:1px solid #facc15;border-radius:10px;padding:10px;margin-top:12px;display:flex;justify-content:space-between}
@@ -90,11 +91,11 @@
   </div>
   <div class="pending-split">
     <div class="pending-col bid-col">
-      <h3>🟢 BID - BUY LIMIT (Support)</h3>
+      <h3>🟢 BID - BUY MARKET (Support)</h3>
       <div id="pendingBidList"><div class="empty">Loading BID...</div></div>
     </div>
     <div class="pending-col ask-col">
-      <h3>🔴 ASK - SELL LIMIT (Resistance)</h3>
+      <h3>🔴 ASK - SELL MARKET (Resistance)</h3>
       <div id="pendingAskList"><div class="empty">Loading ASK...</div></div>
     </div>
   </div>
@@ -106,19 +107,20 @@
     <h2>🎯 SINYAL AKTIF</h2>
     <button class="btn-dl" onclick="downloadCard('signalCard','sinyal-aktif')">⬇ Download Gambar</button>
   </div>
-  <div class="label" style="margin-top:8px">Sinyal Saat Ini <span class="live">● LIVE</span></div>
+  <div class="label" style="margin-top:8px">Sinyal Saat Ini <span class="live">● LIVE</span> <span class="badge setup" id="setupBadge" style="display:none"></span></div>
   <div class="signal WAIT" id="signalText">WAIT</div>
   <div class="jam-box">
     <div><div style="font-size:11px;color:#94a3b8">🕐 Sinyal Aktif Sejak</div><b id="jamAktif">-</b><div id="jamTanggal" style="font-size:11px;color:#94a3b8">-</div></div>
     <div style="text-align:right"><div style="font-size:11px;color:#94a3b8">⏳ Udah Jalan</div><b id="jamTelat">-</b><div id="jamStatus" style="font-size:11px;color:#00e676">Masih fresh, gas masuk</div></div>
   </div>
   <div class="grid2">
-    <div class="mini"><small>Entry (Limit)</small><b id="entryVal">0</b></div>
+    <div class="mini"><small>Entry (Market)</small><b id="entryVal">0</b></div>
     <div class="mini"><small>Stop Loss</small><b id="slVal">0</b></div>
     <div class="mini"><small>TP 1 (50%)</small><b id="tp1Val">0</b></div>
     <div class="mini"><small>TP 2</small><b id="tp2Val">0</b></div>
   </div>
-  <div class="status-row" style="margin-top:12px"><span>Emergency SL</span><b id="emergencyVal">-</b></div>
+  <div class="status-row" style="margin-top:12px"><span>Setup</span><b id="setupVal" style="color:#facc15">-</b></div>
+  <div class="status-row"><span>Emergency SL</span><b id="emergencyVal">-</b></div>
   <div class="status-row"><span>Partial</span><b id="partialVal">50/50</b></div>
   <div class="status-row"><span>Re-Entry A</span><b id="reentryVal">-</b></div>
   <div class="status-row"><span>Lock</span><b id="lockVal">-</b></div>
@@ -143,8 +145,8 @@
     <h2>📚 RIWAYAT SINYAL - JURNALING</h2>
     <div style="display:flex;gap:6px"><button class="btn-dl" onclick="downloadCSV()">⬇ CSV</button><button class="btn-dl" onclick="downloadCard('historyCard','riwayat')">⬇ Gambar</button></div>
   </div>
-  <div style="font-size:12px;color:#94a3b8;margin-top:6px">Server nyala terus, riwayat kesimpen sampe 100 sinyal terakhir. Tulis catatan di kolom Catatan, ke-save otomatis di HP / laptop lo.</div>
-  <div style="overflow-x:auto"><table class="hist-table"><thead><tr><th>Tanggal / Jam</th><th>Sinyal</th><th>Entry</th><th>SL / TP</th><th>Hasil</th><th>Catatan (Jurnal)</th></tr></thead><tbody id="historyBody"><tr><td colspan="6" class="empty">Belum ada riwayat...</td></tr></tbody></table></div>
+  <div style="font-size:12px;color:#94a3b8;margin-top:6px">Cari Setup di Telegram / di sini pake nomornya, misal #K7M2. Server nyala terus, riwayat kesimpen sampe 100 sinyal terakhir.</div>
+  <div style="overflow-x:auto"><table class="hist-table"><thead><tr><th>Setup</th><th>Tanggal / Jam</th><th>Sinyal</th><th>Entry</th><th>SL / TP</th><th>Hasil</th><th>Catatan (Jurnal)</th></tr></thead><tbody id="historyBody"><tr><td colspan="7" class="empty">Belum ada riwayat...</td></tr></tbody></table></div>
   <div class="status-row" style="margin-top:8px"><span>Winrate TP2</span><b id="winrateVal">-</b></div>
 </div>
 
@@ -164,7 +166,7 @@
   <button class="btn-dark" onclick="unlock()">🔓 BATALKAN LOCK MANUAL</button>
   <button class="btn-install" id="installBtn" onclick="installPWA()">📲 INSTALL APLIKASI</button>
 </div>
-<div id="status" style="text-align:center;font-size:11px;color:#94a3b8;margin-bottom:20px">Auto-refresh tiap 5 detik • Sinyal LIMIT, bukan market • Jangan kejar harga</div>
+<div id="status" style="text-align:center;font-size:11px;color:#94a3b8;margin-bottom:20px">Auto-refresh tiap 5 detik • Sinyal MARKET • Eksekusi instan</div>
 
 <script>
 const API_URL = 'https://abelbot.onrender.com/api/signal';
@@ -197,7 +199,6 @@ async function installPWA(){
   }
 }
 
-// NOTIF
 async function enableNotif(){
   if(!('Notification' in window)){ alert('Browser ini gak support notif'); return; }
   const perm = await Notification.requestPermission();
@@ -254,11 +255,11 @@ async function downloadCard(cardId, fileName){
 function getNote(id){ return localStorage.getItem('abel_note_' + id) || ''; }
 function saveNote(id, val){ localStorage.setItem('abel_note_' + id, val); }
 function downloadCSV(){
-  const rows = [['Tanggal','Jam','Sinyal','Entry_MT5','SL_MT5','TP1_MT5','TP2_MT5','Size','Hasil','Catatan']];
+  const rows = [['Setup','Tanggal','Jam','Sinyal','Entry_MT5','SL_MT5','TP1_MT5','TP2_MT5','Size','Hasil','Catatan']];
   const hist = window._lastHistory || [];
   hist.forEach(h=>{
     const dt = new Date(h.created_at);
-    rows.push([dt.toLocaleDateString('id-ID'), dt.toLocaleTimeString('id-ID'), h.signal, h.entry_mt5, h.sl_mt5, h.tp1_mt5, h.tp2_mt5, h.size, h.result, getNote(h.id).replace(/,/g,';')]);
+    rows.push([h.setup_id||'', dt.toLocaleDateString('id-ID'), dt.toLocaleTimeString('id-ID'), h.signal, h.entry_mt5, h.sl_mt5, h.tp1_mt5, h.tp2_mt5, h.size, h.result, getNote(h.id).replace(/,/g,';')]);
   });
   const csv = rows.map(r=> r.join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
@@ -287,13 +288,19 @@ async function load(){
     else if(sigRaw === 'DONE') sigCls = 'DONE';
     sigEl.className = 'signal ' + sigCls;
 
-    // NOTIF: kalau sinyal berubah WAIT -> BUY LIMIT / SELL LIMIT, atau jadi DONE
+    // SETUP ID - TAMPIL DI SINYAL AKTIF
+    const setupId = d.setup_id || '';
+    document.getElementById('setupVal').innerText = setupId || '-';
+    const badge = document.getElementById('setupBadge');
+    if(setupId){ badge.innerText = 'Setup ' + setupId; badge.style.display = 'inline-block'; } else { badge.style.display = 'none'; }
+
+    // NOTIF: kalau sinyal berubah WAIT -> BUY MARKET / SELL MARKET, atau jadi DONE
     const notifKey = sigRaw + '-' + (d.lockedId || d.lockedAt || '');
     if(notifKey !== lastNotifId){
       if(lastSignal === 'WAIT' && (sigRaw.includes('BUY') || sigRaw.includes('SELL'))){
-        sendNotif('🎯 ' + sigRaw + ' di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : ''), 'Pasang LIMIT di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : '') + ' | SL ' + (d.sl_mt5 ? '$' + d.sl_mt5.toFixed(2) : '') + ' | TP1 ' + (d.tp1_mt5 ? '$' + d.tp1_mt5.toFixed(2) : '') + ' | TP2 ' + (d.tp2_mt5 ? '$' + d.tp2_mt5.toFixed(2) : '') + '. Jangan market sekarang.');
+        sendNotif('🎯 ' + sigRaw + ' ' + setupId + ' di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : ''), 'Eksekusi MARKET di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : '') + ' | SL ' + (d.sl_mt5 ? '$' + d.sl_mt5.toFixed(2) : '') + ' | TP1 ' + (d.tp1_mt5 ? '$' + d.tp1_mt5.toFixed(2) : '') + ' | TP2 ' + (d.tp2_mt5 ? '$' + d.tp2_mt5.toFixed(2) : '') + '. Eksekusi sekarang.');
       } else if(sigRaw === 'DONE' && (lastSignal.includes('BUY') || lastSignal.includes('SELL'))){
-        sendNotif('✅ Sinyal DONE - ' + (d.last_done?.last_result || ''), 'Cek riwayat buat jurnaling.');
+        sendNotif('✅ Sinyal DONE ' + setupId + ' - ' + (d.last_done?.last_result || ''), 'Cek riwayat buat jurnaling.');
       }
       lastNotifId = notifKey;
     }
@@ -309,8 +316,8 @@ async function load(){
     document.getElementById('lockVal').innerText = d.is_locked ? '🔒 ' + (d.lock_status || 'LOCKED') : 'Tidak terkunci';
     if(d.last_done) document.getElementById('lockVal').innerText = 'Last: ' + (d.last_done.last_result || '');
     const lockedAt = d.lockedAt || d.signal_started_at || (d.is_locked ? Date.now() : null);
-    const isActiveLimit = sigRaw.includes('BUY') || sigRaw.includes('SELL');
-    if(isActiveLimit){
+    const isActiveMarket = sigRaw.includes('BUY') || sigRaw.includes('SELL');
+    if(isActiveMarket){
       if(lockedAt){
         const dt = new Date(lockedAt);
         document.getElementById('jamAktif').innerText = dt.toLocaleTimeString('id-ID');
@@ -319,9 +326,9 @@ async function load(){
         const diffDetik = Math.floor((Date.now() - dt.getTime())/1000) % 60;
         document.getElementById('jamTelat').innerText = diffMenit + 'm ' + diffDetik + 'd';
         const statusEl = document.getElementById('jamStatus');
-        if(diffMenit <= 2){ statusEl.innerText = 'Limit baru pasang, tunggu kejemput'; statusEl.style.color = '#00e676'; }
-        else if(diffMenit <= 10){ statusEl.innerText = 'Limit udah jalan ' + diffMenit + 'm, cek udah kejemput belum'; statusEl.style.color = '#facc15'; }
-        else { statusEl.innerText = 'Limit udah ' + diffMenit + 'm gak kejemput, pertimbangin cancel'; statusEl.style.color = '#ff5252'; }
+        if(diffMenit <= 2){ statusEl.innerText = 'Market baru eksekusi, pantau TP1'; statusEl.style.color = '#00e676'; }
+        else if(diffMenit <= 10){ statusEl.innerText = 'Market udah jalan ' + diffMenit + 'm, cek TP1'; statusEl.style.color = '#facc15'; }
+        else { statusEl.innerText = 'Market udah ' + diffMenit + 'm belum TP1, pantau terus'; statusEl.style.color = '#ff5252'; }
       }
     } else {
       document.getElementById('jamAktif').innerText = '-';
@@ -357,8 +364,8 @@ async function load(){
     } else {
       const sorted = [...(d.walls || [])].sort((a,b)=> b.size - a.size).slice(0,20);
       const filteredBetah = sorted.filter(w=> (w.age_menit||0) >= 5);
-      pendingSource = filteredBetah.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY LIMIT':'SELL LIMIT', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='PENDING');
-      touchedSource = filteredBetah.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY LIMIT':'SELL LIMIT', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='TERSENTUH');
+      pendingSource = filteredBetah.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY MARKET':'SELL MARKET', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='PENDING');
+      touchedSource = filteredBetah.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY MARKET':'SELL MARKET', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='TERSENTUH');
     }
     const renderPendingItem = (w)=>{
       const mt5 = w.price_mt5 || (w.price - selisih);
@@ -366,8 +373,8 @@ async function load(){
       const isBuy = w.side === 'BID';
       const cls = isTouched ? 'touched' : (isBuy ? 'buy' : 'sell');
       const badgeCls = isTouched ? 'touched' : (isBuy ? 'buy' : 'sell');
-      const badgeText = isTouched ? '🔥 TERSENTUH' : (isBuy ? 'BUY LIMIT' : 'SELL LIMIT');
-      return `<div class="pending-item ${cls}"><div class="pending-top"><b>${w.side} ${w.price.toFixed(2)}</b><span class="badge ${badgeCls}">${badgeText}</span></div><div class="mt5">MT5 ${mt5.toFixed(2)} • ${isBuy?'BUY LIMIT':'SELL LIMIT'} di ${mt5.toFixed(2)}</div><div class="meta">${w.size.toFixed(4)} XAUT • $${(w.size * w.price).toFixed(0)} • ${w.sources||''} • Umur ${w.age_menit||0}m<br>Jarak ke harga MT5: ${(w.distance_mt5 ?? (xauusd?Math.abs(mt5-xauusd):0)).toFixed(1)}$ ${isTouched?'• UDAH KENA!':'• Belum kena'}</div></div>`;
+      const badgeText = isTouched ? '🔥 TERSENTUH' : (isBuy ? 'BUY MARKET' : 'SELL MARKET');
+      return `<div class="pending-item ${cls}"><div class="pending-top"><b>${w.side} ${w.price.toFixed(2)}</b><span class="badge ${badgeCls}">${badgeText}</span></div><div class="mt5">MT5 ${mt5.toFixed(2)} • ${isBuy?'BUY MARKET':'SELL MARKET'} di ${mt5.toFixed(2)}</div><div class="meta">${w.size.toFixed(4)} XAUT • $${(w.size * w.price).toFixed(0)} • ${w.sources||''} • Umur ${w.age_menit||0}m<br>Jarak ke harga MT5: ${(w.distance_mt5 ?? (xauusd?Math.abs(mt5-xauusd):0)).toFixed(1)}$ ${isTouched?'• UDAH KENA!':'• Belum kena'}</div></div>`;
     };
     document.getElementById('pendingBidList').innerHTML = pendingSource.filter(w=> w.side==='BID').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada BID pending yang betah 5 menit - lagi nunggu...</div>';
     document.getElementById('pendingAskList').innerHTML = pendingSource.filter(w=> w.side==='ASK').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada ASK pending yang betah 5 menit - lagi nunggu...</div>';
@@ -378,22 +385,22 @@ async function load(){
     document.getElementById('totalVal').innerText = (d.walls?.length || 0) + ' level • Jauh: ' + (d.wallsFarCount || 0);
     document.getElementById('uptimeVal').innerText = (d.uptime_menit || 0) + ' menit';
     document.getElementById('lastUpdateVal').innerText = d.last_update ? new Date(d.last_update).toLocaleTimeString('id-ID') : '-';
-    document.getElementById('status').innerText = 'Update: ' + new Date().toLocaleTimeString('id-ID') + ' • Sinyal LIMIT, bukan market • Jangan kejar harga';
+    document.getElementById('status').innerText = 'Update: ' + new Date().toLocaleTimeString('id-ID') + ' • Sinyal MARKET • Eksekusi instan';
 
-    // RIWAYAT
+    // RIWAYAT + SETUP
     const hist = d.history || [];
     window._lastHistory = hist;
     if(hist.length){
       document.getElementById('historyBody').innerHTML = hist.map(h=>{
         const dt = new Date(h.created_at);
         const resultColor = h.result === 'TP2 KENA' ? '#00e676' : h.result === 'SL KENA' ? '#ff5252' : h.result === 'AKTIF' ? '#facc15' : '#94a3b8';
-        return `<tr><td>${dt.toLocaleDateString('id-ID')}<br><small style="color:#94a3b8">${dt.toLocaleTimeString('id-ID')}</small></td><td style="font-weight:900;color:${h.signal.includes('BUY')?'#00e676':'#ff5252'}">${h.signal}</td><td>$${h.entry_mt5.toFixed(2)}<br><small style="color:#94a3b8">${h.size.toFixed(2)} XAUT • ${h.sources||''}</small></td><td>SL $${h.sl_mt5.toFixed(2)}<br>TP1 $${h.tp1_mt5.toFixed(2)}<br>TP2 $${h.tp2_mt5.toFixed(2)}</td><td style="font-weight:900;color:${resultColor}">${h.result}${h.result_price ? '<br><small style="color:#94a3b8">$'+h.result_price.toFixed(2)+'</small>' : ''}${h.duration_menit ? '<br><small style="color:#94a3b8">'+h.duration_menit+'m</small>' : ''}</td><td><input class="hist-note" value="${getNote(h.id).replace(/"/g,'&quot;')}" placeholder="Tulis jurnal... misal: kejemput, TP1, dll" oninput="saveNote('${h.id}', this.value)" /></td></tr>`;
+        return `<tr><td style="font-weight:900;color:#facc15">${h.setup_id||'-'}</td><td>${dt.toLocaleDateString('id-ID')}<br><small style="color:#94a3b8">${dt.toLocaleTimeString('id-ID')}</small></td><td style="font-weight:900;color:${h.signal.includes('BUY')?'#00e676':'#ff5252'}">${h.signal}</td><td>$${h.entry_mt5.toFixed(2)}<br><small style="color:#94a3b8">${h.size.toFixed(2)} XAUT • ${h.sources||''}</small></td><td>SL $${h.sl_mt5.toFixed(2)}<br>TP1 $${h.tp1_mt5.toFixed(2)}<br>TP2 $${h.tp2_mt5.toFixed(2)}</td><td style="font-weight:900;color:${resultColor}">${h.result}${h.result_price ? '<br><small style="color:#94a3b8">$'+h.result_price.toFixed(2)+'</small>' : ''}${h.duration_menit ? '<br><small style="color:#94a3b8">'+h.duration_menit+'m</small>' : ''}</td><td><input class="hist-note" value="${getNote(h.id).replace(/"/g,'&quot;')}" placeholder="Tulis jurnal... misal: TP1, dll" oninput="saveNote('${h.id}', this.value)" /></td></tr>`;
       }).join('');
       const closed = hist.filter(h=> h.result !== 'AKTIF');
       const win = hist.filter(h=> h.result === 'TP2 KENA').length;
       document.getElementById('winrateVal').innerText = closed.length ? win + ' TP2 / ' + closed.length + ' closed = ' + Math.floor(win/closed.length*100) + '% winrate' : '-';
     } else {
-      document.getElementById('historyBody').innerHTML = '<tr><td colspan="6" class="empty">Belum ada riwayat...</td></tr>';
+      document.getElementById('historyBody').innerHTML = '<tr><td colspan="7" class="empty">Belum ada riwayat...</td></tr>';
     }
   }catch(e){
     document.getElementById('status').innerText = 'Gagal: ' + e.message;
