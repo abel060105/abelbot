@@ -22,7 +22,6 @@
   .card-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
   .card-head h2{margin:0;font-size:15px}
   .btn-dl{background:#0ea5e9;color:#fff;border:0;padding:6px 10px;border-radius:8px;font-size:11px;cursor:pointer;font-weight:bold}
-  .btn-dl:hover{background:#0284c7}
   .btn-dark{background:#334155;color:#fff;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:bold}
   .btn-green{background:#16a34a;color:#fff;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:bold}
   .btn-center{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;max-width:1100px;margin:16px auto 8px;text-align:center}
@@ -80,7 +79,6 @@
 <body>
 <div class="topbar"><h1>⚡ ABEL FX ORDERBOOK</h1></div>
 
-<!-- 1. PENDING ORDER - DIPISAH KIRI BID, KANAN ASK - BETAH 5 MENIT -->
 <div class="card" id="pendingCard">
   <div class="card-head">
     <h2>📌 PENDING ORDER</h2>
@@ -99,7 +97,6 @@
   <div class="status-row" style="margin-top:8px"><span>Total Pending</span><b id="pendingCount">-</b></div>
 </div>
 
-<!-- 2. SINYAL AKTIF -->
 <div class="card" id="signalCard">
   <div class="card-head">
     <h2>🎯 SINYAL AKTIF</h2>
@@ -125,14 +122,12 @@
   <div class="status-row"><span>Level TERSENTUH</span><b id="touchedVal" style="color:#facc15">-</b></div>
 </div>
 
-<!-- HARGA -->
 <div class="harga-grid">
   <div class="harga-box"><div class="lbl">XAUT (Orderbook)</div><div class="val" id="xautPrice">--</div><div class="sub">Harga mentah Bybit/OKX/Binance</div></div>
   <div class="harga-box highlight"><div class="lbl">⭐ XAUUSD / MT5</div><div class="val" id="xauusdPrice" style="color:#00e676">--</div><div class="sub">Harga yang lo pake trading</div></div>
   <div class="harga-box"><div class="lbl">Selisih</div><div class="val" id="selisihPrice" style="font-size:18px">--</div><div class="sub" id="selisihDesc">XAUT - XAUUSD</div></div>
 </div>
 
-<!-- 3. BID / ASK -->
 <div class="four-col" id="wallsCard">
   <div class="card"><div class="card-head"><h2>🟢 BID Dekat</h2></div><div id="bidsNear"><div class="empty">Loading...</div></div></div>
   <div class="card"><div class="card-head"><h2>🔴 ASK Dekat</h2></div><div id="asksNear"><div class="empty">Loading...</div></div></div>
@@ -150,7 +145,6 @@
   <div class="status-row"><span>Sumber Gold</span><b id="goldSourceVal">-</b></div>
 </div>
 
-<!-- 3 TOMBOL - UDAH DI TENGAH -->
 <div class="btn-center">
   <button class="btn-green" onclick="window.open(API_URL,'_blank')">LIHAT JSON MENTAH</button>
   <button class="btn-dark" onclick="load()">🔄 REFRESH SEKARANG</button>
@@ -267,9 +261,16 @@ async function load(){
     render('asksNear', wallsNear.filter(w=>w.side==='ASK').sort((a,b)=>a.price-b.price).slice(0,6), 'ASK');
     render('bidsFar', wallsFar.filter(w=>w.side==='BID').sort((a,b)=>b.size-a.size), 'FAR-BID');
     render('asksFar', wallsFar.filter(w=>w.side==='ASK').sort((a,b)=>b.size-a.size), 'FAR-ASK');
-    let pendingSource = d.pendingOrders && d.pendingOrders.length ? d.pendingOrders : null;
-    let touchedSource = d.touchedLevels || [];
-    if(!pendingSource){
+
+    // FIX UTAMA: Kalau server ngirim pendingOrders (walau kosong []), PAKAI ITU. Jangan fallback ke walls.
+    // Cuma kalau server bener-bener gak ngirim field pendingOrders sama sekali (server lama), baru fallback.
+    let pendingSource;
+    let touchedSource;
+    if(Array.isArray(d.pendingOrders)){
+      pendingSource = d.pendingOrders;
+      touchedSource = Array.isArray(d.touchedLevels) ? d.touchedLevels : [];
+    } else {
+      // Fallback buat server lama doang, tetep disaring betah 5 menit
       const sorted = [...(d.walls || [])].sort((a,b)=> b.size - a.size).slice(0,20);
       const filteredBetah = sorted.filter(w=> (w.age_menit||0) >= 5);
       pendingSource = filteredBetah.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY':'SELL', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='PENDING');
@@ -284,8 +285,8 @@ async function load(){
       const badgeText = isTouched ? '🔥 TERSENTUH' : (isBuy ? 'BUY' : 'SELL');
       return `<div class="pending-item ${cls}"><div class="pending-top"><b>${w.side} ${w.price.toFixed(2)}</b><span class="badge ${badgeCls}">${badgeText}</span></div><div class="mt5">MT5 ${mt5.toFixed(2)} • ${isBuy?'BUY':'SELL'} di ${mt5.toFixed(2)}</div><div class="meta">${w.size.toFixed(4)} XAUT • $${(w.size * w.price).toFixed(0)} • ${w.sources||''} • Umur ${w.age_menit||0}m<br>Jarak ke harga MT5: ${(w.distance_mt5 ?? (xauusd?Math.abs(mt5-xauusd):0)).toFixed(1)}$ ${isTouched?'• UDAH KENA!':'• Belum kena'}</div></div>`;
     };
-    document.getElementById('pendingBidList').innerHTML = pendingSource.filter(w=> w.side==='BID').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada BID pending yang betah 5 menit</div>';
-    document.getElementById('pendingAskList').innerHTML = pendingSource.filter(w=> w.side==='ASK').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada ASK pending yang betah 5 menit</div>';
+    document.getElementById('pendingBidList').innerHTML = pendingSource.filter(w=> w.side==='BID').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada BID pending yang betah 5 menit - lagi nunggu...</div>';
+    document.getElementById('pendingAskList').innerHTML = pendingSource.filter(w=> w.side==='ASK').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada ASK pending yang betah 5 menit - lagi nunggu...</div>';
     document.getElementById('pendingCount').innerText = pendingSource.length + ' pending • ' + touchedSource.length + ' tersentuh';
     document.getElementById('touchedVal').innerText = touchedSource.length ? touchedSource.map(w=> `${w.side} ${w.price.toFixed(2)} (MT5 ${(w.price_mt5||w.price-selisih).toFixed(2)})`).join(' | ') : '-';
     document.getElementById('supabaseVal').innerText = d.supabase || '-';
