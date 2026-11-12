@@ -86,11 +86,11 @@
   </div>
   <div class="pending-split">
     <div class="pending-col bid-col">
-      <h3>🟢 BID - BUY (Support)</h3>
+      <h3>🟢 BID - BUY LIMIT (Support)</h3>
       <div id="pendingBidList"><div class="empty">Loading BID...</div></div>
     </div>
     <div class="pending-col ask-col">
-      <h3>🔴 ASK - SELL (Resistance)</h3>
+      <h3>🔴 ASK - SELL LIMIT (Resistance)</h3>
       <div id="pendingAskList"><div class="empty">Loading ASK...</div></div>
     </div>
   </div>
@@ -110,7 +110,7 @@
     <div style="text-align:right"><div style="font-size:11px;color:#94a3b8">⏳ Udah Jalan</div><b id="jamTelat">-</b><div id="jamStatus" style="font-size:11px;color:#00e676">Masih fresh, gas masuk</div></div>
   </div>
   <div class="grid2">
-    <div class="mini"><small>Entry</small><b id="entryVal">0</b><span id="entryMt5">MT5 -</span></div>
+    <div class="mini"><small>Entry (Limit)</small><b id="entryVal">0</b><span id="entryMt5">MT5 -</span></div>
     <div class="mini"><small>Stop Loss</small><b id="slVal">0</b><span id="slMt5">MT5 -</span></div>
     <div class="mini"><small>TP 1 (50%)</small><b id="tp1Val">0</b><span id="tp1Mt5">MT5 -</span></div>
     <div class="mini"><small>TP 2</small><b id="tp2Val">0</b><span id="tp2Mt5">MT5 -</span></div>
@@ -151,13 +151,12 @@
   <button class="btn-dark" onclick="unlock()">🔓 BATALKAN LOCK MANUAL</button>
   <button class="btn-install" id="installBtn" onclick="installPWA()">📲 INSTALL APLIKASI</button>
 </div>
-<div id="status" style="text-align:center;font-size:11px;color:#94a3b8;margin-bottom:20px">Auto-refresh tiap 5 detik • Jangan trade kalau masih PEMANASAN</div>
+<div id="status" style="text-align:center;font-size:11px;color:#94a3b8;margin-bottom:20px">Auto-refresh tiap 5 detik • Sinyal LIMIT, bukan market • Jangan kejar harga</div>
 
 <script>
 const API_URL = 'https://abelbot.onrender.com/api/signal';
 const BASE_URL = API_URL.replace('/api/signal','');
 function fmt(n){ return n ? '$' + n.toFixed(2) : '0'; }
-
 let deferredPrompt = null;
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
@@ -180,7 +179,6 @@ async function installPWA(){
     alert('Di Chrome HP: klik titik 3 di kanan atas > Tambahkan ke Layar Utama / Install App.\nDi Chrome Laptop: klik ikon Install di address bar (kanan).');
   }
 }
-
 async function downloadCard(cardId, fileName){
   const el = document.getElementById(cardId);
   if(!el) return;
@@ -193,7 +191,6 @@ async function downloadCard(cardId, fileName){
     a.click();
   }catch(e){ alert('Gagal download: ' + e.message); }
 }
-
 async function load(){
   document.getElementById('status').innerText = 'Menghubungkan...';
   try{
@@ -204,9 +201,15 @@ async function load(){
     const price = d.harga?.xaut_mid || 0;
     const xauusd = d.harga?.xauusd_goldprice || 0;
     const selisih = d.harga?.selisih || 0;
+    const sigRaw = d.signal || 'WAIT';
     const sigEl = document.getElementById('signalText');
-    sigEl.innerText = d.signal || 'WAIT';
-    sigEl.className = 'signal ' + (d.signal || 'WAIT');
+    sigEl.innerText = sigRaw;
+    // Warna tetep ngikutin BUY / SELL, walau judulnya BUY LIMIT / SELL LIMIT
+    let sigCls = 'WAIT';
+    if(sigRaw.includes('BUY')) sigCls = 'BUY';
+    else if(sigRaw.includes('SELL')) sigCls = 'SELL';
+    else if(sigRaw === 'DONE') sigCls = 'DONE';
+    sigEl.className = 'signal ' + sigCls;
     document.getElementById('signalReason').innerText = d.reason || d.lock_status || '-';
     document.getElementById('entryVal').innerText = fmt(d.entry_mt5);
     document.getElementById('entryMt5').innerText = d.entry ? 'XAUT ' + fmt(d.entry) : 'MT5 -';
@@ -222,7 +225,8 @@ async function load(){
     document.getElementById('lockVal').innerText = d.is_locked ? '🔒 ' + (d.lock_status || 'LOCKED') : 'Tidak terkunci';
     if(d.last_done) document.getElementById('lockVal').innerText = 'Last: ' + (d.last_done.last_result || '');
     const lockedAt = d.lockedAt || d.signal_started_at || (d.is_locked ? Date.now() : null);
-    if(d.signal === 'BUY' || d.signal === 'SELL'){
+    const isActiveLimit = sigRaw.includes('BUY') || sigRaw.includes('SELL');
+    if(isActiveLimit){
       if(lockedAt){
         const dt = new Date(lockedAt);
         document.getElementById('jamAktif').innerText = dt.toLocaleTimeString('id-ID');
@@ -231,9 +235,9 @@ async function load(){
         const diffDetik = Math.floor((Date.now() - dt.getTime())/1000) % 60;
         document.getElementById('jamTelat').innerText = diffMenit + 'm ' + diffDetik + 'd';
         const statusEl = document.getElementById('jamStatus');
-        if(diffMenit <= 2){ statusEl.innerText = 'Masih fresh, gas masuk'; statusEl.style.color = '#00e676'; }
-        else if(diffMenit <= 10){ statusEl.innerText = 'Udah jalan ' + diffMenit + 'm, hati-hati telat'; statusEl.style.color = '#facc15'; }
-        else { statusEl.innerText = 'UDAH TELAT ' + diffMenit + 'm, jangan kejar! Tunggu Re-Entry'; statusEl.style.color = '#ff5252'; }
+        if(diffMenit <= 2){ statusEl.innerText = 'Limit baru pasang, tunggu kejemput'; statusEl.style.color = '#00e676'; }
+        else if(diffMenit <= 10){ statusEl.innerText = 'Limit udah jalan ' + diffMenit + 'm, cek udah kejemput belum'; statusEl.style.color = '#facc15'; }
+        else { statusEl.innerText = 'Limit udah ' + diffMenit + 'm gak kejemput, pertimbangin cancel'; statusEl.style.color = '#ff5252'; }
       }
     } else {
       document.getElementById('jamAktif').innerText = '-';
@@ -261,20 +265,16 @@ async function load(){
     render('asksNear', wallsNear.filter(w=>w.side==='ASK').sort((a,b)=>a.price-b.price).slice(0,6), 'ASK');
     render('bidsFar', wallsFar.filter(w=>w.side==='BID').sort((a,b)=>b.size-a.size), 'FAR-BID');
     render('asksFar', wallsFar.filter(w=>w.side==='ASK').sort((a,b)=>b.size-a.size), 'FAR-ASK');
-
-    // FIX UTAMA: Kalau server ngirim pendingOrders (walau kosong []), PAKAI ITU. Jangan fallback ke walls.
-    // Cuma kalau server bener-bener gak ngirim field pendingOrders sama sekali (server lama), baru fallback.
     let pendingSource;
     let touchedSource;
     if(Array.isArray(d.pendingOrders)){
       pendingSource = d.pendingOrders;
       touchedSource = Array.isArray(d.touchedLevels) ? d.touchedLevels : [];
     } else {
-      // Fallback buat server lama doang, tetep disaring betah 5 menit
       const sorted = [...(d.walls || [])].sort((a,b)=> b.size - a.size).slice(0,20);
       const filteredBetah = sorted.filter(w=> (w.age_menit||0) >= 5);
-      pendingSource = filteredBetah.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY':'SELL', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='PENDING');
-      touchedSource = filteredBetah.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY':'SELL', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='TERSENTUH');
+      pendingSource = filteredBetah.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY LIMIT':'SELL LIMIT', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='PENDING');
+      touchedSource = filteredBetah.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY LIMIT':'SELL LIMIT', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='TERSENTUH');
     }
     const renderPendingItem = (w)=>{
       const mt5 = w.price_mt5 || (w.price - selisih);
@@ -282,8 +282,8 @@ async function load(){
       const isBuy = w.side === 'BID';
       const cls = isTouched ? 'touched' : (isBuy ? 'buy' : 'sell');
       const badgeCls = isTouched ? 'touched' : (isBuy ? 'buy' : 'sell');
-      const badgeText = isTouched ? '🔥 TERSENTUH' : (isBuy ? 'BUY' : 'SELL');
-      return `<div class="pending-item ${cls}"><div class="pending-top"><b>${w.side} ${w.price.toFixed(2)}</b><span class="badge ${badgeCls}">${badgeText}</span></div><div class="mt5">MT5 ${mt5.toFixed(2)} • ${isBuy?'BUY':'SELL'} di ${mt5.toFixed(2)}</div><div class="meta">${w.size.toFixed(4)} XAUT • $${(w.size * w.price).toFixed(0)} • ${w.sources||''} • Umur ${w.age_menit||0}m<br>Jarak ke harga MT5: ${(w.distance_mt5 ?? (xauusd?Math.abs(mt5-xauusd):0)).toFixed(1)}$ ${isTouched?'• UDAH KENA!':'• Belum kena'}</div></div>`;
+      const badgeText = isTouched ? '🔥 TERSENTUH' : (isBuy ? 'BUY LIMIT' : 'SELL LIMIT');
+      return `<div class="pending-item ${cls}"><div class="pending-top"><b>${w.side} ${w.price.toFixed(2)}</b><span class="badge ${badgeCls}">${badgeText}</span></div><div class="mt5">MT5 ${mt5.toFixed(2)} • ${isBuy?'BUY LIMIT':'SELL LIMIT'} di ${mt5.toFixed(2)}</div><div class="meta">${w.size.toFixed(4)} XAUT • $${(w.size * w.price).toFixed(0)} • ${w.sources||''} • Umur ${w.age_menit||0}m<br>Jarak ke harga MT5: ${(w.distance_mt5 ?? (xauusd?Math.abs(mt5-xauusd):0)).toFixed(1)}$ ${isTouched?'• UDAH KENA!':'• Belum kena'}</div></div>`;
     };
     document.getElementById('pendingBidList').innerHTML = pendingSource.filter(w=> w.side==='BID').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada BID pending yang betah 5 menit - lagi nunggu...</div>';
     document.getElementById('pendingAskList').innerHTML = pendingSource.filter(w=> w.side==='ASK').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada ASK pending yang betah 5 menit - lagi nunggu...</div>';
@@ -294,7 +294,7 @@ async function load(){
     document.getElementById('totalVal').innerText = (d.walls?.length || 0) + ' level • Jauh: ' + (d.wallsFarCount || 0);
     document.getElementById('uptimeVal').innerText = (d.uptime_menit || 0) + ' menit';
     document.getElementById('lastUpdateVal').innerText = d.last_update ? new Date(d.last_update).toLocaleTimeString('id-ID') : '-';
-    document.getElementById('status').innerText = 'Update: ' + new Date().toLocaleTimeString('id-ID') + ' • Auto-refresh tiap 5 detik • Jangan trade kalau masih PEMANASAN';
+    document.getElementById('status').innerText = 'Update: ' + new Date().toLocaleTimeString('id-ID') + ' • Sinyal LIMIT, bukan market • Jangan kejar harga';
   }catch(e){
     document.getElementById('status').innerText = 'Gagal: ' + e.message;
     document.getElementById('signalReason').innerText = 'Gagal konek: ' + e.message;
