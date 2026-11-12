@@ -1,4 +1,4 @@
-// ABEL BOT - V4.3 - BETAH 5 MENIT + PENDING DIPISAH
+// ABEL BOT - V4.4 - FIX MT5 KOSONG / SELISIH NGAWUR
 // Render: node server.js
 const express = require('express');
 const cors = require('cors');
@@ -9,10 +9,11 @@ app.use(express.json());
 const PORT = process.env.PORT || 10000;
 
 // ============ STATE ============
-let walls = []; // semua whale level: { side, price, price_mt5, size, sources, age_menit, first_seen }
+let walls = [];
 let wallsFar = [];
 let xautPrice = 0;
 let xauusdPrice = 0;
+let lastKnownXauusd = 0;
 let selisih = 0;
 let goldSource = '-';
 let exchanges = { bybit: false, okx: false, binance: false };
@@ -20,7 +21,6 @@ let uptimeStart = Date.now();
 let lastUpdate = null;
 let lastDone = null;
 
-// Signal lock
 let isLocked = false;
 let lockStatus = 'Tidak terkunci';
 let lockedSignal = 'WAIT';
@@ -32,8 +32,7 @@ let lockedReason = '';
 let reentry = null;
 let partial = '50/50';
 
-// Simpan first_seen per harga biar bisa hitung umur / betah
-let firstSeenMap = new Map(); // key: SIDE-PRICE -> timestamp
+let firstSeenMap = new Map();
 
 function getAgeMenit(key){
   const t = firstSeenMap.get(key);
@@ -41,30 +40,65 @@ function getAgeMenit(key){
   return Math.floor((Date.now() - t) / 60000);
 }
 
-// ============ FETCH HARGA EMAS MT5 ============
+// ============ FETCH HARGA EMAS MT5 - 3 LAPIS, ANTI KOSONG ============
 async function fetchGoldPrice(){
+  // LAPIS 1: gold-api.com - gratis, paling ringan
   try{
-    const r = await fetch('https://data-asg.goldprice.org/dbXRates/USD');
+    const r = await fetch('https://api.gold-api.com/price/XAU', { signal: AbortSignal.timeout(5000), headers: { 'User-Agent': 'Mozilla/5.0' } });
     const d = await r.json();
-    if(d && d.items && d.items[0] && d.items[0].curr === 'USD'){
+    if(d && d.price && d.price > 1000){
+      xauusdPrice = d.price;
+      lastKnownXauusd = d.price;
+      goldSource = 'Gold-API';
+      return true;
+    }
+  }catch(e){}
+
+  // LAPIS 2: goldprice.org - yang lama, tapi pake User-Agent biar gak di-block Render
+  try{
+    const r = await fetch('https://data-asg.goldprice.org/dbXRates/USD', { signal: AbortSignal.timeout(5000), headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept': 'application/json' } });
+    const d = await r.json();
+    if(d && d.items && d.items[0] && d.items[0].xauPrice > 1000){
       xauusdPrice = d.items[0].xauPrice;
+      lastKnownXauusd = d.items[0].xauPrice;
       goldSource = 'GoldPrice.org';
       return true;
     }
   }catch(e){}
+
+  // LAPIS 3: Binance PAXGUSDT - INI YANG PALING ANTI GAGAL, KARENA BINANCE PASTI JALAN DI RENDER
+  // PAXG = emas token, harga nempel XAUUSD, beda cuma 1-2$
   try{
-    const r2 = await fetch('https://api.metals.live/v1/spot');
-    const d2 = await r2.json();
-    if(d2 && d2[0] && d2[0].gold){
-      xauusdPrice = d2[0].gold;
-      goldSource = 'Metals.live';
+    const r = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=PAXGUSDT', { signal: AbortSignal.timeout(5000) });
+    const d = await r.json();
+    if(d && parseFloat(d.price) > 1000){
+      xauusdPrice = parseFloat(d.price);
+      lastKnownXauusd = parseFloat(d.price);
+      goldSource = 'PAXG Binance';
       return true;
     }
   }catch(e){}
+
+  // LAPIS 4: Kalau semua mati, pake harga terakhir yang masih keinget, JANGAN 0
+  // Ini yang bikin kemarin selisih jadi +0.00$ dan MT5 jadi --. Sekarang gak akan 0 lagi.
+  if(lastKnownXauusd > 1000){
+    xauusdPrice = lastKnownXauusd;
+    goldSource = goldSource + ' (last known)';
+    return true;
+  }
+
+  // Kalau bener-bener baru pertama nyala dan semua mati, pake XAUT sebagai perkiraan sementara
+  // Biar MT5 gak kosong, selisih gak ngawur
+  if(xautPrice > 1000){
+    xauusdPrice = xautPrice;
+    goldSource = 'XAUT fallback';
+    return true;
+  }
+
   return false;
 }
 
-// ============ FETCH ORDERBOOK 3 EXCHANGE ============
+// ============ FETCH ORDERBOOK ============
 async function fetchOne(url, headers){
   try{
     const r = await fetch(url, { headers: headers || {}, signal: AbortSignal.timeout(5000) });
@@ -75,14 +109,11 @@ async function fetchOne(url, headers){
 }
 
 async function fetchOrderbooks(){
-  // Bybit XAUTUSDT
   const bybit = await fetchOne('https://api.bybit.com/v5/market/orderbook?category=spot&symbol=XAUTUSDT&limit=200');
-  // OKX XAUT-USDT
   const okx = await fetchOne('https://www.okx.com/api/v5/market/books?instId=XAUT-USDT&sz=200');
-  // Binance XAUTUSDT
   const binance = await fetchOne('https://api.binance.com/api/v3/depth?symbol=XAUTUSDT&limit=200');
 
-  let allBids = []; // { price, size, source }
+  let allBids = [];
   let allAsks = [];
 
   if(bybit && bybit.result && bybit.result.b){
@@ -107,7 +138,6 @@ async function fetchOrderbooks(){
 }
 
 function mergeLevels(list){
-  // Gabungin harga yang sama persis dari 3 exchange, jumlahin size-nya
   const map = new Map();
   list.forEach(o=>{
     const key = o.price.toFixed(2);
@@ -124,21 +154,16 @@ function buildWalls(allBids, allAsks){
   const asks = mergeLevels(allAsks);
   if(!bids.length || !asks.length) return;
 
-  // Harga XAUT mid
   const bestBid = Math.max(...bids.map(b=> b.price));
   const bestAsk = Math.min(...asks.map(a=> a.price));
   xautPrice = (bestBid + bestAsk) / 2;
-  if(xauusdPrice) selisih = xautPrice - xauusdPrice;
+  // FIX: selisih cuma dihitung kalau MT5-nya beneran ada, bukan 0
+  if(xauusdPrice > 1000) selisih = xautPrice - xauusdPrice;
 
-  // Rata-rata size buat nentuin whale: 2.5x rata-rata
   const allSizes = [...bids, ...asks].map(x=> x.size);
   const avg = allSizes.reduce((a,b)=> a+b, 0) / allSizes.length;
   const threshold = avg * 2.5;
 
-  // Bersihin firstSeen yang udah gak ada di orderbook, biar gak numpuk
-  const nowKeys = new Set();
-  [...bids, ...asks].forEach(o=> nowKeys.add(o.price.toFixed(2)));
-  // Kita simpan per side+price
   const activeKeys = new Set();
   bids.forEach(o=> activeKeys.add('BID-' + o.price.toFixed(2)));
   asks.forEach(o=> activeKeys.add('ASK-' + o.price.toFixed(2)));
@@ -167,11 +192,9 @@ function buildWalls(allBids, allAsks){
     else newWalls.push(wall);
   };
 
-  // Near: yang deket harga + whale
   bids.forEach(o=>{ if(o.size >= threshold) pushWall('BID', o, false); });
   asks.forEach(o=>{ if(o.size >= threshold) pushWall('ASK', o, false); });
 
-  // Far: BID jauh 4000 / 3900, ASK jauh 4100 / 4200 - yang gede juga
   bids.forEach(o=>{
     const mt5 = o.price - selisih;
     if((mt5 >= 3890 && mt5 <= 3910) || (mt5 >= 3990 && mt5 <= 4010)){
@@ -185,21 +208,18 @@ function buildWalls(allBids, allAsks){
     }
   });
 
-  // Deduplikasi Far yang udah ada di Near
   const nearKeys = new Set(newWalls.map(w=> w.side + '-' + w.price.toFixed(2)));
   walls = newWalls;
   wallsFar = newFar.filter(w=> !nearKeys.has(w.side + '-' + w.price.toFixed(2)));
 }
 
-// ============ PENDING ORDER - BETAH 5 MENIT ============
+// ============ PENDING - BETAH 5 MENIT ============
 function buildPendingOrders(){
   if(!walls.length || !xauusdPrice) return { pending: [], touched: [] };
-  // Ambil 20 terbesar dulu, baru saring betah, biar gak kehabisan kalau yang atas masih 0m
   const sorted = [...walls].sort((a,b)=> b.size - a.size).slice(0, 20);
   const pending = [];
   const touched = [];
   sorted.forEach(w=>{
-    // INI KUNCI BETAH 5 MENIT: kalau umur di bawah 5 menit, buang. Gak tampil.
     if((w.age_menit || 0) < 5) return;
     const mt5 = w.price_mt5 || (w.price - selisih);
     const jarak = Math.abs(mt5 - xauusdPrice);
@@ -223,9 +243,7 @@ function buildPendingOrders(){
 // ============ SINYAL + LOCK ============
 function checkSignal(){
   const { pending, touched } = buildPendingOrders();
-  // Kalau udah lock, jangan ganti sinyal, cek TP / SL aja
   if(isLocked){
-    // Cek TP2 kena
     if(lockedSignal === 'BUY'){
       if(xauusdPrice >= lockedTp2Mt5){
         lastDone = { last_result: 'BUY TP2 KENA di ' + lockedTp2Mt5.toFixed(2) };
@@ -263,20 +281,15 @@ function checkSignal(){
     };
   }
 
-  // Belum lock - cari sinyal baru dari Pending yang udah betah 5 menit
-  // Prioritas: Pending yang paling deket sama harga sekarang
   if(!pending.length || !xauusdPrice){
     return { signal: 'WAIT', reason: 'Nunggu tembok betah 5 menit muncul...', pending, touched };
   }
-  // Urutin pending berdasar jarak ke harga MT5
   const byJarak = [...pending].sort((a,b)=> a.distance_mt5 - b.distance_mt5);
   const terdekat = byJarak[0];
-  // Kalau jaraknya masih jauh > 15$, WAIT dulu, jangan kejar
   if(terdekat.distance_mt5 > 15){
     return { signal: 'WAIT', reason: `Tembok terdekat ${terdekat.side} ${terdekat.price_mt5.toFixed(2)} masih jauh ${terdekat.distance_mt5.toFixed(1)}$, tunggu harga deket dulu`, pending, touched };
   }
 
-  // Ada tembok deket yang betah 5 menit -> bikin sinyal + LOCK
   const isBuy = terdekat.side === 'BID';
   const entryMt5 = terdekat.price_mt5;
   const entryXaut = terdekat.price;
@@ -318,7 +331,7 @@ function checkSignal(){
   };
 }
 
-// ============ LOOP UTAMA ============
+// ============ LOOP ============
 async function tick(){
   await fetchGoldPrice();
   const { allBids, allAsks } = await fetchOrderbooks();
@@ -333,11 +346,10 @@ tick();
 app.get('/', (req,res)=> res.send('ABEL BOT OK - /api/signal'));
 app.get('/api/signal', (req,res)=>{
   const sig = checkSignal();
-  const wallsNear = walls;
   res.json({
     ...sig,
     walls: walls,
-    wallsNear: wallsNear,
+    wallsNear: walls,
     wallsFar: wallsFar,
     wallsFarCount: wallsFar.length,
     pendingOrders: sig.pending,
