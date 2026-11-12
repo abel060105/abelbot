@@ -1,4 +1,4 @@
-// ABEL BOT - V7 - MARKET INSTAN: MARKET -> TP1 -> TP2/SL -> REKAP + LEVEL DIKUNCI
+// ABEL BOT - V8.1 - MARKET ONLY + SETUP ID, TELEGRAM SIMPEL, TANPA LIMIT
 const express = require('express');
 const cors = require('cors');
 const app = express();
@@ -13,9 +13,18 @@ async function sendTelegram(msg){
   try{
     await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: msg, parse_mode: 'HTML' })
+      body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: msg })
     });
   }catch(e){ console.log('Telegram gagal:', e.message); }
+}
+
+// SETUP ID - RANDOM 4 KARAKTER
+let lockedSetupId = '';
+function generateSetupId(){
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let id = '';
+  for(let i=0; i<4; i++) id += chars[Math.floor(Math.random() * chars.length)];
+  return '#' + id;
 }
 
 let walls = [], wallsFar = [], xautPrice = 0, xauusdPrice = 0, lastKnownXauusd = 0, selisih = 0, goldSource = '-';
@@ -23,10 +32,10 @@ let exchanges = { bybit: false, okx: false, binance: false };
 let uptimeStart = Date.now(), lastUpdate = null, lastDone = null;
 let firstSeenMap = new Map(), signalHistory = [];
 
-// STATE - LEVEL DIKUNCI PAS TRIGGER MARKET, GAK PERNAH BERUBAH LAGI
+// STATE - LEVEL DIKUNCI PAS TRIGGER MARKET
 let isLocked = false, lockStatus = 'Tidak terkunci';
 let lockedSignal = 'WAIT';
-let lockedState = 'IDLE'; // IDLE, IN_POSITION, TP1_HIT, CLOSED
+let lockedState = 'IDLE';
 let lockedId = null, lockedAt = null;
 let lockedEntryMt5 = 0, lockedSlMt5 = 0, lockedTp1Mt5 = 0, lockedTp2Mt5 = 0;
 let lockedWallPrice = 0, lockedWallSize = 0, lockedWallSources = '', lockedWallAge = 0;
@@ -82,103 +91,80 @@ function buildPendingOrders(){
   pending.sort((a,b)=> b.size - a.size); touched.sort((a,b)=> b.size - a.size); return { pending: pending.slice(0,6), touched: touched.slice(0,6) };
 }
 
-function sendRekap(){
-  const dur = lockedClosedAt && lockedAt ? Math.floor((lockedClosedAt - lockedAt)/60000) : 0;
-  const profit = lockedResult.includes('TP2') ? '+10$' : lockedResult.includes('TP1') ? '+5$' : lockedResult.includes('SL') ? '-5$' : '0$';
-  const emoji = lockedResult.includes('TP2') ? '✅' : lockedResult.includes('SL') ? '❌' : '⚠️';
-  sendTelegram(`${emoji} <b>REKAP ${lockedSignal} MARKET - ${lockedResult}</b>\n\n` +
-    `<b>Entry MARKET [KUNCI]:</b> $${lockedEntryMt5.toFixed(2)}\n` +
-    `<b>SL [KUNCI]:</b> $${lockedSlMt5.toFixed(2)}\n` +
-    `<b>TP1 [KUNCI]:</b> $${lockedTp1Mt5.toFixed(2)}\n` +
-    `<b>TP2 [KUNCI]:</b> $${lockedTp2Mt5.toFixed(2)}\n` +
-    `<b>Harga Close:</b> $${xauusdPrice.toFixed(2)}\n` +
-    `<b>Hasil:</b> ${profit}\n` +
-    `<b>Tembok Pemicu:</b> ${lockedWallPrice.toFixed(2)} - ${lockedWallSize.toFixed(2)} XAUT - Betah ${lockedWallAge}m - ${lockedWallSources}\n` +
-    `<b>Total Durasi:</b> ${dur} menit\n\n` +
-    `Level di atas TIDAK BERUBAH dari awal sinyal.`);
-}
-
 function checkSignal(){
   const { pending, touched } = buildPendingOrders();
 
   if(isLocked){
     const displaySignal = lockedSignal === 'BUY' ? 'BUY' : 'SELL';
-    const base = { pending, touched, entry_mt5: lockedEntryMt5, sl_mt5: lockedSlMt5, tp1_mt5: lockedTp1Mt5, tp2_mt5: lockedTp2Mt5, partial, reentry, is_locked: true, lockedAt, lockedId, lockedState, lockedTp1Hit, lock_status: lockStatus };
+    const base = { setup_id: lockedSetupId, pending, touched, entry_mt5: lockedEntryMt5, sl_mt5: lockedSlMt5, tp1_mt5: lockedTp1Mt5, tp2_mt5: lockedTp2Mt5, partial, reentry, is_locked: true, lockedAt, lockedId, lockedState, lockedTp1Hit, lock_status: lockStatus };
 
-    // STATE: IN_POSITION - CEK TP1 / SL
     if(lockedState === 'IN_POSITION'){
       const kenaSL = lockedSignal === 'BUY' ? xauusdPrice <= lockedSlMt5 : xauusdPrice >= lockedSlMt5;
       if(kenaSL){
         lockedResult = 'SL KENA'; lockedClosedAt = Date.now(); lockedState = 'CLOSED';
-        lastDone = { last_result: displaySignal + ' SL KENA di ' + lockedSlMt5.toFixed(2) };
+        lastDone = { last_result: displaySignal + ' SL KENA di ' + lockedSlMt5.toFixed(2) + ' - Setup ' + lockedSetupId };
         closeHistory(lockedId, 'SL KENA', lockedSlMt5);
-        sendTelegram(`❌ <b>TRIGGER SL - ${displaySignal} MARKET SL KENA</b>\n\n<b>Harga:</b> $${xauusdPrice.toFixed(2)}\n<b>SL [KUNCI]:</b> $${lockedSlMt5.toFixed(2)}\n<b>Entry [KUNCI]:</b> $${lockedEntryMt5.toFixed(2)}\n<b>Loss:</b> -5$`);
-        sendRekap();
+        sendTelegram(`❌ ${displaySignal} SL KENA - Setup ${lockedSetupId}\n\nHarga: $${xauusdPrice.toFixed(2)}\nEntry tadi: $${lockedEntryMt5.toFixed(2)}\nProfit: -5$`);
         isLocked = false; lockedState = 'IDLE'; lockStatus = 'SL KENA - DONE';
-        return { signal: 'DONE', reason: '', pending, touched };
+        return { signal: 'DONE', reason: '', setup_id: lockedSetupId, pending, touched };
       }
       const kenaTP1 = lockedSignal === 'BUY' ? xauusdPrice >= lockedTp1Mt5 : xauusdPrice <= lockedTp1Mt5;
       if(kenaTP1){
         lockedTp1Hit = true; lockedTp1At = Date.now(); lockedState = 'TP1_HIT'; lockStatus = 'TP1 KENA - SL KE BE';
-        sendTelegram(`🟢 <b>TRIGGER TP1 - ${displaySignal} MARKET TP1 KENA</b>\n\n<b>Harga:</b> $${xauusdPrice.toFixed(2)}\n<b>TP1 [KUNCI]:</b> $${lockedTp1Mt5.toFixed(2)}\n<b>Entry [KUNCI]:</b> $${lockedEntryMt5.toFixed(2)}\n<b>Profit Terkunci:</b> +5$ (50% TP1)\n<b>SL Pindah ke BE:</b> $${lockedEntryMt5.toFixed(2)} untuk sisa 50%\n\nTunggu TP2 $${lockedTp2Mt5.toFixed(2)} atau SL BE.`);
+        sendTelegram(`🟢 ${displaySignal} TP1 KENA - Setup ${lockedSetupId}\n\nHarga: $${xauusdPrice.toFixed(2)}\nEntry tadi: $${lockedEntryMt5.toFixed(2)}\nProfit: +5$`);
         return { signal: displaySignal + ' - TP1 KENA', ...base, lockedState: 'TP1_HIT', lockedTp1Hit: true, lock_status: lockStatus };
       }
       return { signal: displaySignal + ' - AKTIF', ...base, lock_status: lockStatus };
     }
 
-    // STATE: TP1_HIT - SL UDAH BE, TINGGAL TP2 / BE
     if(lockedState === 'TP1_HIT'){
       const beLevel = lockedEntryMt5;
       const kenaSLBE = lockedSignal === 'BUY' ? xauusdPrice <= beLevel : xauusdPrice >= beLevel;
       if(kenaSLBE){
-        lockedResult = 'TP1 KENA, SISA BE KENA'; lockedClosedAt = Date.now(); lockedState = 'CLOSED';
-        lastDone = { last_result: displaySignal + ' TP1 KENA, SISA BE' };
-        closeHistory(lockedId, 'TP1 KENA, SISA BE KENA', beLevel);
-        sendTelegram(`🟡 <b>TRIGGER SL BE - ${displaySignal} SISA BE KENA</b>\n\n<b>Harga:</b> $${xauusdPrice.toFixed(2)}\n<b>BE [KUNCI]:</b> $${beLevel.toFixed(2)}\n<b>Profit Total:</b> +5$ (dari TP1 50%)`);
-        sendRekap();
+        lockedResult = 'BE KENA'; lockedClosedAt = Date.now(); lockedState = 'CLOSED';
+        lastDone = { last_result: displaySignal + ' TP1 KENA, SISA BE - Setup ' + lockedSetupId };
+        closeHistory(lockedId, 'BE KENA', beLevel);
+        sendTelegram(`🟡 ${displaySignal} BE KENA - Setup ${lockedSetupId}\n\nHarga: $${xauusdPrice.toFixed(2)}\nEntry tadi: $${lockedEntryMt5.toFixed(2)}\nProfit: +5$`);
         isLocked = false; lockedState = 'IDLE'; lockStatus = 'TP1 + BE - DONE';
-        return { signal: 'DONE', reason: '', pending, touched };
+        return { signal: 'DONE', reason: '', setup_id: lockedSetupId, pending, touched };
       }
       const kenaTP2 = lockedSignal === 'BUY' ? xauusdPrice >= lockedTp2Mt5 : xauusdPrice <= lockedTp2Mt5;
       if(kenaTP2){
         lockedResult = 'TP2 KENA'; lockedClosedAt = Date.now(); lockedState = 'CLOSED';
-        lastDone = { last_result: displaySignal + ' TP2 KENA di ' + lockedTp2Mt5.toFixed(2) };
+        lastDone = { last_result: displaySignal + ' TP2 KENA di ' + lockedTp2Mt5.toFixed(2) + ' - Setup ' + lockedSetupId };
         closeHistory(lockedId, 'TP2 KENA', lockedTp2Mt5);
-        sendTelegram(`✅ <b>TRIGGER TP2 - ${displaySignal} MARKET TP2 KENA</b>\n\n<b>Harga:</b> $${xauusdPrice.toFixed(2)}\n<b>TP2 [KUNCI]:</b> $${lockedTp2Mt5.toFixed(2)}\n<b>Entry [KUNCI]:</b> $${lockedEntryMt5.toFixed(2)}\n<b>Profit Total:</b> +10$`);
-        sendRekap();
+        sendTelegram(`✅ ${displaySignal} TP2 KENA - Setup ${lockedSetupId}\n\nHarga: $${xauusdPrice.toFixed(2)}\nEntry tadi: $${lockedEntryMt5.toFixed(2)}\nProfit: +10$`);
         isLocked = false; lockedState = 'IDLE'; lockStatus = 'TP2 KENA - DONE';
-        return { signal: 'DONE', reason: '', pending, touched };
+        return { signal: 'DONE', reason: '', setup_id: lockedSetupId, pending, touched };
       }
       return { signal: displaySignal + ' - TP1 KENA', ...base, lockedState: 'TP1_HIT', lockedTp1Hit: true, lock_status: lockStatus };
     }
     return { signal: displaySignal, ...base };
   }
 
-  // GAK ADA SINYAL - TRIGGER MARKET INSTAN
-  if(!pending.length || !xauusdPrice){ return { signal: 'WAIT', reason: '', pending, touched }; }
+  if(!pending.length || !xauusdPrice){ return { signal: 'WAIT', reason: '', setup_id: '', pending, touched }; }
   const byJarak = [...pending].sort((a,b)=> a.distance_mt5 - b.distance_mt5);
   const terdekat = byJarak[0];
-  if(terdekat.distance_mt5 > 15){ return { signal: 'WAIT', reason: '', pending, touched }; }
+  if(terdekat.distance_mt5 > 15){ return { signal: 'WAIT', reason: '', setup_id: '', pending, touched }; }
   const isBuy = terdekat.side === 'BID';
 
-  // KUNCI LEVEL BERDASARKAN HARGA MARKET SAAT INI, BUKAN HARGA TEMBOK
   const entryMt5 = Math.floor(xauusdPrice * 100) / 100;
   let slMt5, tp1Mt5, tp2Mt5, emergency;
   if(isBuy){ slMt5 = entryMt5 - 5; tp1Mt5 = entryMt5 + 5; tp2Mt5 = entryMt5 + 10; emergency = entryMt5 - 8; reentry = { entry_mt5: entryMt5 - 3, sl_mt5: entryMt5 - 8 }; }
   else { slMt5 = entryMt5 + 5; tp1Mt5 = entryMt5 - 5; tp2Mt5 = entryMt5 - 10; emergency = entryMt5 + 8; reentry = { entry_mt5: entryMt5 + 3, sl_mt5: entryMt5 + 8 }; }
 
   isLocked = true; lockedSignal = isBuy ? 'BUY' : 'SELL'; lockedState = 'IN_POSITION'; lockedTp1Hit = false;
+  lockedSetupId = generateSetupId();
   const displaySignal = isBuy ? 'BUY' : 'SELL';
   lockedEntryMt5 = entryMt5; lockedSlMt5 = slMt5; lockedTp1Mt5 = tp1Mt5; lockedTp2Mt5 = tp2Mt5;
   lockedWallPrice = terdekat.price; lockedWallSize = terdekat.size; lockedWallSources = terdekat.sources; lockedWallAge = terdekat.age_menit;
   lockedAt = Date.now(); lockedId = 'SIG-' + lockedAt; lockedTp1At = null; lockedClosedAt = null; lockedResult = '';
   lockStatus = 'IN POSITION - ' + displaySignal + ' MARKET di ' + entryMt5.toFixed(2);
-  addHistory({ id: lockedId, signal: displaySignal + ' MARKET', wall_side: terdekat.side, wall_price: terdekat.price, entry_mt5: entryMt5, entry_xaut: terdekat.price, sl_mt5: slMt5, tp1_mt5: tp1Mt5, tp2_mt5: tp2Mt5, size: terdekat.size, sources: terdekat.sources, age_menit: terdekat.age_menit, created_at: lockedAt, closed_at: null, result: 'AKTIF - MARKET', result_price: null, duration_menit: 0 });
+  addHistory({ id: lockedId, setup_id: lockedSetupId, signal: displaySignal + ' MARKET', wall_side: terdekat.side, wall_price: terdekat.price, entry_mt5: entryMt5, entry_xaut: terdekat.price, sl_mt5: slMt5, tp1_mt5: tp1Mt5, tp2_mt5: tp2Mt5, size: terdekat.size, sources: terdekat.sources, age_menit: terdekat.age_menit, created_at: lockedAt, closed_at: null, result: 'AKTIF - MARKET', result_price: null, duration_menit: 0 });
 
-  // TRIGGER MARKET + TRIGGER ENTRY JADI SATU - LANGSUNG EKSEKUSI
-  sendTelegram(`🚀 <b>TRIGGER MARKET - ${displaySignal} MARKET EKSEKUSI SEKARANG</b>\n\n<b>Entry MARKET [KUNCI]:</b> $${entryMt5.toFixed(2)}\n<b>SL [KUNCI]:</b> $${slMt5.toFixed(2)}\n<b>TP1 [KUNCI]:</b> $${tp1Mt5.toFixed(2)}\n<b>TP2 [KUNCI]:</b> $${tp2Mt5.toFixed(2)}\n<b>Tembok Pemicu:</b> ${terdekat.side} ${terdekat.price.toFixed(2)} - ${terdekat.size.toFixed(2)} XAUT - Betah ${terdekat.age_menit}m - ${terdekat.sources} (jarak ${terdekat.distance_mt5.toFixed(1)}$)\n\n⚡ EKSEKUSI MARKET SEKARANG di $${entryMt5.toFixed(2)}, JANGAN TUNGGU. Level ini TIDAK AKAN BERUBAH.`);
+  sendTelegram(`🎯 ${displaySignal} NOW - Setup ${lockedSetupId}\n\nEntry: $${entryMt5.toFixed(2)}\nSL: $${slMt5.toFixed(2)}\nTP1: $${tp1Mt5.toFixed(2)}\nTP2: $${tp2Mt5.toFixed(2)}\nTembok Pemicu: ${terdekat.side} ${terdekat.price.toFixed(2)} - ${terdekat.size.toFixed(2)} XAUT - Betah ${terdekat.age_menit}m - ${terdekat.sources} (jarak ${terdekat.distance_mt5.toFixed(1)}$)`);
 
-  return { signal: displaySignal + ' MARKET - AKTIF', reason: '', pending, touched, entry_mt5: lockedEntryMt5, sl_mt5: lockedSlMt5, tp1_mt5: lockedTp1Mt5, tp2_mt5: lockedTp2Mt5, partial, reentry, is_locked: true, lockedState: 'IN_POSITION', lock_status: lockStatus, lockedAt, lockedId };
+  return { signal: displaySignal + ' MARKET - AKTIF', reason: '', setup_id: lockedSetupId, pending, touched, entry_mt5: lockedEntryMt5, sl_mt5: lockedSlMt5, tp1_mt5: lockedTp1Mt5, tp2_mt5: lockedTp2Mt5, emergency_sl_mt5: emergency, partial, reentry, is_locked: true, lockedState: 'IN_POSITION', lock_status: lockStatus, lockedAt, lockedId };
 }
 
 async function tick(){ await fetchGoldPrice(); const { allBids, allAsks } = await fetchOrderbooks(); if(allBids.length) buildWalls(allBids, allAsks); lastUpdate = Date.now(); }
@@ -187,9 +173,9 @@ setInterval(tick, 2000); tick();
 app.get('/', (req,res)=> res.send('ABEL BOT OK - /api/signal'));
 app.get('/api/signal', (req,res)=>{
   const sig = checkSignal();
-  res.json({ ...sig, walls, wallsNear: walls, wallsFar, wallsFarCount: wallsFar.length, pendingOrders: sig.pending, touchedLevels: sig.touched, history: signalHistory, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF', harga: { xaut_mid: xautPrice, xauusd_goldprice: xauusdPrice, selisih, source: goldSource }, range: { low: 3893, high: 4060 }, exchanges, supabase: 'OK', uptime_menit: Math.floor((Date.now() - uptimeStart) / 60000), last_update: lastUpdate, last_done: lastDone });
+  res.json({ ...sig, setup_id: lockedSetupId || sig.setup_id || '', walls, wallsNear: walls, wallsFar, wallsFarCount: wallsFar.length, pendingOrders: sig.pending, touchedLevels: sig.touched, history: signalHistory, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF', harga: { xaut_mid: xautPrice, xauusd_goldprice: xauusdPrice, selisih, source: goldSource }, range: { low: 3893, high: 4060 }, exchanges, supabase: 'OK', uptime_menit: Math.floor((Date.now() - uptimeStart) / 60000), last_update: lastUpdate, last_done: lastDone });
 });
 app.get('/api/history', (req,res)=>{ res.json({ history: signalHistory, total: signalHistory.length }); });
-app.get('/api/test-telegram', async (req,res)=>{ await sendTelegram(`🔔 <b>TEST ABEL BOT V7 MARKET</b>\n\nAlur baru: MARKET -> TP1 -> TP2/SL -> REKAP. Eksekusi instan, level dikunci.`); res.json({ ok: true, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF' }); });
+app.get('/api/test-telegram', async (req,res)=>{ const testId = generateSetupId(); await sendTelegram(`🎯 BUY NOW - Setup ${testId}\n\nEntry: $3954.19\nSL: $3949.19\nTP1: $3959.19\nTP2: $3964.19\nTembok Pemicu: BID 3935.90 - 58.38 XAUT - Betah 5m - OKX (jarak 12.4$)`); res.json({ ok: true, setup_id: testId, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF' }); });
 app.get('/api/unlock', (req,res)=>{ if(isLocked && lockedId) closeHistory(lockedId, 'MANUAL / DIBATALKAN', xauusdPrice); isLocked = false; lockedState = 'IDLE'; lockStatus = 'Dibatalkan manual'; lockedSignal = 'WAIT'; res.json({ ok: true, msg: 'Lock dibatalkan' }); });
-app.listen(PORT, ()=> console.log('ABEL BOT V7 MARKET jalan di port ' + PORT));
+app.listen(PORT, ()=> console.log('ABEL BOT V8.1 MARKET jalan di port ' + PORT));
