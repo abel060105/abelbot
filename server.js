@@ -1,4 +1,4 @@
-// ABEL BOT - V4.9 - SINYAL JADI BUY LIMIT / SELL LIMIT, TRIGGER BALIK KE 15$
+// ABEL BOT - V5.0 - HAPUS DESKRIPSI, + RIWAYAT SINYAL BUAT JURNALING
 const express = require('express');
 const cors = require('cors');
 const app = express();
@@ -19,15 +19,34 @@ let lastUpdate = null;
 let lastDone = null;
 let isLocked = false;
 let lockStatus = 'Tidak terkunci';
-let lockedSignal = 'WAIT'; // internal tetep BUY / SELL, biar gampang dicek TP/SL
+let lockedSignal = 'WAIT';
 let lockedEntry = 0, lockedEntryMt5 = 0, lockedSl = 0, lockedSlMt5 = 0;
 let lockedTp1 = 0, lockedTp1Mt5 = 0, lockedTp2 = 0, lockedTp2Mt5 = 0;
 let lockedEmergency = 0;
 let lockedAt = null;
 let lockedReason = '';
+let lockedId = null;
 let reentry = null;
 let partial = '50/50';
 let firstSeenMap = new Map();
+
+// RIWAYAT SINYAL - nyimpen di memory server, server nyala terus jadi gak ilang
+// Format: { id, signal, entry_mt5, entry_xaut, sl_mt5, tp1_mt5, tp2_mt5, size, wall_price, wall_side, sources, age_menit, created_at, closed_at, result, result_price, duration_menit }
+let signalHistory = [];
+function addHistory(entry){
+  signalHistory.unshift(entry);
+  if(signalHistory.length > 100) signalHistory = signalHistory.slice(0,100);
+}
+function closeHistory(id, result, resultPrice){
+  const h = signalHistory.find(x=> x.id === id);
+  if(h && !h.closed_at){
+    h.closed_at = Date.now();
+    h.result = result;
+    h.result_price = resultPrice;
+    h.duration_menit = Math.floor((h.closed_at - h.created_at)/60000);
+  }
+}
+
 function getAgeMenit(key){
   const t = firstSeenMap.get(key);
   if(!t) return 0;
@@ -164,25 +183,39 @@ function checkSignal(){
     const tp2Mt5Now = lockedTp2 - selisih;
     const displaySignal = lockedSignal === 'BUY' ? 'BUY LIMIT' : 'SELL LIMIT';
     if(lockedSignal === 'BUY'){
-      if(xauusdPrice >= tp2Mt5Now){ lastDone = { last_result: 'BUY LIMIT TP2 KENA di ' + tp2Mt5Now.toFixed(2) }; isLocked = false; lockStatus = 'TP2 KENA - DONE'; return { signal: 'DONE', reason: 'BUY LIMIT TP2 kena, tunggu sinyal baru', pending, touched }; }
-      if(xauusdPrice <= slMt5Now){ lastDone = { last_result: 'BUY LIMIT SL KENA di ' + slMt5Now.toFixed(2) }; isLocked = false; lockStatus = 'SL KENA - DONE'; return { signal: 'DONE', reason: 'BUY LIMIT SL kena, tunggu sinyal baru', pending, touched }; }
+      if(xauusdPrice >= tp2Mt5Now){
+        lastDone = { last_result: 'BUY LIMIT TP2 KENA di ' + tp2Mt5Now.toFixed(2) };
+        closeHistory(lockedId, 'TP2 KENA', tp2Mt5Now);
+        isLocked = false; lockStatus = 'TP2 KENA - DONE';
+        return { signal: 'DONE', reason: '', pending, touched };
+      }
+      if(xauusdPrice <= slMt5Now){
+        lastDone = { last_result: 'BUY LIMIT SL KENA di ' + slMt5Now.toFixed(2) };
+        closeHistory(lockedId, 'SL KENA', slMt5Now);
+        isLocked = false; lockStatus = 'SL KENA - DONE';
+        return { signal: 'DONE', reason: '', pending, touched };
+      }
     }
     if(lockedSignal === 'SELL'){
-      if(xauusdPrice <= tp2Mt5Now){ lastDone = { last_result: 'SELL LIMIT TP2 KENA di ' + tp2Mt5Now.toFixed(2) }; isLocked = false; lockStatus = 'TP2 KENA - DONE'; return { signal: 'DONE', reason: 'SELL LIMIT TP2 kena, tunggu sinyal baru', pending, touched }; }
-      if(xauusdPrice >= slMt5Now){ lastDone = { last_result: 'SELL LIMIT SL KENA di ' + slMt5Now.toFixed(2) }; isLocked = false; lockStatus = 'SL KENA - DONE'; return { signal: 'DONE', reason: 'SELL LIMIT SL kena, tunggu sinyal baru', pending, touched }; }
+      if(xauusdPrice <= tp2Mt5Now){
+        lastDone = { last_result: 'SELL LIMIT TP2 KENA di ' + tp2Mt5Now.toFixed(2) };
+        closeHistory(lockedId, 'TP2 KENA', tp2Mt5Now);
+        isLocked = false; lockStatus = 'TP2 KENA - DONE';
+        return { signal: 'DONE', reason: '', pending, touched };
+      }
+      if(xauusdPrice >= slMt5Now){
+        lastDone = { last_result: 'SELL LIMIT SL KENA di ' + slMt5Now.toFixed(2) };
+        closeHistory(lockedId, 'SL KENA', slMt5Now);
+        isLocked = false; lockStatus = 'SL KENA - DONE';
+        return { signal: 'DONE', reason: '', pending, touched };
+      }
     }
-    return { signal: displaySignal, reason: lockedReason, pending, touched, entry: lockedEntry, entry_mt5: Math.floor(entryMt5Now*100)/100, sl: lockedSl, sl_mt5: Math.floor(slMt5Now*100)/100, tp1: lockedTp1, tp1_mt5: Math.floor(tp1Mt5Now*100)/100, tp2: lockedTp2, tp2_mt5: Math.floor(tp2Mt5Now*100)/100, emergency_sl_mt5: lockedEmergency, partial, reentry, is_locked: true, lock_status: 'LOCKED - ' + displaySignal + ' di ' + (Math.floor(entryMt5Now*100)/100).toFixed(2), lockedAt };
+    return { signal: displaySignal, reason: '', pending, touched, entry: lockedEntry, entry_mt5: Math.floor(entryMt5Now*100)/100, sl: lockedSl, sl_mt5: Math.floor(slMt5Now*100)/100, tp1: lockedTp1, tp1_mt5: Math.floor(tp1Mt5Now*100)/100, tp2: lockedTp2, tp2_mt5: Math.floor(tp2Mt5Now*100)/100, emergency_sl_mt5: lockedEmergency, partial, reentry, is_locked: true, lock_status: 'LOCKED - ' + displaySignal + ' di ' + (Math.floor(entryMt5Now*100)/100).toFixed(2), lockedAt, lockedId };
   }
-
-  if(!pending.length || !xauusdPrice){ return { signal: 'WAIT', reason: 'Nunggu tembok betah 5 menit muncul...', pending, touched }; }
-
-  // TRIGGER BALIK KE 15$ KAYAK SEMULA, GAK DIUBAH. Cuma judulnya jadi LIMIT.
+  if(!pending.length || !xauusdPrice){ return { signal: 'WAIT', reason: '', pending, touched }; }
   const byJarak = [...pending].sort((a,b)=> a.distance_mt5 - b.distance_mt5);
   const terdekat = byJarak[0];
-  if(terdekat.distance_mt5 > 15){
-    return { signal: 'WAIT', reason: `Tembok terdekat ${terdekat.side} ${terdekat.price_mt5.toFixed(2)} masih jauh ${terdekat.distance_mt5.toFixed(1)}$, tunggu harga deket dulu`, pending, touched };
-  }
-
+  if(terdekat.distance_mt5 > 15){ return { signal: 'WAIT', reason: '', pending, touched }; }
   const isBuy = terdekat.side === 'BID';
   const entryMt5 = terdekat.price_mt5;
   const entryXaut = terdekat.price;
@@ -198,9 +231,12 @@ function checkSignal(){
   lockedTp2 = entryXaut + (isBuy ? 10 : -10); lockedTp2Mt5 = tp2Mt5;
   lockedEmergency = emergency;
   lockedAt = Date.now();
+  lockedId = 'SIG-' + lockedAt;
   lockStatus = 'LOCKED - ' + displaySignal + ' di ' + entryMt5.toFixed(2);
-  lockedReason = `${displaySignal} di tembok ${terdekat.side} ${terdekat.price.toFixed(2)} (MT5 ${entryMt5.toFixed(2)}) - Harga sekarang ${xauusdPrice.toFixed(2)}, jarak ${terdekat.distance_mt5.toFixed(1)}$. PASANG LIMIT di ${entryMt5.toFixed(2)}, JANGAN MARKET SEKARANG. Tunggu harga nyentuh ${entryMt5.toFixed(2)} baru kejemput. Betah ${terdekat.age_menit}m, Size ${terdekat.size.toFixed(2)} XAUT, ${terdekat.sources}. SL ${slMt5.toFixed(2)}, TP1 ${tp1Mt5.toFixed(2)}, TP2 ${tp2Mt5.toFixed(2)}`;
-  return { signal: displaySignal, reason: lockedReason, pending, touched, entry: lockedEntry, entry_mt5: lockedEntryMt5, sl: lockedSl, sl_mt5: lockedSlMt5, tp1: lockedTp1, tp1_mt5: lockedTp1Mt5, tp2: lockedTp2, tp2_mt5: lockedTp2Mt5, emergency_sl_mt5: lockedEmergency, partial, reentry, is_locked: true, lock_status: lockStatus, lockedAt };
+  lockedReason = '';
+  // Simpan ke riwayat
+  addHistory({ id: lockedId, signal: displaySignal, wall_side: terdekat.side, wall_price: terdekat.price, entry_mt5: entryMt5, entry_xaut: entryXaut, sl_mt5: slMt5, tp1_mt5: tp1Mt5, tp2_mt5: tp2Mt5, size: terdekat.size, sources: terdekat.sources, age_menit: terdekat.age_menit, created_at: lockedAt, closed_at: null, result: 'AKTIF', result_price: null, duration_menit: 0 });
+  return { signal: displaySignal, reason: '', pending, touched, entry: lockedEntry, entry_mt5: lockedEntryMt5, sl: lockedSl, sl_mt5: lockedSlMt5, tp1: lockedTp1, tp1_mt5: lockedTp1Mt5, tp2: lockedTp2, tp2_mt5: lockedTp2Mt5, emergency_sl_mt5: lockedEmergency, partial, reentry, is_locked: true, lock_status: lockStatus, lockedAt, lockedId };
 }
 
 async function tick(){
@@ -215,7 +251,12 @@ tick();
 app.get('/', (req,res)=> res.send('ABEL BOT OK - /api/signal'));
 app.get('/api/signal', (req,res)=>{
   const sig = checkSignal();
-  res.json({ ...sig, walls: walls, wallsNear: walls, wallsFar: wallsFar, wallsFarCount: wallsFar.length, pendingOrders: sig.pending, touchedLevels: sig.touched, harga: { xaut_mid: xautPrice, xauusd_goldprice: xauusdPrice, selisih, source: goldSource }, range: { low: 3893, high: 4060 }, exchanges, supabase: 'OK', uptime_menit: Math.floor((Date.now() - uptimeStart) / 60000), last_update: lastUpdate, last_done: lastDone });
+  res.json({ ...sig, walls: walls, wallsNear: walls, wallsFar: wallsFar, wallsFarCount: wallsFar.length, pendingOrders: sig.pending, touchedLevels: sig.touched, history: signalHistory, harga: { xaut_mid: xautPrice, xauusd_goldprice: xauusdPrice, selisih, source: goldSource }, range: { low: 3893, high: 4060 }, exchanges, supabase: 'OK', uptime_menit: Math.floor((Date.now() - uptimeStart) / 60000), last_update: lastUpdate, last_done: lastDone });
 });
-app.get('/api/unlock', (req,res)=>{ isLocked = false; lockStatus = 'Dibatalkan manual'; lockedSignal = 'WAIT'; res.json({ ok: true, msg: 'Lock dibatalkan, sinyal di-reset ke WAIT' }); });
+app.get('/api/history', (req,res)=>{ res.json({ history: signalHistory, total: signalHistory.length }); });
+app.get('/api/unlock', (req,res)=>{
+  if(isLocked && lockedId) closeHistory(lockedId, 'MANUAL / DIBATALKAN', xauusdPrice);
+  isLocked = false; lockStatus = 'Dibatalkan manual'; lockedSignal = 'WAIT';
+  res.json({ ok: true, msg: 'Lock dibatalkan, sinyal di-reset ke WAIT' });
+});
 app.listen(PORT, ()=> console.log('ABEL BOT jalan di port ' + PORT));
