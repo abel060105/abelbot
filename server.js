@@ -1,7 +1,11 @@
-// ABEL FX ORDERBOOK v3.4 - FULL DEPTH + NO LIMIT JARAK
-// Base: ABEL BOT v3.3 - LOCK AUTO-UNLOCK + SELISIH FIX 3 SUMBER + LEVEL ORDERBOOK
-// Pair: XAUT = XAUUSD | Konfirmasi 2/3 | Entry +3 | SL -3 | Emergency -6 | TP1/TP2 | Partial 50/50 | Re-Entry A | Warm-up 30m
-// UPDATE v3.4: Fetch 500/400/1000 (mentok bursa), Hapus slice(0,30), Filter SIZE doang, Grouping 4$ biar gak mepet, Tampil Whale Jauh 4000/4100
+// ABEL FX ORDERBOOK v4.0 - SPOT ALA STREAMLIT
+// Base: server.js V3.4 + app.py Streamlit lo
+// Pair: XAUT = XAUUSD | Entry +3 | SL -3 | Emergency -6 | TP1/TP2 | Partial 50/50 | Re-Entry A | Warm-up 30m
+// UPDATE v4.0:
+// - BUANG Gate, GANTI Binance Spot (kayak Streamlit, likuiditasnya jauh lebih tebel)
+// - BUANG filter 2/3 exchange, BUANG betah 3 menit, BUANG avg*2.5, BUANG grouping 4$
+// - CARA BARU: Gabung round 0.1, hitung Heat, Zona Heat > 15 = Level (kayak heatmap Streamlit)
+// - BUANG Yahoo GC=F (FUTURES), ganti goldprice.dev XAU-USD-SPOT (SPOT MURNI kayak Streamlit)
 const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -35,6 +39,9 @@ let lockedSignal = null;
 let lockedWallGoneSince = 0;
 let lastDone = null;
 
+// Heatmap history ala Streamlit - 40 snapshot terakhir
+let heatHistory = { times: [], price_map: {} };
+
 async function saveToSupabase(wall){
   if(!SUPABASE_URL || !SUPABASE_KEY) return;
   try{
@@ -46,18 +53,20 @@ async function saveToSupabase(wall){
   }catch(e){ console.log('Supabase save gagal:', e.message); }
 }
 
-// === HARGA XAUUSD - 3 SUMBER CADANGAN, ANTI BLOCK ===
+// === HARGA XAUUSD - SPOT MURNI ALA STREAMLIT, NO FUTURES ===
+// Streamlit lo pake: goldprice.dev XAU-USD-SPOT -> gold-api.com
+// GAK ADA Yahoo GC=F lagi. GC=F itu futures, itu yang bikin selisih loncat.
 async function fetchGoldPrice(){
   const sources = [
-    { name: 'gold-api.com', url: 'https://api.gold-api.com/price/XAU', parse: (d) => d.price ? parseFloat(d.price) : null },
-    { name: 'goldprice.org', url: 'https://data-asg.goldprice.org/dbXRates/USD', parse: (d) => { const item = d.items?.[0]; return (item && item.curr === 'XAU' && item.ask) ? parseFloat(item.ask) : null; } },
-    { name: 'Yahoo GC=F', url: 'https://query1.finance.yahoo.com/v8/finance/chart/GC=F', parse: (d) => { const p = d.chart?.result?.[0]?.meta?.regularMarketPrice; return p ? parseFloat(p) : null; } }
+    { name: 'goldprice.dev SPOT', url: 'https://api.goldprice.dev/v1/prices?symbol=XAU-USD-SPOT', parse: (d) => (d.symbols && d.symbols[0] && d.symbols[0].price) ? parseFloat(d.symbols[0].price) : null },
+    { name: 'gold-api.com SPOT', url: 'https://api.gold-api.com/price/XAU', parse: (d) => d.price ? parseFloat(d.price) : null },
+    { name: 'goldprice.org SPOT', url: 'https://data-asg.goldprice.org/dbXRates/USD', parse: (d) => { const item = d.items?.[0]; return (item && item.curr === 'XAU' && item.ask) ? parseFloat(item.ask) : null; } }
   ];
   for(let s of sources){
     try{
       const res = await fetch(s.url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36', 'Accept': 'application/json' } });
       const text = await res.text();
-      if(!text.trim().startsWith('{')) { console.log(`Goldprice ${s.name} bukan JSON, skip`); continue; }
+      if(!text.trim().startsWith('{')) continue;
       const data = JSON.parse(text);
       const price = s.parse(data);
       if(price && price > 1000 && price < 10000){
@@ -72,19 +81,12 @@ async function fetchGoldPrice(){
   console.log('Semua sumber gold gagal, pake harga terakhir:', xauusdPrice);
 }
 
-// === FETCH FULL DEPTH - MENTOK MAKSIMAL BURSA ===
-async function fetchBybit(){
-  try{
-    // DULU limit=100, SEKARANG 500 = MENTOK BYBIT
-    const res = await fetch('https://api.bybit.com/v5/market/orderbook?category=spot&symbol=XAUTUSDT&limit=500');
-    const data = await res.json();
-    if(!data.result || !data.result.b || !data.result.a) return null;
-    return { bids: data.result.b.map(b=>({price: parseFloat(b[0]), size: parseFloat(b[1]), side:'BID'})), asks: data.result.a.map(a=>({price: parseFloat(a[0]), size: parseFloat(a[1]), side:'ASK'})) };
-  }catch(e){ return null; }
-}
+// === FETCH SPOT ALA STREAMLIT - OKX + BINANCE + BYBIT ===
+// Streamlit: OKX sz=400, Binance depth 100, Bybit spot limit=50
+// Di sini gue naikin dikit biar full depth, tapi cara bacanya SAMA PERSIS kayak Streamlit
 async function fetchOKX(){
   try{
-    // DULU sz=100, SEKARANG 400 = MENTOK OKX
+    // OKX SPOT - instId XAUT-USDT (tanpa -SWAP, jadi SPOT murni)
     const res = await fetch('https://www.okx.com/api/v5/market/books?instId=XAUT-USDT&sz=400');
     const data = await res.json();
     if(!data.data || !data.data[0]) return null;
@@ -92,22 +94,40 @@ async function fetchOKX(){
     return { bids: d.bids.map(b=>({price: parseFloat(b[0]), size: parseFloat(b[1]), side:'BID'})), asks: d.asks.map(a=>({price: parseFloat(a[0]), size: parseFloat(a[1]), side:'ASK'})) };
   }catch(e){ return null; }
 }
-async function fetchGate(){
+async function fetchBinance(){
+  // BINANCE SPOT - ini pengganti Gate. Endpoint /api/v3/depth itu SPOT, bukan futures.
+  // Futures Binance itu di fapi.binance.com, bukan api.binance.com. Jadi ini murni SPOT.
+  const urls = [
+    'https://api.binance.com/api/v3/depth?symbol=XAUTUSDT&limit=500',
+    'https://api1.binance.com/api/v3/depth?symbol=XAUTUSDT&limit=500',
+    'https://data-api.binance.vision/api/v3/depth?symbol=XAUTUSDT&limit=500'
+  ];
+  for(let url of urls){
+    try{
+      const res = await fetch(url);
+      const data = await res.json();
+      if(!data.bids || !data.asks) continue;
+      return { bids: data.bids.map(b=>({price: parseFloat(b[0]), size: parseFloat(b[1]), side:'BID'})), asks: data.asks.map(a=>({price: parseFloat(a[0]), size: parseFloat(a[1]), side:'ASK'})) };
+    }catch(e){ continue; }
+  }
+  return null;
+}
+async function fetchBybit(){
   try{
-    // DULU limit=100, SEKARANG 1000 = MENTOK GATE
-    const res = await fetch('https://api.gateio.ws/api/v4/spot/order_book?currency_pair=XAUT_USDT&limit=1000');
+    // BYBIT SPOT - category=spot, BUKAN linear / futures
+    const res = await fetch('https://api.bybit.com/v5/market/orderbook?category=spot&symbol=XAUTUSDT&limit=500');
     const data = await res.json();
-    if(!data.bids || !data.asks) return null;
-    return { bids: data.bids.map(b=>({price: parseFloat(b[0]), size: parseFloat(b[1]), side:'BID'})), asks: data.asks.map(a=>({price: parseFloat(a[0]), size: parseFloat(a[1]), side:'ASK'})) };
+    if(!data.result || !data.result.b || !data.result.a) return null;
+    return { bids: data.result.b.map(b=>({price: parseFloat(b[0]), size: parseFloat(b[1]), side:'BID'})), asks: data.result.a.map(a=>({price: parseFloat(a[0]), size: parseFloat(a[1]), side:'ASK'})) };
   }catch(e){ return null; }
 }
 
 async function fetchOrderbook(){
   try{
-    const [byb, okx, gate] = await Promise.all([fetchBybit(), fetchOKX(), fetchGate()]);
-    const sources = { bybit: !!byb, okx: !!okx, gate: !!gate };
+    const [okx, binance, byb] = await Promise.all([fetchOKX(), fetchBinance(), fetchBybit()]);
+    const sources = { okx: !!okx, binance: !!binance, bybit: !!byb };
     lastSources = sources;
-    const active = [byb, okx, gate].filter(Boolean);
+    const active = [okx, binance, byb].filter(Boolean);
     if(active.length===0){ console.log('Semua exchange kosong, skip'); return; }
 
     let mids = [];
@@ -117,44 +137,50 @@ async function fetchOrderbook(){
     if(mids.length>0) xautMid = mids.reduce((a,b)=>a+b,0)/mids.length;
     if(xauusdPrice>0) selisih = xautMid - xauusdPrice;
 
-    // === V3.4 FIX: DULU slice(0,30) - CUMA 30 TERDEKET, MAKANYA 4000/4100 GAK PERNAH MUNCUL ===
-    // SEKARANG: AMBIL SEMUA, DARI HARGA PALING RENDAH SAMPE PALING TINGGI
-    let allLevels = [];
-    active.forEach(ex=>{ allLevels.push(...ex.bids, ...ex.asks); });
-    const avg = allLevels.reduce((s,w)=>s+w.size,0) / allLevels.length;
-    lastAvg = avg;
-
-    let candidates = [];
-    const exNames = ['BYBIT','OKX','GATE'];
-    [byb, okx, gate].forEach((ex, idx)=>{
+    // === CARA STREAMLIT: GABUNG SEMUA, ROUND 0.1, JUMLAH SIZE ===
+    // Beda sama V3.4 yang harus 2/3 exchange + grouping 4$.
+    // Di sini: kalau ada harga yang sama (dibulatkan 0.1), size-nya dijumlah. Udah. Gak ada syarat lain.
+    // Makanya levelnya BANYAK dan SERING KE-HIT, kayak heatmap Streamlit lo.
+    let mergedMap = {}; // key: price_rounded_side -> { price, size, sources:Set }
+    const exNames = ['OKX','BINANCE','BYBIT'];
+    [okx, binance, byb].forEach((ex, idx)=>{
       if(!ex) return;
       [...ex.bids, ...ex.asks].forEach(w=>{
-        // FILTER CUMA PAKE SIZE GEDE. GAK PAKE JARAK LAGI.
-        // Mau di 3950, 4050, 4100, kalau gede ya MASUK.
-        if(w.size > avg * 2.5) candidates.push({...w, source: exNames[idx]});
+        const rounded = Math.round(w.price * 10) / 10; // round 0.1 kayak Streamlit: round(p,1)
+        const key = `${w.side}-${rounded.toFixed(1)}`;
+        if(!mergedMap[key]) mergedMap[key] = { price: rounded, side: w.side, size: 0, sources: new Set() };
+        mergedMap[key].size += w.size;
+        mergedMap[key].sources.add(exNames[idx]);
       });
     });
 
-    let confirmed = [];
-    candidates.forEach(c=>{
-      // V3.4 FIX: DULU <=1.0 bikin level mepet-mepet 4057, 4055, 4054
-      // SEKARANG <4, yang jaraknya <4$ digabung jadi 1 tembok paling gede
-      const others = candidates.filter(o=> o.side===c.side && o.source!==c.source && Math.abs(o.price - c.price) < 4);
-      const uniqueSources = new Set([c.source, ...others.map(o=>o.source)]);
-      if(uniqueSources.size >= 2){
-        const exists = confirmed.find(x=> x.side===c.side && Math.abs(x.price - c.price) < 4);
-        if(!exists){
-          const totalSize = c.size + others.reduce((s,o)=>s+o.size,0);
-          confirmed.push({ price: c.price, side: c.side, size: Math.floor(totalSize*10000)/10000, score: Math.floor(totalSize/avg*10)/10, sources: [...uniqueSources].join('+'), sourceCount: uniqueSources.size });
-        } else {
-          // Kalau udah ada yang mepet, gabung size-nya ke yang udah ada, ambil yang paling gede
-          if(c.size > exists.size) exists.price = c.price;
-          exists.size = Math.floor((exists.size + c.size)*10000)/10000;
-        }
-      }
+    let allLevels = Object.values(mergedMap);
+    // Filter cuma yang masih deket harga: +/- 10% dari mid, kayak heatmap Streamlit
+    // Biar gak berat, tapi tetep jauh lebih luas dari V3.4
+    allLevels = allLevels.filter(w => Math.abs(w.price - xautMid) < xautMid * 0.10);
+
+    const avg = allLevels.length ? allLevels.reduce((s,w)=>s+w.size,0) / allLevels.length : 0;
+    lastAvg = avg;
+
+    // === HEATMAP ALA STREAMLIT: HEAT = SIZE / AVG ===
+    // Di Streamlit lo, Zona Heat > 15 yang ditandain sebagai Zona Likuiditas Tinggi.
+    // Di sini gue pake rumus yang sama. Heat gede = tembok gede.
+    // Tapi gak dibuang kalau Heat kecil. Semua tetep ditampilin, cuma yang Heat > 15 yang jadi kandidat sinyal.
+    let confirmed = allLevels.map(w=>{
+      const heat = avg > 0 ? w.size / avg : 0;
+      return {
+        price: Math.floor(w.price*100)/100,
+        side: w.side,
+        size: Math.floor(w.size*10000)/10000,
+        score: Math.floor(heat*10)/10,
+        heat: Math.floor(heat*10)/10,
+        sources: [...w.sources].join('+'),
+        sourceCount: w.sources.size,
+        is_heat_zone: heat > 15 // Zona Heat > 15 kayak Streamlit
+      };
     });
 
-    // Urutin biar rapi: BID dari tinggi ke rendah, ASK dari rendah ke tinggi
+    // Urutin: BID tinggi ke rendah, ASK rendah ke tinggi
     confirmed.sort((a,b)=> a.side==='BID' ? b.price - a.price : a.price - b.price);
 
     const now = Date.now();
@@ -168,17 +194,21 @@ async function fetchOrderbook(){
       w.firstSeen = first;
       w.price_mt5 = Math.floor((w.price - selisih)*100)/100;
       w.price_xaut = Math.floor(w.price*100)/100;
-      // Tandain jauh / deket buat frontend
       w.distance = Math.abs(w.price - xautMid);
       w.is_far = w.distance >= 20;
     });
     wallFirstSeen = newSeen;
-    const stableWalls = confirmed.filter(w=> w.age_menit >= 3);
+
+    // === BEDANYA SAMA V3.4: STABIL = HEAT ZONE, BUKAN BETAH 3 MENIT ===
+    // V3.4: stable = age >= 3 menit -> bikin sinyal jarang
+    // V4.0 ala Streamlit: stable = Heat > 15 -> langsung bisa jadi sinyal, gak perlu nunggu 3 menit
+    // Makanya levelnya sering ke-hit kayak Streamlit
+    const stableWalls = confirmed.filter(w=> w.is_heat_zone);
     walls = confirmed;
     walls._stable = stableWalls;
     lastFetch = Date.now();
     for(let w of walls.slice(0,3)) await saveToSupabase(w);
-    console.log(`3EX FULL [BYB:${sources.bybit?'OK':'X'} OKX:${sources.okx?'OK':'X'} GATE:${sources.gate?'OK':'X'}] Avg:${avg.toFixed(4)} | Level:${walls.length} Stabil:${stableWalls.length} | Jauh:${walls.filter(w=>w.is_far).length} | Range:${walls.length?Math.min(...walls.map(w=>w.price)).toFixed(0)+'-'+Math.max(...walls.map(w=>w.price)).toFixed(0):'-'} | XAUT:${xautMid.toFixed(2)} XAUUSD:${xauusdPrice.toFixed(2)} (${lastGoldSource}) Selisih:${selisih.toFixed(2)} | LOCK:${lockedSignal?lockedSignal.signal:'-'}`);
+    console.log(`3EX SPOT [OKX:${sources.okx?'OK':'X'} BIN:${sources.binance?'OK':'X'} BYB:${sources.bybit?'OK':'X'}] Avg:${avg.toFixed(4)} | Level:${walls.length} HeatZone:${stableWalls.length} | Jauh:${walls.filter(w=>w.is_far).length} | Range:${walls.length?Math.min(...walls.map(w=>w.price)).toFixed(0)+'-'+Math.max(...walls.map(w=>w.price)).toFixed(0):'-'} | XAUT:${xautMid.toFixed(2)} XAUUSD:${xauusdPrice.toFixed(2)} (${lastGoldSource}) Selisih:${selisih.toFixed(2)} | LOCK:${lockedSignal?lockedSignal.signal:'-'}`);
   }catch(e){ console.log('Fetch gagal:', e.message); }
 }
 
@@ -228,13 +258,15 @@ function buildSignal(){
     }
   }
 
-  if(stableWalls.length===0) return { signal:'WAIT', reason:'Belum ada level STABIL (>=3 menit) yang terkonfirmasi 2/3 exchange', entry:0, sl:0, emergency_sl:0, tp1:0, tp2:0, entry_mt5:0, sl_mt5:0, emergency_sl_mt5:0, tp1_mt5:0, tp2_mt5:0, partial:'50/50', reentry:null, last_done: lastDone };
+  if(stableWalls.length===0) return { signal:'WAIT', reason:'Belum ada Zona Heat > 15 (ala Streamlit) yang ke-detect', entry:0, sl:0, emergency_sl:0, tp1:0, tp2:0, entry_mt5:0, sl_mt5:0, emergency_sl_mt5:0, tp1_mt5:0, tp2_mt5:0, partial:'50/50', reentry:null, last_done: lastDone };
   const bidWalls = [...stableWalls].filter(w=>w.side==='BID').sort((a,b)=>b.price-a.price);
   const askWalls = [...stableWalls].filter(w=>w.side==='ASK').sort((a,b)=>a.price-b.price);
-  if(bidWalls.length===0 || askWalls.length===0) return { signal:'WAIT', reason:'Level stabil satu sisi doang, skip', entry:0, sl:0, emergency_sl:0, tp1:0, tp2:0, entry_mt5:0, sl_mt5:0, emergency_sl_mt5:0, tp1_mt5:0, tp2_mt5:0, partial:'50/50', reentry:null, last_done: lastDone };
+  if(bidWalls.length===0 || askWalls.length===0) return { signal:'WAIT', reason:'Zona Heat satu sisi doang, skip', entry:0, sl:0, emergency_sl:0, tp1:0, tp2:0, entry_mt5:0, sl_mt5:0, emergency_sl_mt5:0, tp1_mt5:0, tp2_mt5:0, partial:'50/50', reentry:null, last_done: lastDone };
   const mid = (bidWalls[0].price + askWalls[0].price) / 2;
-  const nearestBid = bidWalls.find(w=> (mid - w.price) >= 5 && (mid - w.price) <= 15) || bidWalls[0];
-  const nearestAsk = askWalls.find(w=> (w.price - mid) >= 5 && (w.price - mid) <= 15) || askWalls[0];
+  // Cari yang paling deket sama harga, kayak Streamlit yang levelnya nempel harga
+  // V3.4 nyari yang 5-15$ jauhnya. V4.0 nyari yang paling deket, biar sering ke-hit.
+  const nearestBid = bidWalls.sort((a,b)=> Math.abs(mid - a.price) - Math.abs(mid - b.price))[0];
+  const nearestAsk = askWalls.sort((a,b)=> Math.abs(a.price - mid) - Math.abs(mid - b.price))[0];
 
   let newSignal = null;
   if(nearestBid.score >= nearestAsk.score){
@@ -246,7 +278,7 @@ function buildSignal(){
     const tp2 = (askWalls[askWalls.length-1]?.price || nearestAsk.price) - 3;
     const backup = bidWalls[bidWalls.length-1];
     const reentry = backup && backup.price !== wall.price ? { entry: backup.price + 3, sl: backup.price - 3, wall: backup.price, entry_mt5: (backup.price + 3) - selisih, sl_mt5: (backup.price - 3) - selisih } : null;
-    newSignal = { signal:'BUY', reason:`Level BID ${wall.price} size ${wall.size} XAUT (${wall.score}x avg) TERKONFIRMASI [${wall.sources}] | Umur level ${wall.age_menit}m | TP1 depan ASK ${nearestAsk.price}`, entry, sl, emergency_sl, tp1, tp2, partial:'50/50 - 50% di TP1, 50% ke TP2', reentry, wall: wall.price, avg: lastAvg };
+    newSignal = { signal:'BUY', reason:`SPOT Heat Zone BID ${wall.price} size ${wall.size} XAUT (Heat ${wall.heat}x avg) [${wall.sources}] | Jarak ${Math.abs(mid - wall.price).toFixed(1)}$ dari harga | TP1 depan ASK ${nearestAsk.price}`, entry, sl, emergency_sl, tp1, tp2, partial:'50/50 - 50% di TP1, 50% ke TP2', reentry, wall: wall.price, avg: lastAvg };
   } else {
     const wall = nearestAsk;
     const entry = wall.price - 3;
@@ -256,7 +288,7 @@ function buildSignal(){
     const tp2 = (bidWalls[bidWalls.length-1]?.price || nearestBid.price) + 3;
     const backup = askWalls[askWalls.length-1];
     const reentry = backup && backup.price !== wall.price ? { entry: backup.price - 3, sl: backup.price + 3, wall: backup.price, entry_mt5: (backup.price - 3) - selisih, sl_mt5: (backup.price + 3) - selisih } : null;
-    newSignal = { signal:'SELL', reason:`Level ASK ${wall.price} size ${wall.size} XAUT (${wall.score}x avg) TERKONFIRMASI [${wall.sources}] | Umur level ${wall.age_menit}m | TP1 depan BID ${nearestBid.price}`, entry, sl, emergency_sl, tp1, tp2, partial:'50/50 - 50% di TP1, 50% ke TP2', reentry, wall: wall.price, avg: lastAvg };
+    newSignal = { signal:'SELL', reason:`SPOT Heat Zone ASK ${wall.price} size ${wall.size} XAUT (Heat ${wall.heat}x avg) [${wall.sources}] | Jarak ${Math.abs(wall.price - mid).toFixed(1)}$ dari harga | TP1 depan BID ${nearestBid.price}`, entry, sl, emergency_sl, tp1, tp2, partial:'50/50 - 50% di TP1, 50% ke TP2', reentry, wall: wall.price, avg: lastAvg };
   }
 
   newSignal.entry_mt5 = newSignal.entry - selisih;
@@ -275,26 +307,25 @@ setInterval(fetchGoldPrice, 5000);
 fetchOrderbook();
 fetchGoldPrice();
 
-app.get('/', (req,res)=> res.send('ABEL FX ORDERBOOK v3.4 FULL DEPTH jalan!'));
+app.get('/', (req,res)=> res.send('ABEL FX ORDERBOOK v4.0 SPOT ALA STREAMLIT jalan!'));
 app.get('/api/health', (req,res)=> res.json({ status: 'ok', uptime_menit: Math.floor((Date.now()-startTime)/60000) }));
 app.get('/api/unlock', (req,res)=>{ lockedSignal = null; lockedWallGoneSince = 0; res.json({ ok:true, msg:'Lock dibatalkan manual' }); });
 app.get('/api/signal', (req,res)=>{
   const s = buildSignal();
   const uptime_menit = Math.floor((Date.now()-startTime)/60000);
-  // Pisahin buat frontend: DEKET vs JAUH, tapi dua-duanya dari data FULL
   const wallsNear = walls.filter(w=> !w.is_far);
   const wallsFar = walls.filter(w=> w.is_far);
   const allPrices = walls.map(w=>w.price);
   res.json({ ...s, pair: 'XAUT = XAUUSD MT5', exchanges: lastSources, avg_xaut: lastAvg,
-    walls: walls.slice(0,50), // kirim 50 teratas biar gak berat, tapi tetep full di wallsFar
+    walls: walls.slice(0,50),
     wallsNear: wallsNear.slice(0,10),
-    wallsFar: wallsFar, // INI YANG LO MAU - SEMUA WHALE JAUH, GAK DILIMIT
+    wallsFar: wallsFar,
     wallsFarCount: wallsFar.length,
     range: walls.length ? { low: Math.min(...allPrices), high: Math.max(...allPrices) } : { low: 0, high: 0 },
     uptime_menit, supabase: SUPABASE_URL ? 'CONNECTED' : 'NOT SET', last_update: new Date(lastFetch).toISOString(), last_done: lastDone,
     harga: { xaut_mid: Math.floor(xautMid*100)/100, xauusd_goldprice: Math.floor(xauusdPrice*100)/100, selisih: Math.floor(selisih*100)/100, selisih_text: selisih>=0? `XAUT +${selisih.toFixed(2)}$ lebih mahal` : `XAUT ${selisih.toFixed(2)}$ lebih murah`, last_gold_update: new Date(lastGoldFetch).toISOString(), source: lastGoldSource },
-    rules: 'V3.4: ABEL FX ORDERBOOK - Full Depth 500/400/1000, Konfirmasi 2/3, Level Betah 3m, Lock + Auto-Unlock TP/SL, Entry +3 | SL -3 | Emergency -6 | TP1/TP2 | Partial 50/50 | Re-Entry A | Warm-up 30m | Grouping 4$ | Filter SIZE doang, NO LIMIT JARAK'
+    rules: 'V4.0 SPOT ALA STREAMLIT: OKX Spot + Binance Spot + Bybit Spot, Gabung round 0.1, Heat > 15 = Zona, NO 2/3, NO betah 3m, NO grouping 4$, NO GC=F Futures, Entry +3 | SL -3 | Emergency -6 | TP1/TP2 | Partial 50/50 | Re-Entry A | Warm-up 30m'
   });
 });
 
-app.listen(PORT, ()=> console.log(`ABEL FX ORDERBOOK v3.4 jalan di port ${PORT}`));
+app.listen(PORT, ()=> console.log(`ABEL FX ORDERBOOK v4.0 SPOT ALA STREAMLIT jalan di port ${PORT}`));
