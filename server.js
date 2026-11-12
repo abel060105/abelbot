@@ -1,10 +1,28 @@
-// ABEL BOT - V5.0 - HAPUS DESKRIPSI, + RIWAYAT SINYAL BUAT JURNALING
+// ABEL BOT - V5.2 - NOTIF VIA TELEGRAM + RIWAYAT + HAPUS DESKRIPSI
 const express = require('express');
 const cors = require('cors');
 const app = express();
 app.use(cors());
 app.use(express.json());
 const PORT = process.env.PORT || 10000;
+
+// TELEGRAM CONFIG - isi dari Render Environment
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
+async function sendTelegram(msg){
+  if(!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID){
+    console.log('Telegram belum di-setting, skip:', msg.slice(0,50));
+    return;
+  }
+  try{
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: msg, parse_mode: 'HTML' })
+    });
+    console.log('Telegram terkirim');
+  }catch(e){ console.log('Telegram gagal:', e.message); }
+}
 
 let walls = [];
 let wallsFar = [];
@@ -29,9 +47,6 @@ let lockedId = null;
 let reentry = null;
 let partial = '50/50';
 let firstSeenMap = new Map();
-
-// RIWAYAT SINYAL - nyimpen di memory server, server nyala terus jadi gak ilang
-// Format: { id, signal, entry_mt5, entry_xaut, sl_mt5, tp1_mt5, tp2_mt5, size, wall_price, wall_side, sources, age_menit, created_at, closed_at, result, result_price, duration_menit }
 let signalHistory = [];
 function addHistory(entry){
   signalHistory.unshift(entry);
@@ -46,7 +61,6 @@ function closeHistory(id, result, resultPrice){
     h.duration_menit = Math.floor((h.closed_at - h.created_at)/60000);
   }
 }
-
 function getAgeMenit(key){
   const t = firstSeenMap.get(key);
   if(!t) return 0;
@@ -186,12 +200,14 @@ function checkSignal(){
       if(xauusdPrice >= tp2Mt5Now){
         lastDone = { last_result: 'BUY LIMIT TP2 KENA di ' + tp2Mt5Now.toFixed(2) };
         closeHistory(lockedId, 'TP2 KENA', tp2Mt5Now);
+        sendTelegram(`✅ <b>BUY LIMIT TP2 KENA</b>\n\nHarga: $${tp2Mt5Now.toFixed(2)}\nEntry tadi: $${entryMt5Now.toFixed(2)}\nProfit: +10$\n\nCek dashboard buat sinyal baru.`);
         isLocked = false; lockStatus = 'TP2 KENA - DONE';
         return { signal: 'DONE', reason: '', pending, touched };
       }
       if(xauusdPrice <= slMt5Now){
         lastDone = { last_result: 'BUY LIMIT SL KENA di ' + slMt5Now.toFixed(2) };
         closeHistory(lockedId, 'SL KENA', slMt5Now);
+        sendTelegram(`❌ <b>BUY LIMIT SL KENA</b>\n\nHarga: $${slMt5Now.toFixed(2)}\nEntry tadi: $${entryMt5Now.toFixed(2)}\nLoss: -5$\n\nTunggu sinyal baru, jangan revenge.`);
         isLocked = false; lockStatus = 'SL KENA - DONE';
         return { signal: 'DONE', reason: '', pending, touched };
       }
@@ -200,12 +216,14 @@ function checkSignal(){
       if(xauusdPrice <= tp2Mt5Now){
         lastDone = { last_result: 'SELL LIMIT TP2 KENA di ' + tp2Mt5Now.toFixed(2) };
         closeHistory(lockedId, 'TP2 KENA', tp2Mt5Now);
+        sendTelegram(`✅ <b>SELL LIMIT TP2 KENA</b>\n\nHarga: $${tp2Mt5Now.toFixed(2)}\nEntry tadi: $${entryMt5Now.toFixed(2)}\nProfit: +10$\n\nCek dashboard buat sinyal baru.`);
         isLocked = false; lockStatus = 'TP2 KENA - DONE';
         return { signal: 'DONE', reason: '', pending, touched };
       }
       if(xauusdPrice >= slMt5Now){
         lastDone = { last_result: 'SELL LIMIT SL KENA di ' + slMt5Now.toFixed(2) };
         closeHistory(lockedId, 'SL KENA', slMt5Now);
+        sendTelegram(`❌ <b>SELL LIMIT SL KENA</b>\n\nHarga: $${slMt5Now.toFixed(2)}\nEntry tadi: $${entryMt5Now.toFixed(2)}\nLoss: -5$\n\nTunggu sinyal baru, jangan revenge.`);
         isLocked = false; lockStatus = 'SL KENA - DONE';
         return { signal: 'DONE', reason: '', pending, touched };
       }
@@ -234,8 +252,15 @@ function checkSignal(){
   lockedId = 'SIG-' + lockedAt;
   lockStatus = 'LOCKED - ' + displaySignal + ' di ' + entryMt5.toFixed(2);
   lockedReason = '';
-  // Simpan ke riwayat
   addHistory({ id: lockedId, signal: displaySignal, wall_side: terdekat.side, wall_price: terdekat.price, entry_mt5: entryMt5, entry_xaut: entryXaut, sl_mt5: slMt5, tp1_mt5: tp1Mt5, tp2_mt5: tp2Mt5, size: terdekat.size, sources: terdekat.sources, age_menit: terdekat.age_menit, created_at: lockedAt, closed_at: null, result: 'AKTIF', result_price: null, duration_menit: 0 });
+
+  // KIRIM TELEGRAM - INI YANG BIKIN NOTIF MASUK WALAU PWA DI-CLOSE
+  if(isBuy){
+    sendTelegram(`🎯 <b>BUY LIMIT</b>\n\n<b>Entry (Limit):</b> $${entryMt5.toFixed(2)}\n<b>Harga Sekarang:</b> $${xauusdPrice.toFixed(2)} (jarak ${terdekat.distance_mt5.toFixed(1)}$)\n<b>SL:</b> $${slMt5.toFixed(2)}\n<b>TP1:</b> $${tp1Mt5.toFixed(2)}\n<b>TP2:</b> $${tp2Mt5.toFixed(2)}\n<b>Tembok:</b> BID ${terdekat.price.toFixed(2)} - ${terdekat.size.toFixed(2)} XAUT - Betah ${terdekat.age_menit}m - ${terdekat.sources}\n\n⚠️ PASANG LIMIT di $${entryMt5.toFixed(2)}, JANGAN MARKET SEKARANG. Tunggu kejemput.`);
+  } else {
+    sendTelegram(`🎯 <b>SELL LIMIT</b>\n\n<b>Entry (Limit):</b> $${entryMt5.toFixed(2)}\n<b>Harga Sekarang:</b> $${xauusdPrice.toFixed(2)} (jarak ${terdekat.distance_mt5.toFixed(1)}$)\n<b>SL:</b> $${slMt5.toFixed(2)}\n<b>TP1:</b> $${tp1Mt5.toFixed(2)}\n<b>TP2:</b> $${tp2Mt5.toFixed(2)}\n<b>Tembok:</b> ASK ${terdekat.price.toFixed(2)} - ${terdekat.size.toFixed(2)} XAUT - Betah ${terdekat.age_menit}m - ${terdekat.sources}\n\n⚠️ PASANG LIMIT di $${entryMt5.toFixed(2)}, JANGAN MARKET SEKARANG. Tunggu kejemput.`);
+  }
+
   return { signal: displaySignal, reason: '', pending, touched, entry: lockedEntry, entry_mt5: lockedEntryMt5, sl: lockedSl, sl_mt5: lockedSlMt5, tp1: lockedTp1, tp1_mt5: lockedTp1Mt5, tp2: lockedTp2, tp2_mt5: lockedTp2Mt5, emergency_sl_mt5: lockedEmergency, partial, reentry, is_locked: true, lock_status: lockStatus, lockedAt, lockedId };
 }
 
@@ -251,9 +276,13 @@ tick();
 app.get('/', (req,res)=> res.send('ABEL BOT OK - /api/signal'));
 app.get('/api/signal', (req,res)=>{
   const sig = checkSignal();
-  res.json({ ...sig, walls: walls, wallsNear: walls, wallsFar: wallsFar, wallsFarCount: wallsFar.length, pendingOrders: sig.pending, touchedLevels: sig.touched, history: signalHistory, harga: { xaut_mid: xautPrice, xauusd_goldprice: xauusdPrice, selisih, source: goldSource }, range: { low: 3893, high: 4060 }, exchanges, supabase: 'OK', uptime_menit: Math.floor((Date.now() - uptimeStart) / 60000), last_update: lastUpdate, last_done: lastDone });
+  res.json({ ...sig, walls: walls, wallsNear: walls, wallsFar: wallsFar, wallsFarCount: wallsFar.length, pendingOrders: sig.pending, touchedLevels: sig.touched, history: signalHistory, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF - isi TELEGRAM_BOT_TOKEN di Render', harga: { xaut_mid: xautPrice, xauusd_goldprice: xauusdPrice, selisih, source: goldSource }, range: { low: 3893, high: 4060 }, exchanges, supabase: 'OK', uptime_menit: Math.floor((Date.now() - uptimeStart) / 60000), last_update: lastUpdate, last_done: lastDone });
 });
 app.get('/api/history', (req,res)=>{ res.json({ history: signalHistory, total: signalHistory.length }); });
+app.get('/api/test-telegram', async (req,res)=>{
+  await sendTelegram(`🔔 <b>TEST TELEGRAM ABEL BOT</b>\n\nKalau pesan ini masuk, berarti Telegram lo udah nyambung. Sinyal baru nanti bakal masuk ke sini, walau PWA di-close.`);
+  res.json({ ok: true, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF', chat_id_set: !!TELEGRAM_CHAT_ID });
+});
 app.get('/api/unlock', (req,res)=>{
   if(isLocked && lockedId) closeHistory(lockedId, 'MANUAL / DIBATALKAN', xauusdPrice);
   isLocked = false; lockStatus = 'Dibatalkan manual'; lockedSignal = 'WAIT';
