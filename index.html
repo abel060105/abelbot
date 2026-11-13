@@ -119,12 +119,14 @@
     <div class="mini"><small>TP 1 (50%)</small><b id="tp1Val">0</b></div>
     <div class="mini"><small>TP 2</small><b id="tp2Val">0</b></div>
   </div>
-  <div class="status-row" style="margin-top:12px"><span>Setup</span><b id="setupVal" style="color:#facc15">-</b></div>
+  <div class="status-row"><span>Setup</span><b id="setupVal" style="color:#facc15">-</b></div>
+  <div class="status-row"><span>Tembok Pemicu (Setup Ini)</span><b id="wallVal">-</b></div>
   <div class="status-row"><span>Emergency SL</span><b id="emergencyVal">-</b></div>
   <div class="status-row"><span>Partial</span><b id="partialVal">50/50</b></div>
   <div class="status-row"><span>Re-Entry A</span><b id="reentryVal">-</b></div>
   <div class="status-row"><span>Lock</span><b id="lockVal">-</b></div>
-  <div class="status-row"><span>Level TERSENTUH</span><b id="touchedVal" style="color:#facc15">-</b></div>
+  <div class="status-row"><span>Setup Terakhir (Last)</span><b id="lastVal" style="color:#94a3b8">-</b></div>
+  <div class="status-row"><span>Level TERSENTUH (Global)</span><b id="touchedVal" style="color:#facc15">-</b></div>
 </div>
 
 <div class="harga-grid">
@@ -166,7 +168,7 @@
   <button class="btn-dark" onclick="unlock()">🔓 BATALKAN LOCK MANUAL</button>
   <button class="btn-install" id="installBtn" onclick="installPWA()">📲 INSTALL APLIKASI</button>
 </div>
-<div id="status" style="text-align:center;font-size:11px;color:#94a3b8;margin-bottom:20px">Auto-refresh tiap 5 detik • Sinyal MARKET • Eksekusi instan</div>
+<div id="status" style="text-align:center;font-size:11px;color:#94a3b8;margin-bottom:20px">Auto-refresh tiap 5 detik • Sinyal MARKET • Eksekusi instan • Mesin jalan di server</div>
 
 <script>
 const API_URL = 'https://abelbot.onrender.com/api/signal';
@@ -198,7 +200,6 @@ async function installPWA(){
     alert('Di Chrome HP: klik titik 3 di kanan atas > Tambahkan ke Layar Utama / Install App.\nDi Chrome Laptop: klik ikon Install di address bar (kanan).');
   }
 }
-
 async function enableNotif(){
   if(!('Notification' in window)){ alert('Browser ini gak support notif'); return; }
   const perm = await Notification.requestPermission();
@@ -238,7 +239,6 @@ function sendNotif(title, body){
   document.title = '🔔 ' + title;
   setTimeout(()=>{ document.title = 'ABEL FX ORDERBOOK'; }, 5000);
 }
-
 async function downloadCard(cardId, fileName){
   const el = document.getElementById(cardId);
   if(!el) return;
@@ -251,7 +251,6 @@ async function downloadCard(cardId, fileName){
     a.click();
   }catch(e){ alert('Gagal download: ' + e.message); }
 }
-
 function getNote(id){ return localStorage.getItem('abel_note_' + id) || ''; }
 function saveNote(id, val){ localStorage.setItem('abel_note_' + id, val); }
 function downloadCSV(){
@@ -268,7 +267,6 @@ function downloadCSV(){
   a.download = 'abel-jurnal-' + new Date().toISOString().slice(0,10) + '.csv';
   a.click();
 }
-
 async function load(){
   document.getElementById('status').innerText = 'Menghubungkan...';
   try{
@@ -288,14 +286,16 @@ async function load(){
     else if(sigRaw === 'DONE') sigCls = 'DONE';
     sigEl.className = 'signal ' + sigCls;
 
-    // SETUP ID - TAMPIL DI SINYAL AKTIF
     const setupId = d.setup_id || '';
     document.getElementById('setupVal').innerText = setupId || '-';
     const badge = document.getElementById('setupBadge');
     if(setupId){ badge.innerText = 'Setup ' + setupId; badge.style.display = 'inline-block'; } else { badge.style.display = 'none'; }
 
-    // NOTIF: kalau sinyal berubah WAIT -> BUY MARKET / SELL MARKET, atau jadi DONE
-    const notifKey = sigRaw + '-' + (d.lockedId || d.lockedAt || '');
+    // Tembok pemicu - dari setup yang lagi jalan, bukan global
+    document.getElementById('wallVal').innerText = d.wall ? `${d.wall.side} ${d.wall.price.toFixed(2)} - ${d.wall.size.toFixed(2)} XAUT - ${d.wall.sources} - Betah ${d.wall.age_menit}m` : '-';
+    document.getElementById('lastVal').innerText = d.last_done ? d.last_done.last_result : (d.last_setup ? d.last_setup.setup_id + ' ' + d.last_setup.result : '-');
+
+    const notifKey = sigRaw + '-' + (d.lockedId || '');
     if(notifKey !== lastNotifId){
       if(lastSignal === 'WAIT' && (sigRaw.includes('BUY') || sigRaw.includes('SELL'))){
         sendNotif('🎯 ' + sigRaw + ' ' + setupId + ' di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : ''), 'Eksekusi MARKET di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : '') + ' | SL ' + (d.sl_mt5 ? '$' + d.sl_mt5.toFixed(2) : '') + ' | TP1 ' + (d.tp1_mt5 ? '$' + d.tp1_mt5.toFixed(2) : '') + ' | TP2 ' + (d.tp2_mt5 ? '$' + d.tp2_mt5.toFixed(2) : '') + '. Eksekusi sekarang.');
@@ -313,23 +313,20 @@ async function load(){
     document.getElementById('emergencyVal').innerText = d.emergency_sl_mt5 ? fmt(d.emergency_sl_mt5) : '-';
     document.getElementById('partialVal').innerText = d.partial || '50/50';
     document.getElementById('reentryVal').innerText = d.reentry ? fmt(d.reentry.entry_mt5) + ' / SL ' + fmt(d.reentry.sl_mt5) : '-';
-    document.getElementById('lockVal').innerText = d.is_locked ? '🔒 ' + (d.lock_status || 'LOCKED') : 'Tidak terkunci';
-    if(d.last_done) document.getElementById('lockVal').innerText = 'Last: ' + (d.last_done.last_result || '');
-    const lockedAt = d.lockedAt || d.signal_started_at || (d.is_locked ? Date.now() : null);
+    document.getElementById('lockVal').innerText = d.is_locked ? '🔒 ' + (d.lock_status || 'LOCKED') : (d.lock_status || 'Tidak terkunci');
+    const lockedAt = d.lockedAt || null;
     const isActiveMarket = sigRaw.includes('BUY') || sigRaw.includes('SELL');
-    if(isActiveMarket){
-      if(lockedAt){
-        const dt = new Date(lockedAt);
-        document.getElementById('jamAktif').innerText = dt.toLocaleTimeString('id-ID');
-        document.getElementById('jamTanggal').innerText = dt.toLocaleDateString('id-ID');
-        const diffMenit = Math.floor((Date.now() - dt.getTime())/60000);
-        const diffDetik = Math.floor((Date.now() - dt.getTime())/1000) % 60;
-        document.getElementById('jamTelat').innerText = diffMenit + 'm ' + diffDetik + 'd';
-        const statusEl = document.getElementById('jamStatus');
-        if(diffMenit <= 2){ statusEl.innerText = 'Market baru eksekusi, pantau TP1'; statusEl.style.color = '#00e676'; }
-        else if(diffMenit <= 10){ statusEl.innerText = 'Market udah jalan ' + diffMenit + 'm, cek TP1'; statusEl.style.color = '#facc15'; }
-        else { statusEl.innerText = 'Market udah ' + diffMenit + 'm belum TP1, pantau terus'; statusEl.style.color = '#ff5252'; }
-      }
+    if(isActiveMarket && lockedAt){
+      const dt = new Date(lockedAt);
+      document.getElementById('jamAktif').innerText = dt.toLocaleTimeString('id-ID');
+      document.getElementById('jamTanggal').innerText = dt.toLocaleDateString('id-ID');
+      const diffMenit = Math.floor((Date.now() - dt.getTime())/60000);
+      const diffDetik = Math.floor((Date.now() - dt.getTime())/1000) % 60;
+      document.getElementById('jamTelat').innerText = diffMenit + 'm ' + diffDetik + 'd';
+      const statusEl = document.getElementById('jamStatus');
+      if(diffMenit <= 2){ statusEl.innerText = 'Market baru eksekusi, pantau TP1'; statusEl.style.color = '#00e676'; }
+      else if(diffMenit <= 10){ statusEl.innerText = 'Market udah jalan ' + diffMenit + 'm, cek TP1'; statusEl.style.color = '#facc15'; }
+      else { statusEl.innerText = 'Market udah ' + diffMenit + 'm belum TP1, pantau terus'; statusEl.style.color = '#ff5252'; }
     } else {
       document.getElementById('jamAktif').innerText = '-';
       document.getElementById('jamTanggal').innerText = 'Belum ada sinyal aktif';
@@ -356,17 +353,8 @@ async function load(){
     render('asksNear', wallsNear.filter(w=>w.side==='ASK').sort((a,b)=>a.price-b.price).slice(0,6), 'ASK');
     render('bidsFar', wallsFar.filter(w=>w.side==='BID').sort((a,b)=>b.size-a.size), 'FAR-BID');
     render('asksFar', wallsFar.filter(w=>w.side==='ASK').sort((a,b)=>b.size-a.size), 'FAR-ASK');
-    let pendingSource;
-    let touchedSource;
-    if(Array.isArray(d.pendingOrders)){
-      pendingSource = d.pendingOrders;
-      touchedSource = Array.isArray(d.touchedLevels) ? d.touchedLevels : [];
-    } else {
-      const sorted = [...(d.walls || [])].sort((a,b)=> b.size - a.size).slice(0,20);
-      const filteredBetah = sorted.filter(w=> (w.age_menit||0) >= 5);
-      pendingSource = filteredBetah.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY MARKET':'SELL MARKET', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='PENDING');
-      touchedSource = filteredBetah.map(w=>{ const mt5 = w.price_mt5 || (w.price - selisih); const jarakMt5 = xauusd ? Math.abs(mt5 - xauusd) : 999; return { ...w, price_mt5: mt5, instruction: w.side==='BID'?'BUY MARKET':'SELL MARKET', status: jarakMt5<=3?'TERSENTUH':'PENDING', distance_mt5: jarakMt5 }; }).filter(w=> w.status==='TERSENTUH');
-    }
+    let pendingSource = Array.isArray(d.pendingOrders) ? d.pendingOrders : [];
+    let touchedSource = Array.isArray(d.touchedLevels) ? d.touchedLevels : [];
     const renderPendingItem = (w)=>{
       const mt5 = w.price_mt5 || (w.price - selisih);
       const isTouched = w.status === 'TERSENTUH';
@@ -385,9 +373,7 @@ async function load(){
     document.getElementById('totalVal').innerText = (d.walls?.length || 0) + ' level • Jauh: ' + (d.wallsFarCount || 0);
     document.getElementById('uptimeVal').innerText = (d.uptime_menit || 0) + ' menit';
     document.getElementById('lastUpdateVal').innerText = d.last_update ? new Date(d.last_update).toLocaleTimeString('id-ID') : '-';
-    document.getElementById('status').innerText = 'Update: ' + new Date().toLocaleTimeString('id-ID') + ' • Sinyal MARKET • Eksekusi instan';
-
-    // RIWAYAT + SETUP
+    document.getElementById('status').innerText = 'Update: ' + new Date().toLocaleTimeString('id-ID') + ' • Sinyal MARKET • Eksekusi instan • Mesin jalan di server';
     const hist = d.history || [];
     window._lastHistory = hist;
     if(hist.length){
