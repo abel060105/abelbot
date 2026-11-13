@@ -78,6 +78,12 @@
   .hist-table th{color:#94a3b8;font-size:11px}
   .hist-note{width:100%;background:#0b1118;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px}
   .notif-on{color:#00e676}
+  .btn-riwayat{width:100%;padding:13px;background:#1e293b;color:#fff;border:1px solid #334155;border-radius:10px;font-weight:900;cursor:pointer;font-size:14px;margin-top:12px}
+  .btn-riwayat:hover{background:#334155}
+  .sesi-info{text-align:center;font-size:11px;color:#94a3b8;margin-top:6px}
+  #popupRiwayat{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:99;padding:16px}
+  .popup-box{background:#0f172a;max-width:620px;margin:20px auto;border-radius:14px;padding:16px;max-height:82vh;overflow:auto;border:1px solid #334155}
+  .riw-item{border-bottom:1px solid #1e293b;padding:10px 0;font-size:13px}
   @media(max-width:700px){.four-col{grid-template-columns:1fr 1fr}.harga-grid{grid-template-columns:1fr}.pending-split{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}.signal{font-size:38px}.hist-table{font-size:11px}}
 </style>
 </head>
@@ -127,6 +133,22 @@
   <div class="status-row"><span>Lock</span><b id="lockVal">-</b></div>
   <div class="status-row"><span>Setup Terakhir (Last)</span><b id="lastVal" style="color:#94a3b8">-</b></div>
   <div class="status-row"><span>Level TERSENTUH (Global)</span><b id="touchedVal" style="color:#facc15">-</b></div>
+  <!-- TOMBOL RIWAYAT SESI INI - di bawah Sinyal Aktif -->
+  <button class="btn-riwayat" onclick="bukaRiwayatSesi()">📜 Riwayat Sinyal - Sejak Nyala</button>
+  <div class="sesi-info" id="sesiInfo">Sesi dimulai: - • Loading...</div>
+</div>
+
+<!-- POPUP RIWAYAT SESI INI -->
+<div id="popupRiwayat">
+  <div class="popup-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <b>📜 Riwayat Sinyal - Sesi Ini</b>
+      <button class="btn-dl" onclick="tutupRiwayatSesi()">✕ Tutup</button>
+    </div>
+    <div id="riwayatSesiInfo" style="font-size:12px;color:#94a3b8;margin-top:6px"></div>
+    <div id="riwayatSesiIsi" style="margin-top:10px">Loading...</div>
+    <button class="btn-riwayat" onclick="tutupRiwayatSesi(); document.getElementById('historyCard').scrollIntoView({behavior:'smooth'})">📚 Lihat Jurnal Lengkap di Bawah</button>
+  </div>
 </div>
 
 <div class="harga-grid">
@@ -291,7 +313,6 @@ async function load(){
     const badge = document.getElementById('setupBadge');
     if(setupId){ badge.innerText = 'Setup ' + setupId; badge.style.display = 'inline-block'; } else { badge.style.display = 'none'; }
 
-    // Tembok pemicu - dari setup yang lagi jalan, bukan global
     document.getElementById('wallVal').innerText = d.wall ? `${d.wall.side} ${d.wall.price.toFixed(2)} - ${d.wall.size.toFixed(2)} XAUT - ${d.wall.sources} - Betah ${d.wall.age_menit}m` : '-';
     document.getElementById('lastVal').innerText = d.last_done ? d.last_done.last_result : (d.last_setup ? d.last_setup.setup_id + ' ' + d.last_setup.result : '-');
 
@@ -372,6 +393,8 @@ async function load(){
     document.getElementById('exchangesVal').innerText = d.exchanges ? 'BYB:' + (d.exchanges.bybit?'OK':'X') + ' OKX:' + (d.exchanges.okx?'OK':'X') + ' BIN:' + (d.exchanges.binance?'OK':'X') : '-';
     document.getElementById('totalVal').innerText = (d.walls?.length || 0) + ' level • Jauh: ' + (d.wallsFarCount || 0);
     document.getElementById('uptimeVal').innerText = (d.uptime_menit || 0) + ' menit';
+    // Info sesi di bawah tombol Riwayat - pakai uptimeStart dari server.js yang udah dimodif
+    if(d.uptimeStart){ document.getElementById('sesiInfo').innerText = 'Sesi dimulai: ' + new Date(d.uptimeStart).toLocaleString('id-ID') + ' • ' + (d.uptime_menit || 0) + ' menit lalu • ' + (d.history ? d.history.length : 0) + ' sinyal sesi ini'; }
     document.getElementById('lastUpdateVal').innerText = d.last_update ? new Date(d.last_update).toLocaleTimeString('id-ID') : '-';
     document.getElementById('status').innerText = 'Update: ' + new Date().toLocaleTimeString('id-ID') + ' • Sinyal MARKET • Eksekusi instan • Mesin jalan di server';
     const hist = d.history || [];
@@ -392,6 +415,31 @@ async function load(){
     document.getElementById('status').innerText = 'Gagal: ' + e.message;
   }
 }
+// === RIWAYAT SESI INI - sejak server nyala (uptimeStart) ===
+async function bukaRiwayatSesi(){
+  document.getElementById('popupRiwayat').style.display = 'block';
+  document.getElementById('riwayatSesiIsi').innerHTML = 'Loading...';
+  try{
+    const r = await fetch(BASE_URL + '/api/history', { cache: 'no-store' });
+    const j = JSON.parse(await r.text());
+    const hist = j.history || [];
+    document.getElementById('riwayatSesiInfo').innerText = 'Sesi: ' + (j.sesi_mulai || '-') + ' • Total: ' + (j.total || hist.length) + ' sinyal • Uptime: ' + (j.uptime_menit || 0) + ' menit';
+    if(!hist.length){
+      document.getElementById('riwayatSesiIsi').innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8">Belum ada sinyal di sesi ini.<br>Bot baru nyala, tunggu sinyal pertama.</div>';
+      return;
+    }
+    document.getElementById('riwayatSesiIsi').innerHTML = hist.map(h=>{
+      const dt = new Date(h.created_at);
+      const c = h.result === 'TP2 KENA' ? '#00e676' : h.result === 'SL KENA' ? '#ff5252' : '#facc15';
+      return `<div class="riw-item"><b style="color:${h.signal && h.signal.includes('BUY') ? '#00e676' : '#ff5252'}">${h.signal}</b> - <b style="color:${c}">${h.result || '-'}</b> <span style="float:right;color:#94a3b8;font-size:12px">${dt.toLocaleDateString('id-ID')} ${dt.toLocaleTimeString('id-ID')}</span><br><small style="color:#cbd5e1">Setup ${h.setup_id || '-'} | Entry $${h.entry_mt5 ? h.entry_mt5.toFixed(2) : '-'} | SL $${h.sl_mt5 ? h.sl_mt5.toFixed(2) : '-'} | TP1 $${h.tp1_mt5 ? h.tp1_mt5.toFixed(2) : '-'} | TP2 $${h.tp2_mt5 ? h.tp2_mt5.toFixed(2) : '-'}${h.result_price ? ' | Close $' + h.result_price.toFixed(2) : ''}${h.duration_menit ? ' | ' + h.duration_menit + 'm' : ''}</small></div>`;
+    }).join('');
+  }catch(e){
+    document.getElementById('riwayatSesiIsi').innerHTML = 'Gagal load riwayat: ' + e.message;
+  }
+}
+function tutupRiwayatSesi(){ document.getElementById('popupRiwayat').style.display = 'none'; }
+document.addEventListener('click', (e)=>{ if(e.target && e.target.id === 'popupRiwayat') tutupRiwayatSesi(); });
+
 async function unlock(){
   try{ const r = await fetch(BASE_URL + '/api/unlock'); const d = JSON.parse(await r.text());
     alert(d.msg || 'Unlocked'); load();
