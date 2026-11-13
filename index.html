@@ -150,7 +150,7 @@
 </div>
 
 <div class="harga-grid">
-  <div class="harga-box"><div class="lbl">XAUT (Orderbook)</div><div class="val" id="xautPrice">--</div><div class="sub">Harga mentah Bybit/OKX/Binance</div></div>
+  <div class="harga-box"><div class="lbl">XAUT (Orderbook)</div><div class="val" id="xautPrice">--</div><div class="sub">Harga mentah Bybit/OKX</div></div>
   <div class="harga-box highlight"><div class="lbl">⭐ XAUUSD / MT5</div><div class="val" id="xauusdPrice" style="color:#00e676">--</div><div class="sub">Harga yang lo pake trading</div></div>
   <div class="harga-box"><div class="lbl">Selisih</div><div class="val" id="selisihPrice" style="font-size:18px">--</div><div class="sub" id="selisihDesc">XAUT - XAUUSD</div></div>
 </div>
@@ -175,7 +175,7 @@
 <div class="card">
   <div style="display:flex;justify-content:space-between"><h2 style="font-size:13px;margin:0">📥 Download Semua Dashboard</h2><button class="btn-dl" onclick="downloadCard('wallsCard','bid-ask')">⬇ Download BID/ASK</button></div>
   <div class="status-row" style="margin-top:10px"><span>Supabase</span><b id="supabaseVal">-</b></div>
-  <div class="status-row"><span>Bybit / OKX / Binance</span><b id="exchangesVal">-</b></div>
+  <div class="status-row"><span>Bybit / OKX</span><b id="exchangesVal">-</b></div>
   <div class="status-row"><span>Total Whale Level</span><b id="totalVal">-</b></div>
   <div class="status-row"><span>Uptime</span><b id="uptimeVal">-</b></div>
   <div class="status-row"><span>Last Update</span><b id="lastUpdateVal">-</b></div>
@@ -253,7 +253,7 @@ async function load(){
     document.getElementById('pendingAskList').innerHTML = pendingSource.filter(w=> w.side==='ASK').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada ASK pending yang betah 5 menit - lagi nunggu...</div>';
     document.getElementById('pendingCount').innerText = pendingSource.length + ' pending • ' + touchedSource.length + ' tersentuh';
     document.getElementById('touchedVal').innerText = touchedSource.length ? touchedSource.map(w=> `${w.side} ${w.price.toFixed(2)} (MT5 ${(w.price_mt5||w.price-selisih).toFixed(2)})`).join(' | ') : '-';
-    document.getElementById('supabaseVal').innerText = d.supabase || '-'; document.getElementById('exchangesVal').innerText = d.exchanges ? 'BYB:' + (d.exchanges.bybit?'OK':'X') + ' OKX:' + (d.exchanges.okx?'OK':'X') + ' BIN:' + (d.exchanges.binance?'OK':'X') : '-'; document.getElementById('totalVal').innerText = (d.walls?.length || 0) + ' level • Jauh: ' + (d.wallsFarCount || 0);
+    document.getElementById('supabaseVal').innerText = d.supabase || '-'; document.getElementById('exchangesVal').innerText = d.exchanges ? 'BYB:' + (d.exchanges.bybit?'OK':'X') + ' OKX:' + (d.exchanges.okx?'OK':'X') : '-'; document.getElementById('totalVal').innerText = (d.walls?.length || 0) + ' level • Jauh: ' + (d.wallsFarCount || 0);
     document.getElementById('uptimeVal').innerText = (d.uptime_menit || 0) + ' menit';
     if(d.uptimeStart){ document.getElementById('sesiInfo').innerText = 'Sesi dimulai: ' + new Date(d.uptimeStart).toLocaleString('id-ID') + ' • ' + (d.uptime_menit || 0) + ' menit lalu • ' + (d.history ? d.history.length : 0) + ' sinyal sesi ini'; }
     document.getElementById('lastUpdateVal').innerText = d.last_update ? new Date(d.last_update).toLocaleTimeString('id-ID') : '-'; document.getElementById('status').innerText = 'Update: ' + new Date().toLocaleTimeString('id-ID') + ' • Sinyal MARKET • Eksekusi instan • Mesin jalan di server';
