@@ -1,6 +1,7 @@
-// ABEL BOT - V8.3 NO-BINANCE - MESIN DI SERVER, API CUMA BACA, 1 SETUP = 1 OBJEK
+// ABEL BOT - V8.4 NO-BINANCE + THRESHOLD PER-EXCHANGE - MESIN DI SERVER, API CUMA BACA, 1 SETUP = 1 OBJEK
 // MODIF: + TELEGRAM PRIBADI+CHANNEL + /api/history SESI INI
 // MODIF V8.3: HAPUS BINANCE TOTAL - CUMA BYBIT + OKX
+// MODIF V8.4: BYBIT VIA BYTICK (ANTI-BLOCK) + THRESHOLD DIPISAH PER EXCHANGE BIAR BYBIT GAK KE-FILTER OKX
 const express = require('express');
 const cors = require('cors');
 const app = express();
@@ -63,27 +64,82 @@ async function fetchGoldPrice(){
 }
 async function fetchOne(url, headers){ try{ const r = await fetch(url, { headers: headers || {}, signal: AbortSignal.timeout(5000) }); const t = await r.text(); if(!t.trim().startsWith('{') && !t.trim().startsWith('[')) return null; return JSON.parse(t); }catch(e){ return null; } }
 async function fetchOrderbooks(){
-  const bybit = await fetchOne('https://api.bybit.com/v5/market/orderbook?category=spot&symbol=XAUTUSDT');
+  // Bybit: coba bytick dulu (domain alternatif Bybit, anti-block Render), baru api.bybit.com
+  let bybit = await fetchOne('https://api.bytick.com/v5/market/orderbook?category=spot&symbol=XAUTUSDT&limit=200');
+  if(!bybit || !bybit.result || !bybit.result.b){
+    bybit = await fetchOne('https://api.bybit.com/v5/market/orderbook?category=spot&symbol=XAUTUSDT&limit=200');
+  }
   const okx = await fetchOne('https://www.okx.com/api/v5/market/books?instId=XAUT-USDT&sz=200');
   let allBids = [], allAsks = [];
-  if(bybit && bybit.result && bybit.result.b){ exchanges.bybit = true; bybit.result.b.forEach(([p,s])=> allBids.push({ price: parseFloat(p), size: parseFloat(s), source: 'BYBIT' })); bybit.result.a.forEach(([p,s])=> allAsks.push({ price: parseFloat(p), size: parseFloat(s), source: 'BYBIT' })); } else exchanges.bybit = false;
+  if(bybit && bybit.result && bybit.result.b){
+    exchanges.bybit = true;
+    console.log('BYBIT OK - bids:', bybit.result.b.length, 'asks:', bybit.result.a.length, 'top bid:', bybit.result.b[0]);
+    bybit.result.b.forEach(([p,s])=> allBids.push({ price: parseFloat(p), size: parseFloat(s), source: 'BYBIT' }));
+    bybit.result.a.forEach(([p,s])=> allAsks.push({ price: parseFloat(p), size: parseFloat(s), source: 'BYBIT' }));
+  } else {
+    exchanges.bybit = false;
+    console.log('BYBIT GAGAL - bytick + bybit.com dua-duanya kosong / ke-block');
+  }
   if(okx && okx.data && okx.data[0]){ exchanges.okx = true; okx.data[0].bids.forEach(([p,s])=> allBids.push({ price: parseFloat(p), size: parseFloat(s), source: 'OKX' })); okx.data[0].asks.forEach(([p,s])=> allAsks.push({ price: parseFloat(p), size: parseFloat(s), source: 'OKX' })); } else exchanges.okx = false;
   return { allBids, allAsks };
 }
 function mergeLevels(list){ const map = new Map(); list.forEach(o=>{ const key = o.price.toFixed(2); if(!map.has(key)) map.set(key, { price: o.price, size: 0, sources: new Set() }); const cur = map.get(key); cur.size += o.size; cur.sources.add(o.source); }); return [...map.values()].map(v=>({ price: v.price, size: v.size, sources: [...v.sources].join('+') })); }
 function buildWalls(allBids, allAsks){
-  const bids = mergeLevels(allBids), asks = mergeLevels(allAsks); if(!bids.length || !asks.length) return;
-  const bestBid = Math.max(...bids.map(b=> b.price)), bestAsk = Math.min(...asks.map(a=> a.price)); xautPrice = (bestBid + bestAsk) / 2;
+  const bidsAll = mergeLevels(allBids), asksAll = mergeLevels(allAsks);
+  if(!bidsAll.length || !asksAll.length) return;
+  const bestBid = Math.max(...bidsAll.map(b=> b.price)), bestAsk = Math.min(...asksAll.map(a=> a.price));
+  xautPrice = (bestBid + bestAsk) / 2;
   if(xauusdPrice > 1000) selisih = xautPrice - xauusdPrice;
-  const allSizes = [...bids, ...asks].map(x=> x.size); const avg = allSizes.reduce((a,b)=> a+b, 0) / allSizes.length; const threshold = avg * 2.5;
-  const activeKeys = new Set(); bids.forEach(o=> activeKeys.add('BID-' + o.price.toFixed(2))); asks.forEach(o=> activeKeys.add('ASK-' + o.price.toFixed(2)));
+
+  const activeKeys = new Set();
+  bidsAll.forEach(o=> activeKeys.add('BID-' + o.price.toFixed(2)));
+  asksAll.forEach(o=> activeKeys.add('ASK-' + o.price.toFixed(2)));
   for(const k of firstSeenMap.keys()){ if(!activeKeys.has(k)) firstSeenMap.delete(k); }
+
   const newWalls = [], newFar = [];
-  const pushWall = (side, o, isFar)=>{ const key = side + '-' + o.price.toFixed(2); if(!firstSeenMap.has(key)) firstSeenMap.set(key, Date.now()); const age = getAgeMenit(key); const mt5 = o.price - selisih; const wall = { side, price: o.price, price_mt5: Math.floor(mt5 * 100) / 100, size: o.size, sources: o.sources, age_menit: age, first_seen: firstSeenMap.get(key) }; if(isFar) newFar.push(wall); else newWalls.push(wall); };
-  bids.forEach(o=>{ if(o.size >= threshold) pushWall('BID', o, false); }); asks.forEach(o=>{ if(o.size >= threshold) pushWall('ASK', o, false); });
-  const bidsFarCandidate = bids.filter(o=> o.size >= threshold * 0.8).sort((a,b)=> b.size - a.size).slice(0,3); const asksFarCandidate = asks.filter(o=> o.size >= threshold * 0.8).sort((a,b)=> b.size - a.size).slice(0,3);
-  bidsFarCandidate.forEach(o=> pushWall('BID', o, true)); asksFarCandidate.forEach(o=> pushWall('ASK', o, true));
-  walls = newWalls; wallsFar = newFar;
+  const pushWall = (side, o, isFar)=>{
+    const key = side + '-' + o.price.toFixed(2);
+    if(!firstSeenMap.has(key)) firstSeenMap.set(key, Date.now());
+    const age = getAgeMenit(key);
+    const mt5 = o.price - selisih;
+    const wall = { side, price: o.price, price_mt5: Math.floor(mt5 * 100) / 100, size: o.size, sources: o.sources, age_menit: age, first_seen: firstSeenMap.get(key) };
+    if(isFar) newFar.push(wall); else newWalls.push(wall);
+  };
+
+  // THRESHOLD DIPISAH PER EXCHANGE - FIX BYBIT KE-FILTER OKX
+  // Dulu: avg digabung Bybit+OKX, threshold kegedean buat Bybit, Bybit kebuang semua.
+  // Sekarang: tiap exchange pake avg + threshold-nya sendiri, baru digabung.
+  const bySource = {};
+  allBids.forEach(o=>{ if(!bySource[o.source]) bySource[o.source] = { bids: [], asks: [] }; bySource[o.source].bids.push(o); });
+  allAsks.forEach(o=>{ if(!bySource[o.source]) bySource[o.source] = { bids: [], asks: [] }; bySource[o.source].asks.push(o); });
+
+  for(const src of Object.keys(bySource)){
+    const b = mergeLevels(bySource[src].bids);
+    const a = mergeLevels(bySource[src].asks);
+    const sizes = [...b, ...a].map(x=> x.size);
+    if(!sizes.length) continue;
+    const avgSrc = sizes.reduce((x,y)=> x+y, 0) / sizes.length;
+    const thresholdSrc = avgSrc * 2.5;
+    console.log(`WALL ${src} - avg: ${avgSrc.toFixed(2)} threshold: ${thresholdSrc.toFixed(2)} max: ${Math.max(...sizes).toFixed(2)}`);
+    b.forEach(o=>{ if(o.size >= thresholdSrc) pushWall('BID', o, false); });
+    a.forEach(o=>{ if(o.size >= thresholdSrc) pushWall('ASK', o, false); });
+    // Far: top 3 terbesar per exchange, biar BID/ASK Jauh tetep ada dari 2 exchange
+    b.slice().sort((x,y)=> y.size - x.size).slice(0,3).forEach(o=> pushWall('BID', o, true));
+    a.slice().sort((x,y)=> y.size - x.size).slice(0,3).forEach(o=> pushWall('ASK', o, true));
+  }
+
+  // Gabung ulang yang harganya sama (misal Bybit + OKX di harga sama jadi BYBIT+OKX)
+  const mergeFinal = (list)=>{
+    const map = new Map();
+    list.forEach(w=>{
+      const k = w.side + '-' + w.price.toFixed(2);
+      if(!map.has(k)) map.set(k, { ...w });
+      else { const cur = map.get(k); cur.size += w.size; cur.sources = [...new Set((cur.sources + ' + ' + w.sources).split(' + '))].join('+'); }
+    });
+    return [...map.values()];
+  };
+  walls = mergeFinal(newWalls);
+  wallsFar = mergeFinal(newFar);
 }
 function buildPendingOrders(){
   if(!walls.length || !xauusdPrice) return { pending: [], touched: [] };
@@ -230,4 +286,4 @@ app.get('/api/unlock', (req,res)=>{
   }
   res.json({ ok: true, msg: 'Lock dibatalkan' });
 });
-app.listen(PORT, ()=> console.log('ABEL BOT V8.3 NO-BINANCE MARKET jalan di port ' + PORT));
+app.listen(PORT, ()=> console.log('ABEL BOT V8.4 NO-BINANCE + THRESHOLD PER-EXCHANGE jalan di port ' + PORT));
