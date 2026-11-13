@@ -133,12 +133,10 @@
   <div class="status-row"><span>Lock</span><b id="lockVal">-</b></div>
   <div class="status-row"><span>Setup Terakhir (Last)</span><b id="lastVal" style="color:#94a3b8">-</b></div>
   <div class="status-row"><span>Level TERSENTUH (Global)</span><b id="touchedVal" style="color:#facc15">-</b></div>
-  <!-- TOMBOL RIWAYAT SESI INI - di bawah Sinyal Aktif -->
   <button class="btn-riwayat" onclick="bukaRiwayatSesi()">📜 Riwayat Sinyal - Sejak Nyala</button>
   <div class="sesi-info" id="sesiInfo">Sesi dimulai: - • Loading...</div>
 </div>
 
-<!-- POPUP RIWAYAT SESI INI -->
 <div id="popupRiwayat">
   <div class="popup-box">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
@@ -200,95 +198,30 @@ let deferredPrompt = null;
 let lastSignal = 'WAIT';
 let notifEnabled = false;
 let lastNotifId = '';
-
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
     navigator.serviceWorker.register('/sw.js').then(()=> console.log('SW OK')).catch(e=> console.log('SW gagal', e));
   });
 }
-window.addEventListener('beforeinstallprompt', (e)=>{
-  e.preventDefault();
-  deferredPrompt = e;
-  document.getElementById('installBtn').style.display = 'inline-block';
-});
+window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt = e; document.getElementById('installBtn').style.display = 'inline-block'; });
 window.addEventListener('appinstalled', ()=>{ document.getElementById('installBtn').style.display = 'none'; });
 async function installPWA(){
-  if(deferredPrompt){
-    deferredPrompt.prompt();
-    const r = await deferredPrompt.userChoice;
-    if(r.outcome === 'accepted') document.getElementById('installBtn').style.display = 'none';
-    deferredPrompt = null;
-  } else {
-    alert('Di Chrome HP: klik titik 3 di kanan atas > Tambahkan ke Layar Utama / Install App.\nDi Chrome Laptop: klik ikon Install di address bar (kanan).');
-  }
+  if(deferredPrompt){ deferredPrompt.prompt(); const r = await deferredPrompt.userChoice; if(r.outcome === 'accepted') document.getElementById('installBtn').style.display = 'none'; deferredPrompt = null; }
+  else { alert('Di Chrome HP: klik titik 3 di kanan atas > Tambahkan ke Layar Utama / Install App.\nDi Chrome Laptop: klik ikon Install di address bar (kanan).'); }
 }
 async function enableNotif(){
   if(!('Notification' in window)){ alert('Browser ini gak support notif'); return; }
   const perm = await Notification.requestPermission();
-  if(perm === 'granted'){
-    notifEnabled = true;
-    localStorage.setItem('abel_notif','1');
-    document.getElementById('notifBtn').innerText = '🔔 NOTIF AKTIF ✅';
-    document.getElementById('notifBtn').classList.add('notif-on');
-    new Notification('ABEL FX - Notif Aktif', { body: 'Sinyal baru bakal bunyi + muncul notif di sini. Biarin PWA kebuka di background ya.', icon: '/icon-192.png' });
-    if(navigator.vibrate) navigator.vibrate(200);
-  } else {
-    alert('Notif ditolak. Buka Settings browser > Site Settings > Notifications > Allow buat abelbot.vercel.app');
-  }
+  if(perm === 'granted'){ notifEnabled = true; localStorage.setItem('abel_notif','1'); document.getElementById('notifBtn').innerText = '🔔 NOTIF AKTIF ✅'; document.getElementById('notifBtn').classList.add('notif-on'); new Notification('ABEL FX - Notif Aktif', { body: 'Sinyal baru bakal bunyi + muncul notif di sini. Biarin PWA kebuka di background ya.', icon: '/icon-192.png' }); if(navigator.vibrate) navigator.vibrate(200); }
+  else { alert('Notif ditolak. Buka Settings browser > Site Settings > Notifications > Allow buat abelbot.vercel.app'); }
 }
-if(localStorage.getItem('abel_notif') === '1' && 'Notification' in window && Notification.permission === 'granted'){
-  notifEnabled = true;
-  document.getElementById('notifBtn').innerText = '🔔 NOTIF AKTIF ✅';
-}
-function playBeep(){
-  try{
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const o = ctx.createOscillator(); const g = ctx.createGain();
-    o.connect(g); g.connect(ctx.destination);
-    o.frequency.value = 880; o.type = 'sine';
-    g.gain.value = 0.15;
-    o.start(); o.stop(ctx.currentTime + 0.4);
-    setTimeout(()=>{ const o2 = ctx.createOscillator(); const g2 = ctx.createGain(); o2.connect(g2); g2.connect(ctx.destination); o2.frequency.value = 880; g2.gain.value = 0.15; o2.start(); o2.stop(ctx.currentTime + 0.4); }, 500);
-  }catch(e){}
-}
-function sendNotif(title, body){
-  if(!notifEnabled) return;
-  playBeep();
-  if(navigator.vibrate) navigator.vibrate([200,100,200]);
-  if('Notification' in window && Notification.permission === 'granted'){
-    try{ new Notification(title, { body, icon: '/icon-192.png', tag: 'abel-signal', requireInteraction: true }); }catch(e){}
-  }
-  document.title = '🔔 ' + title;
-  setTimeout(()=>{ document.title = 'ABEL FX ORDERBOOK'; }, 5000);
-}
-async function downloadCard(cardId, fileName){
-  const el = document.getElementById(cardId);
-  if(!el) return;
-  try{
-    const canvas = await html2canvas(el, { backgroundColor: '#1a222e', scale: 2, useCORS: true });
-    const a = document.createElement('a');
-    const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
-    a.download = `abel-${fileName}-${ts}.png`;
-    a.href = canvas.toDataURL('image/png');
-    a.click();
-  }catch(e){ alert('Gagal download: ' + e.message); }
-}
+if(localStorage.getItem('abel_notif') === '1' && 'Notification' in window && Notification.permission === 'granted'){ notifEnabled = true; document.getElementById('notifBtn').innerText = '🔔 NOTIF AKTIF ✅'; }
+function playBeep(){ try{ const ctx = new (window.AudioContext || window.webkitAudioContext)(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value = 880; o.type = 'sine'; g.gain.value = 0.15; o.start(); o.stop(ctx.currentTime + 0.4); setTimeout(()=>{ const o2 = ctx.createOscillator(); const g2 = ctx.createGain(); o2.connect(g2); g2.connect(ctx.destination); o2.frequency.value = 880; g2.gain.value = 0.15; o2.start(); o2.stop(ctx.currentTime + 0.4); }, 500); }catch(e){} }
+function sendNotif(title, body){ if(!notifEnabled) return; playBeep(); if(navigator.vibrate) navigator.vibrate([200,100,200]); if('Notification' in window && Notification.permission === 'granted'){ try{ new Notification(title, { body, icon: '/icon-192.png', tag: 'abel-signal', requireInteraction: true }); }catch(e){} } document.title = '🔔 ' + title; setTimeout(()=>{ document.title = 'ABEL FX ORDERBOOK'; }, 5000); }
+async function downloadCard(cardId, fileName){ const el = document.getElementById(cardId); if(!el) return; try{ const canvas = await html2canvas(el, { backgroundColor: '#1a222e', scale: 2, useCORS: true }); const a = document.createElement('a'); const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-'); a.download = `abel-${fileName}-${ts}.png`; a.href = canvas.toDataURL('image/png'); a.click(); }catch(e){ alert('Gagal download: ' + e.message); } }
 function getNote(id){ return localStorage.getItem('abel_note_' + id) || ''; }
 function saveNote(id, val){ localStorage.setItem('abel_note_' + id, val); }
-function downloadCSV(){
-  const rows = [['Setup','Tanggal','Jam','Sinyal','Entry_MT5','SL_MT5','TP1_MT5','TP2_MT5','Size','Hasil','Catatan']];
-  const hist = window._lastHistory || [];
-  hist.forEach(h=>{
-    const dt = new Date(h.created_at);
-    rows.push([h.setup_id||'', dt.toLocaleDateString('id-ID'), dt.toLocaleTimeString('id-ID'), h.signal, h.entry_mt5, h.sl_mt5, h.tp1_mt5, h.tp2_mt5, h.size, h.result, getNote(h.id).replace(/,/g,';')]);
-  });
-  const csv = rows.map(r=> r.join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'abel-jurnal-' + new Date().toISOString().slice(0,10) + '.csv';
-  a.click();
-}
+function downloadCSV(){ const rows = [['Setup','Tanggal','Jam','Sinyal','Entry_MT5','SL_MT5','TP1_MT5','TP2_MT5','Size','Hasil','Catatan']]; const hist = window._lastHistory || []; hist.forEach(h=>{ const dt = new Date(h.created_at); rows.push([h.setup_id||'', dt.toLocaleDateString('id-ID'), dt.toLocaleTimeString('id-ID'), h.signal, h.entry_mt5, h.sl_mt5, h.tp1_mt5, h.tp2_mt5, h.size, h.result, getNote(h.id).replace(/,/g,';')]); }); const csv = rows.map(r=> r.join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'abel-jurnal-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); }
 async function load(){
   document.getElementById('status').innerText = 'Menghubungkan...';
   try{
@@ -296,157 +229,46 @@ async function load(){
     const text = await r.text();
     if(!text.trim().startsWith('{')) throw new Error('Server bales HTML');
     const d = JSON.parse(text);
-    const price = d.harga?.xaut_mid || 0;
-    const xauusd = d.harga?.xauusd_goldprice || 0;
-    const selisih = d.harga?.selisih || 0;
-    const sigRaw = d.signal || 'WAIT';
-    const sigEl = document.getElementById('signalText');
-    sigEl.innerText = sigRaw;
-    let sigCls = 'WAIT';
-    if(sigRaw.includes('BUY')) sigCls = 'BUY';
-    else if(sigRaw.includes('SELL')) sigCls = 'SELL';
-    else if(sigRaw === 'DONE') sigCls = 'DONE';
-    sigEl.className = 'signal ' + sigCls;
-
-    const setupId = d.setup_id || '';
-    document.getElementById('setupVal').innerText = setupId || '-';
-    const badge = document.getElementById('setupBadge');
-    if(setupId){ badge.innerText = 'Setup ' + setupId; badge.style.display = 'inline-block'; } else { badge.style.display = 'none'; }
-
+    const price = d.harga?.xaut_mid || 0; const xauusd = d.harga?.xauusd_goldprice || 0; const selisih = d.harga?.selisih || 0;
+    const sigRaw = d.signal || 'WAIT'; const sigEl = document.getElementById('signalText'); sigEl.innerText = sigRaw;
+    let sigCls = 'WAIT'; if(sigRaw.includes('BUY')) sigCls = 'BUY'; else if(sigRaw.includes('SELL')) sigCls = 'SELL'; else if(sigRaw === 'DONE') sigCls = 'DONE'; sigEl.className = 'signal ' + sigCls;
+    const setupId = d.setup_id || ''; document.getElementById('setupVal').innerText = setupId || '-'; const badge = document.getElementById('setupBadge'); if(setupId){ badge.innerText = 'Setup ' + setupId; badge.style.display = 'inline-block'; } else { badge.style.display = 'none'; }
     document.getElementById('wallVal').innerText = d.wall ? `${d.wall.side} ${d.wall.price.toFixed(2)} - ${d.wall.size.toFixed(2)} XAUT - ${d.wall.sources} - Betah ${d.wall.age_menit}m` : '-';
     document.getElementById('lastVal').innerText = d.last_done ? d.last_done.last_result : (d.last_setup ? d.last_setup.setup_id + ' ' + d.last_setup.result : '-');
-
     const notifKey = sigRaw + '-' + (d.lockedId || '');
-    if(notifKey !== lastNotifId){
-      if(lastSignal === 'WAIT' && (sigRaw.includes('BUY') || sigRaw.includes('SELL'))){
-        sendNotif('🎯 ' + sigRaw + ' ' + setupId + ' di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : ''), 'Eksekusi MARKET di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : '') + ' | SL ' + (d.sl_mt5 ? '$' + d.sl_mt5.toFixed(2) : '') + ' | TP1 ' + (d.tp1_mt5 ? '$' + d.tp1_mt5.toFixed(2) : '') + ' | TP2 ' + (d.tp2_mt5 ? '$' + d.tp2_mt5.toFixed(2) : '') + '. Eksekusi sekarang.');
-      } else if(sigRaw === 'DONE' && (lastSignal.includes('BUY') || lastSignal.includes('SELL'))){
-        sendNotif('✅ Sinyal DONE ' + setupId + ' - ' + (d.last_done?.last_result || ''), 'Cek riwayat buat jurnaling.');
-      }
-      lastNotifId = notifKey;
-    }
+    if(notifKey !== lastNotifId){ if(lastSignal === 'WAIT' && (sigRaw.includes('BUY') || sigRaw.includes('SELL'))){ sendNotif('🎯 ' + sigRaw + ' ' + setupId + ' di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : ''), 'Eksekusi MARKET di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : '') + ' | SL ' + (d.sl_mt5 ? '$' + d.sl_mt5.toFixed(2) : '') + ' | TP1 ' + (d.tp1_mt5 ? '$' + d.tp1_mt5.toFixed(2) : '') + ' | TP2 ' + (d.tp2_mt5 ? '$' + d.tp2_mt5.toFixed(2) : '') + '. Eksekusi sekarang.'); } else if(sigRaw === 'DONE' && (lastSignal.includes('BUY') || lastSignal.includes('SELL'))){ sendNotif('✅ Sinyal DONE ' + setupId + ' - ' + (d.last_done?.last_result || ''), 'Cek riwayat buat jurnaling.'); } lastNotifId = notifKey; }
     lastSignal = sigRaw;
-
-    document.getElementById('entryVal').innerText = fmt(d.entry_mt5);
-    document.getElementById('slVal').innerText = fmt(d.sl_mt5);
-    document.getElementById('tp1Val').innerText = fmt(d.tp1_mt5);
-    document.getElementById('tp2Val').innerText = fmt(d.tp2_mt5);
-    document.getElementById('emergencyVal').innerText = d.emergency_sl_mt5 ? fmt(d.emergency_sl_mt5) : '-';
-    document.getElementById('partialVal').innerText = d.partial || '50/50';
-    document.getElementById('reentryVal').innerText = d.reentry ? fmt(d.reentry.entry_mt5) + ' / SL ' + fmt(d.reentry.sl_mt5) : '-';
-    document.getElementById('lockVal').innerText = d.is_locked ? '🔒 ' + (d.lock_status || 'LOCKED') : (d.lock_status || 'Tidak terkunci');
-    const lockedAt = d.lockedAt || null;
-    const isActiveMarket = sigRaw.includes('BUY') || sigRaw.includes('SELL');
-    if(isActiveMarket && lockedAt){
-      const dt = new Date(lockedAt);
-      document.getElementById('jamAktif').innerText = dt.toLocaleTimeString('id-ID');
-      document.getElementById('jamTanggal').innerText = dt.toLocaleDateString('id-ID');
-      const diffMenit = Math.floor((Date.now() - dt.getTime())/60000);
-      const diffDetik = Math.floor((Date.now() - dt.getTime())/1000) % 60;
-      document.getElementById('jamTelat').innerText = diffMenit + 'm ' + diffDetik + 'd';
-      const statusEl = document.getElementById('jamStatus');
-      if(diffMenit <= 2){ statusEl.innerText = 'Market baru eksekusi, pantau TP1'; statusEl.style.color = '#00e676'; }
-      else if(diffMenit <= 10){ statusEl.innerText = 'Market udah jalan ' + diffMenit + 'm, cek TP1'; statusEl.style.color = '#facc15'; }
-      else { statusEl.innerText = 'Market udah ' + diffMenit + 'm belum TP1, pantau terus'; statusEl.style.color = '#ff5252'; }
-    } else {
-      document.getElementById('jamAktif').innerText = '-';
-      document.getElementById('jamTanggal').innerText = 'Belum ada sinyal aktif';
-      document.getElementById('jamTelat').innerText = '-';
-      document.getElementById('jamStatus').innerText = 'Nunggu sinyal...';
-      document.getElementById('jamStatus').style.color = '#94a3b8';
-    }
-    document.getElementById('xautPrice').innerText = price ? '$' + price.toFixed(2) : '--';
-    document.getElementById('xauusdPrice').innerText = xauusd ? '$' + xauusd.toFixed(2) : '--';
-    document.getElementById('selisihPrice').innerText = (selisih>=0?'+':'') + selisih.toFixed(2) + '$';
-    document.getElementById('selisihDesc').innerText = selisih < 0 ? 'XAUT lebih murah ' + Math.abs(selisih).toFixed(2) + '$ dari MT5' : 'XAUT lebih mahal ' + selisih.toFixed(2) + '$ dari MT5';
-    document.getElementById('goldSourceVal').innerText = d.harga?.source || '-';
-    const render = (el, arr, cls) => {
-      if(!arr.length){ document.getElementById(el).innerHTML = '<div class="empty">Gak ada whale di area ini</div>'; return; }
-      document.getElementById(el).innerHTML = arr.map(l=>{
-        let mt5 = l.price_mt5 || (l.price - selisih);
-        let jarak = price ? Math.abs(l.price - price).toFixed(1) + '$ dari harga' : '';
-        return `<div class="row"><div class="left ${cls}">${l.side} ${l.price.toFixed(2)}<small>MT5 ${mt5.toFixed(2)}</small></div><div class="right">${l.size.toFixed(4)} XAUT<small>$${(l.size * l.price).toFixed(0)} • ${jarak} • ${l.sources||''} • ${l.age_menit||0}m</small></div></div>`;
-      }).join('');
-    };
-    const wallsNear = d.wallsNear || d.walls || [];
-    const wallsFar = d.wallsFar || [];
-    render('bidsNear', wallsNear.filter(w=>w.side==='BID').sort((a,b)=>b.price-a.price).slice(0,6), 'BID');
-    render('asksNear', wallsNear.filter(w=>w.side==='ASK').sort((a,b)=>a.price-b.price).slice(0,6), 'ASK');
-    render('bidsFar', wallsFar.filter(w=>w.side==='BID').sort((a,b)=>b.size-a.size), 'FAR-BID');
-    render('asksFar', wallsFar.filter(w=>w.side==='ASK').sort((a,b)=>b.size-a.size), 'FAR-ASK');
-    let pendingSource = Array.isArray(d.pendingOrders) ? d.pendingOrders : [];
-    let touchedSource = Array.isArray(d.touchedLevels) ? d.touchedLevels : [];
-    const renderPendingItem = (w)=>{
-      const mt5 = w.price_mt5 || (w.price - selisih);
-      const isTouched = w.status === 'TERSENTUH';
-      const isBuy = w.side === 'BID';
-      const cls = isTouched ? 'touched' : (isBuy ? 'buy' : 'sell');
-      const badgeCls = isTouched ? 'touched' : (isBuy ? 'buy' : 'sell');
-      const badgeText = isTouched ? '🔥 TERSENTUH' : (isBuy ? 'BUY MARKET' : 'SELL MARKET');
-      return `<div class="pending-item ${cls}"><div class="pending-top"><b>${w.side} ${w.price.toFixed(2)}</b><span class="badge ${badgeCls}">${badgeText}</span></div><div class="mt5">MT5 ${mt5.toFixed(2)} • ${isBuy?'BUY MARKET':'SELL MARKET'} di ${mt5.toFixed(2)}</div><div class="meta">${w.size.toFixed(4)} XAUT • $${(w.size * w.price).toFixed(0)} • ${w.sources||''} • Umur ${w.age_menit||0}m<br>Jarak ke harga MT5: ${(w.distance_mt5 ?? (xauusd?Math.abs(mt5-xauusd):0)).toFixed(1)}$ ${isTouched?'• UDAH KENA!':'• Belum kena'}</div></div>`;
-    };
+    document.getElementById('entryVal').innerText = fmt(d.entry_mt5); document.getElementById('slVal').innerText = fmt(d.sl_mt5); document.getElementById('tp1Val').innerText = fmt(d.tp1_mt5); document.getElementById('tp2Val').innerText = fmt(d.tp2_mt5);
+    document.getElementById('emergencyVal').innerText = d.emergency_sl_mt5 ? fmt(d.emergency_sl_mt5) : '-'; document.getElementById('partialVal').innerText = d.partial || '50/50'; document.getElementById('reentryVal').innerText = d.reentry ? fmt(d.reentry.entry_mt5) + ' / SL ' + fmt(d.reentry.sl_mt5) : '-'; document.getElementById('lockVal').innerText = d.is_locked ? '🔒 ' + (d.lock_status || 'LOCKED') : (d.lock_status || 'Tidak terkunci');
+    const lockedAt = d.lockedAt || null; const isActiveMarket = sigRaw.includes('BUY') || sigRaw.includes('SELL');
+    if(isActiveMarket && lockedAt){ const dt = new Date(lockedAt); document.getElementById('jamAktif').innerText = dt.toLocaleTimeString('id-ID'); document.getElementById('jamTanggal').innerText = dt.toLocaleDateString('id-ID'); const diffMenit = Math.floor((Date.now() - dt.getTime())/60000); const diffDetik = Math.floor((Date.now() - dt.getTime())/1000) % 60; document.getElementById('jamTelat').innerText = diffMenit + 'm ' + diffDetik + 'd'; const statusEl = document.getElementById('jamStatus'); if(diffMenit <= 2){ statusEl.innerText = 'Market baru eksekusi, pantau TP1'; statusEl.style.color = '#00e676'; } else if(diffMenit <= 10){ statusEl.innerText = 'Market udah jalan ' + diffMenit + 'm, cek TP1'; statusEl.style.color = '#facc15'; } else { statusEl.innerText = 'Market udah ' + diffMenit + 'm belum TP1, pantau terus'; statusEl.style.color = '#ff5252'; } }
+    else { document.getElementById('jamAktif').innerText = '-'; document.getElementById('jamTanggal').innerText = 'Belum ada sinyal aktif'; document.getElementById('jamTelat').innerText = '-'; document.getElementById('jamStatus').innerText = 'Nunggu sinyal...'; document.getElementById('jamStatus').style.color = '#94a3b8'; }
+    document.getElementById('xautPrice').innerText = price ? '$' + price.toFixed(2) : '--'; document.getElementById('xauusdPrice').innerText = xauusd ? '$' + xauusd.toFixed(2) : '--'; document.getElementById('selisihPrice').innerText = (selisih>=0?'+':'') + selisih.toFixed(2) + '$'; document.getElementById('selisihDesc').innerText = selisih < 0 ? 'XAUT lebih murah ' + Math.abs(selisih).toFixed(2) + '$ dari MT5' : 'XAUT lebih mahal ' + selisih.toFixed(2) + '$ dari MT5'; document.getElementById('goldSourceVal').innerText = d.harga?.source || '-';
+    const render = (el, arr, cls) => { if(!arr.length){ document.getElementById(el).innerHTML = '<div class="empty">Gak ada whale di area ini</div>'; return; } document.getElementById(el).innerHTML = arr.map(l=>{ let mt5 = l.price_mt5 || (l.price - selisih); let jarak = price ? Math.abs(l.price - price).toFixed(1) + '$ dari harga' : ''; return `<div class="row"><div class="left ${cls}">${l.side} ${l.price.toFixed(2)}<small>MT5 ${mt5.toFixed(2)}</small></div><div class="right">${l.size.toFixed(4)} XAUT<small>$${(l.size * l.price).toFixed(0)} • ${jarak} • ${l.sources||''} • ${l.age_menit||0}m</small></div></div>`; }).join(''); };
+    const wallsNear = d.wallsNear || d.walls || []; const wallsFar = d.wallsFar || [];
+    render('bidsNear', wallsNear.filter(w=>w.side==='BID').sort((a,b)=>b.price-a.price).slice(0,6), 'BID'); render('asksNear', wallsNear.filter(w=>w.side==='ASK').sort((a,b)=>a.price-b.price).slice(0,6), 'ASK'); render('bidsFar', wallsFar.filter(w=>w.side==='BID').sort((a,b)=>b.size-a.size), 'FAR-BID'); render('asksFar', wallsFar.filter(w=>w.side==='ASK').sort((a,b)=>b.size-a.size), 'FAR-ASK');
+    let pendingSource = Array.isArray(d.pendingOrders) ? d.pendingOrders : []; let touchedSource = Array.isArray(d.touchedLevels) ? d.touchedLevels : [];
+    const renderPendingItem = (w)=>{ const mt5 = w.price_mt5 || (w.price - selisih); const isTouched = w.status === 'TERSENTUH'; const isBuy = w.side === 'BID'; const cls = isTouched ? 'touched' : (isBuy ? 'buy' : 'sell'); const badgeCls = isTouched ? 'touched' : (isBuy ? 'buy' : 'sell'); const badgeText = isTouched ? '🔥 TERSENTUH' : (isBuy ? 'BUY MARKET' : 'SELL MARKET'); return `<div class="pending-item ${cls}"><div class="pending-top"><b>${w.side} ${w.price.toFixed(2)}</b><span class="badge ${badgeCls}">${badgeText}</span></div><div class="mt5">MT5 ${mt5.toFixed(2)} • ${isBuy?'BUY MARKET':'SELL MARKET'} di ${mt5.toFixed(2)}</div><div class="meta">${w.size.toFixed(4)} XAUT • $${(w.size * w.price).toFixed(0)} • ${w.sources||''} • Umur ${w.age_menit||0}m<br>Jarak ke harga MT5: ${(w.distance_mt5 ?? (xauusd?Math.abs(mt5-xauusd):0)).toFixed(1)}$ ${isTouched?'• UDAH KENA!':'• Belum kena'}</div></div>`; };
     document.getElementById('pendingBidList').innerHTML = pendingSource.filter(w=> w.side==='BID').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada BID pending yang betah 5 menit - lagi nunggu...</div>';
     document.getElementById('pendingAskList').innerHTML = pendingSource.filter(w=> w.side==='ASK').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada ASK pending yang betah 5 menit - lagi nunggu...</div>';
     document.getElementById('pendingCount').innerText = pendingSource.length + ' pending • ' + touchedSource.length + ' tersentuh';
     document.getElementById('touchedVal').innerText = touchedSource.length ? touchedSource.map(w=> `${w.side} ${w.price.toFixed(2)} (MT5 ${(w.price_mt5||w.price-selisih).toFixed(2)})`).join(' | ') : '-';
-    document.getElementById('supabaseVal').innerText = d.supabase || '-';
-    document.getElementById('exchangesVal').innerText = d.exchanges ? 'BYB:' + (d.exchanges.bybit?'OK':'X') + ' OKX:' + (d.exchanges.okx?'OK':'X') + ' BIN:' + (d.exchanges.binance?'OK':'X') : '-';
-    document.getElementById('totalVal').innerText = (d.walls?.length || 0) + ' level • Jauh: ' + (d.wallsFarCount || 0);
+    document.getElementById('supabaseVal').innerText = d.supabase || '-'; document.getElementById('exchangesVal').innerText = d.exchanges ? 'BYB:' + (d.exchanges.bybit?'OK':'X') + ' OKX:' + (d.exchanges.okx?'OK':'X') + ' BIN:' + (d.exchanges.binance?'OK':'X') : '-'; document.getElementById('totalVal').innerText = (d.walls?.length || 0) + ' level • Jauh: ' + (d.wallsFarCount || 0);
     document.getElementById('uptimeVal').innerText = (d.uptime_menit || 0) + ' menit';
-    // Info sesi di bawah tombol Riwayat - pakai uptimeStart dari server.js yang udah dimodif
     if(d.uptimeStart){ document.getElementById('sesiInfo').innerText = 'Sesi dimulai: ' + new Date(d.uptimeStart).toLocaleString('id-ID') + ' • ' + (d.uptime_menit || 0) + ' menit lalu • ' + (d.history ? d.history.length : 0) + ' sinyal sesi ini'; }
-    document.getElementById('lastUpdateVal').innerText = d.last_update ? new Date(d.last_update).toLocaleTimeString('id-ID') : '-';
-    document.getElementById('status').innerText = 'Update: ' + new Date().toLocaleTimeString('id-ID') + ' • Sinyal MARKET • Eksekusi instan • Mesin jalan di server';
-    const hist = d.history || [];
-    window._lastHistory = hist;
-    if(hist.length){
-      document.getElementById('historyBody').innerHTML = hist.map(h=>{
-        const dt = new Date(h.created_at);
-        const resultColor = h.result === 'TP2 KENA' ? '#00e676' : h.result === 'SL KENA' ? '#ff5252' : h.result === 'AKTIF' ? '#facc15' : '#94a3b8';
-        return `<tr><td style="font-weight:900;color:#facc15">${h.setup_id||'-'}</td><td>${dt.toLocaleDateString('id-ID')}<br><small style="color:#94a3b8">${dt.toLocaleTimeString('id-ID')}</small></td><td style="font-weight:900;color:${h.signal.includes('BUY')?'#00e676':'#ff5252'}">${h.signal}</td><td>$${h.entry_mt5.toFixed(2)}<br><small style="color:#94a3b8">${h.size.toFixed(2)} XAUT • ${h.sources||''}</small></td><td>SL $${h.sl_mt5.toFixed(2)}<br>TP1 $${h.tp1_mt5.toFixed(2)}<br>TP2 $${h.tp2_mt5.toFixed(2)}</td><td style="font-weight:900;color:${resultColor}">${h.result}${h.result_price ? '<br><small style="color:#94a3b8">$'+h.result_price.toFixed(2)+'</small>' : ''}${h.duration_menit ? '<br><small style="color:#94a3b8">'+h.duration_menit+'m</small>' : ''}</td><td><input class="hist-note" value="${getNote(h.id).replace(/"/g,'&quot;')}" placeholder="Tulis jurnal... misal: TP1, dll" oninput="saveNote('${h.id}', this.value)" /></td></tr>`;
-      }).join('');
-      const closed = hist.filter(h=> h.result !== 'AKTIF');
-      const win = hist.filter(h=> h.result === 'TP2 KENA').length;
-      document.getElementById('winrateVal').innerText = closed.length ? win + ' TP2 / ' + closed.length + ' closed = ' + Math.floor(win/closed.length*100) + '% winrate' : '-';
-    } else {
-      document.getElementById('historyBody').innerHTML = '<tr><td colspan="7" class="empty">Belum ada riwayat...</td></tr>';
-    }
-  }catch(e){
-    document.getElementById('status').innerText = 'Gagal: ' + e.message;
-  }
+    document.getElementById('lastUpdateVal').innerText = d.last_update ? new Date(d.last_update).toLocaleTimeString('id-ID') : '-'; document.getElementById('status').innerText = 'Update: ' + new Date().toLocaleTimeString('id-ID') + ' • Sinyal MARKET • Eksekusi instan • Mesin jalan di server';
+    const hist = d.history || []; window._lastHistory = hist;
+    if(hist.length){ document.getElementById('historyBody').innerHTML = hist.map(h=>{ const dt = new Date(h.created_at); const resultColor = h.result === 'TP2 KENA' ? '#00e676' : h.result === 'SL KENA' ? '#ff5252' : h.result === 'AKTIF' ? '#facc15' : '#94a3b8'; return `<tr><td style="font-weight:900;color:#facc15">${h.setup_id||'-'}</td><td>${dt.toLocaleDateString('id-ID')}<br><small style="color:#94a3b8">${dt.toLocaleTimeString('id-ID')}</small></td><td style="font-weight:900;color:${h.signal.includes('BUY')?'#00e676':'#ff5252'}">${h.signal}</td><td>$${h.entry_mt5.toFixed(2)}<br><small style="color:#94a3b8">${h.size.toFixed(2)} XAUT • ${h.sources||''}</small></td><td>SL $${h.sl_mt5.toFixed(2)}<br>TP1 $${h.tp1_mt5.toFixed(2)}<br>TP2 $${h.tp2_mt5.toFixed(2)}</td><td style="font-weight:900;color:${resultColor}">${h.result}${h.result_price ? '<br><small style="color:#94a3b8">$'+h.result_price.toFixed(2)+'</small>' : ''}${h.duration_menit ? '<br><small style="color:#94a3b8">'+h.duration_menit+'m</small>' : ''}</td><td><input class="hist-note" value="${getNote(h.id).replace(/"/g,'&quot;')}" placeholder="Tulis jurnal... misal: TP1, dll" oninput="saveNote('${h.id}', this.value)" /></td></tr>`; }).join(''); const closed = hist.filter(h=> h.result !== 'AKTIF'); const win = hist.filter(h=> h.result === 'TP2 KENA').length; document.getElementById('winrateVal').innerText = closed.length ? win + ' TP2 / ' + closed.length + ' closed = ' + Math.floor(win/closed.length*100) + '% winrate' : '-'; } else { document.getElementById('historyBody').innerHTML = '<tr><td colspan="7" class="empty">Belum ada riwayat...</td></tr>'; }
+  }catch(e){ document.getElementById('status').innerText = 'Gagal: ' + e.message; }
 }
-// === RIWAYAT SESI INI - sejak server nyala (uptimeStart) ===
 async function bukaRiwayatSesi(){
-  document.getElementById('popupRiwayat').style.display = 'block';
-  document.getElementById('riwayatSesiIsi').innerHTML = 'Loading...';
-  try{
-    const r = await fetch(BASE_URL + '/api/history', { cache: 'no-store' });
-    const j = JSON.parse(await r.text());
-    const hist = j.history || [];
-    document.getElementById('riwayatSesiInfo').innerText = 'Sesi: ' + (j.sesi_mulai || '-') + ' • Total: ' + (j.total || hist.length) + ' sinyal • Uptime: ' + (j.uptime_menit || 0) + ' menit';
-    if(!hist.length){
-      document.getElementById('riwayatSesiIsi').innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8">Belum ada sinyal di sesi ini.<br>Bot baru nyala, tunggu sinyal pertama.</div>';
-      return;
-    }
-    document.getElementById('riwayatSesiIsi').innerHTML = hist.map(h=>{
-      const dt = new Date(h.created_at);
-      const c = h.result === 'TP2 KENA' ? '#00e676' : h.result === 'SL KENA' ? '#ff5252' : '#facc15';
-      return `<div class="riw-item"><b style="color:${h.signal && h.signal.includes('BUY') ? '#00e676' : '#ff5252'}">${h.signal}</b> - <b style="color:${c}">${h.result || '-'}</b> <span style="float:right;color:#94a3b8;font-size:12px">${dt.toLocaleDateString('id-ID')} ${dt.toLocaleTimeString('id-ID')}</span><br><small style="color:#cbd5e1">Setup ${h.setup_id || '-'} | Entry $${h.entry_mt5 ? h.entry_mt5.toFixed(2) : '-'} | SL $${h.sl_mt5 ? h.sl_mt5.toFixed(2) : '-'} | TP1 $${h.tp1_mt5 ? h.tp1_mt5.toFixed(2) : '-'} | TP2 $${h.tp2_mt5 ? h.tp2_mt5.toFixed(2) : '-'}${h.result_price ? ' | Close $' + h.result_price.toFixed(2) : ''}${h.duration_menit ? ' | ' + h.duration_menit + 'm' : ''}</small></div>`;
-    }).join('');
-  }catch(e){
-    document.getElementById('riwayatSesiIsi').innerHTML = 'Gagal load riwayat: ' + e.message;
-  }
+  document.getElementById('popupRiwayat').style.display = 'block'; document.getElementById('riwayatSesiIsi').innerHTML = 'Loading...';
+  try{ const r = await fetch(BASE_URL + '/api/history', { cache: 'no-store' }); const j = JSON.parse(await r.text()); const hist = j.history || []; document.getElementById('riwayatSesiInfo').innerText = 'Sesi: ' + (j.sesi_mulai || '-') + ' • Total: ' + (j.total || hist.length) + ' sinyal • Uptime: ' + (j.uptime_menit || 0) + ' menit'; if(!hist.length){ document.getElementById('riwayatSesiIsi').innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8">Belum ada sinyal di sesi ini.<br>Bot baru nyala, tunggu sinyal pertama.</div>'; return; } document.getElementById('riwayatSesiIsi').innerHTML = hist.map(h=>{ const dt = new Date(h.created_at); const c = h.result === 'TP2 KENA' ? '#00e676' : h.result === 'SL KENA' ? '#ff5252' : '#facc15'; return `<div class="riw-item"><b style="color:${h.signal && h.signal.includes('BUY') ? '#00e676' : '#ff5252'}">${h.signal}</b> - <b style="color:${c}">${h.result || '-'}</b> <span style="float:right;color:#94a3b8;font-size:12px">${dt.toLocaleDateString('id-ID')} ${dt.toLocaleTimeString('id-ID')}</span><br><small style="color:#cbd5e1">Setup ${h.setup_id || '-'} | Entry $${h.entry_mt5 ? h.entry_mt5.toFixed(2) : '-'} | SL $${h.sl_mt5 ? h.sl_mt5.toFixed(2) : '-'} | TP1 $${h.tp1_mt5 ? h.tp1_mt5.toFixed(2) : '-'} | TP2 $${h.tp2_mt5 ? h.tp2_mt5.toFixed(2) : '-'}${h.result_price ? ' | Close $' + h.result_price.toFixed(2) : ''}${h.duration_menit ? ' | ' + h.duration_menit + 'm' : ''}</small></div>`; }).join(''); }catch(e){ document.getElementById('riwayatSesiIsi').innerHTML = 'Gagal load riwayat: ' + e.message; }
 }
 function tutupRiwayatSesi(){ document.getElementById('popupRiwayat').style.display = 'none'; }
 document.addEventListener('click', (e)=>{ if(e.target && e.target.id === 'popupRiwayat') tutupRiwayatSesi(); });
-
-async function unlock(){
-  try{ const r = await fetch(BASE_URL + '/api/unlock'); const d = JSON.parse(await r.text());
-    alert(d.msg || 'Unlocked'); load();
-  }catch(e){ alert('Gagal unlock: ' + e.message); }
-}
-load();
-setInterval(load, 5000);
+async function unlock(){ try{ const r = await fetch(BASE_URL + '/api/unlock'); const d = JSON.parse(await r.text()); alert(d.msg || 'Unlocked'); load(); }catch(e){ alert('Gagal unlock: ' + e.message); } }
+load(); setInterval(load, 5000);
 </script>
 </body>
 </html>
