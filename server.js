@@ -1,5 +1,6 @@
-// ABEL BOT - V8.2 - MESIN DI SERVER, API CUMA BACA, 1 SETUP = 1 OBJEK
+// ABEL BOT - V8.3 NO-BINANCE - MESIN DI SERVER, API CUMA BACA, 1 SETUP = 1 OBJEK
 // MODIF: + TELEGRAM PRIBADI+CHANNEL + /api/history SESI INI
+// MODIF V8.3: HAPUS BINANCE TOTAL - CUMA BYBIT + OKX
 const express = require('express');
 const cors = require('cors');
 const app = express();
@@ -33,7 +34,7 @@ function generateSetupId(){
 }
 
 let walls = [], wallsFar = [], xautPrice = 0, xauusdPrice = 0, lastKnownXauusd = 0, selisih = 0, goldSource = '-';
-let exchanges = { bybit: false, okx: false, binance: false };
+let exchanges = { bybit: false, okx: false };
 let uptimeStart = Date.now(), lastUpdate = null;
 let firstSeenMap = new Map(), signalHistory = [];
 
@@ -56,7 +57,6 @@ function calcProfit(signal, entry, harga){
 async function fetchGoldPrice(){
   try{ const r = await fetch('https://api.gold-api.com/price/XAU', { signal: AbortSignal.timeout(5000), headers: { 'User-Agent': 'Mozilla/5.0' } }); const d = await r.json(); if(d && d.price && d.price > 1000){ xauusdPrice = d.price; lastKnownXauusd = d.price; goldSource = 'Gold-API'; return true; } }catch(e){}
   try{ const r = await fetch('https://data-asg.goldprice.org/dbXRates/USD', { signal: AbortSignal.timeout(5000), headers: { 'User-Agent': 'Mozilla/5.0' } }); const d = await r.json(); if(d && d.items && d.items[0] && d.items[0].xauPrice > 1000){ xauusdPrice = d.items[0].xauPrice; lastKnownXauusd = d.items[0].xauPrice; goldSource = 'GoldPrice.org'; return true; } }catch(e){}
-  try{ const r = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=PAXGUSDT', { signal: AbortSignal.timeout(5000) }); const d = await r.json(); if(d && parseFloat(d.price) > 1000){ xauusdPrice = parseFloat(d.price); lastKnownXauusd = parseFloat(d.price); goldSource = 'PAXG Binance'; return true; } }catch(e){}
   if(lastKnownXauusd > 1000){ xauusdPrice = lastKnownXauusd; goldSource = goldSource + ' (last known)'; return true; }
   if(xautPrice > 1000){ xauusdPrice = xautPrice; goldSource = 'XAUT fallback'; return true; }
   return false;
@@ -65,11 +65,9 @@ async function fetchOne(url, headers){ try{ const r = await fetch(url, { headers
 async function fetchOrderbooks(){
   const bybit = await fetchOne('https://api.bybit.com/v5/market/orderbook?category=spot&symbol=XAUTUSDT');
   const okx = await fetchOne('https://www.okx.com/api/v5/market/books?instId=XAUT-USDT&sz=200');
-  const binance = await fetchOne('https://api.binance.com/api/v3/depth?symbol=XAUTUSDT');
   let allBids = [], allAsks = [];
   if(bybit && bybit.result && bybit.result.b){ exchanges.bybit = true; bybit.result.b.forEach(([p,s])=> allBids.push({ price: parseFloat(p), size: parseFloat(s), source: 'BYBIT' })); bybit.result.a.forEach(([p,s])=> allAsks.push({ price: parseFloat(p), size: parseFloat(s), source: 'BYBIT' })); } else exchanges.bybit = false;
   if(okx && okx.data && okx.data[0]){ exchanges.okx = true; okx.data[0].bids.forEach(([p,s])=> allBids.push({ price: parseFloat(p), size: parseFloat(s), source: 'OKX' })); okx.data[0].asks.forEach(([p,s])=> allAsks.push({ price: parseFloat(p), size: parseFloat(s), source: 'OKX' })); } else exchanges.okx = false;
-  if(binance && binance.bids){ exchanges.binance = true; binance.bids.forEach(([p,s])=> allBids.push({ price: parseFloat(p), size: parseFloat(s), source: 'BIN' })); binance.asks.forEach(([p,s])=> allAsks.push({ price: parseFloat(p), size: parseFloat(s), source: 'BIN' })); } else exchanges.binance = false;
   return { allBids, allAsks };
 }
 function mergeLevels(list){ const map = new Map(); list.forEach(o=>{ const key = o.price.toFixed(2); if(!map.has(key)) map.set(key, { price: o.price, size: 0, sources: new Set() }); const cur = map.get(key); cur.size += o.size; cur.sources.add(o.source); }); return [...map.values()].map(v=>({ price: v.price, size: v.size, sources: [...v.sources].join('+') })); }
@@ -232,4 +230,4 @@ app.get('/api/unlock', (req,res)=>{
   }
   res.json({ ok: true, msg: 'Lock dibatalkan' });
 });
-app.listen(PORT, ()=> console.log('ABEL BOT V8.2 MARKET jalan di port ' + PORT));
+app.listen(PORT, ()=> console.log('ABEL BOT V8.3 NO-BINANCE MARKET jalan di port ' + PORT));
