@@ -1,4 +1,5 @@
 // ABEL BOT - V8.2 - MESIN DI SERVER, API CUMA BACA, 1 SETUP = 1 OBJEK
+// MODIF: + TELEGRAM PRIBADI+CHANNEL + /api/history SESI INI
 const express = require('express');
 const cors = require('cors');
 const app = express();
@@ -8,14 +9,20 @@ const PORT = process.env.PORT || 10000;
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
+// DUKUNG PRIBADI + CHANNEL: isi TELEGRAM_CHAT_IDS = "1201491575,-1004487592477"
+// Kalau TELEGRAM_CHAT_IDS kosong, fallback ke TELEGRAM_CHAT_ID lama biar gak error
+const TELEGRAM_CHAT_IDS = (process.env.TELEGRAM_CHAT_IDS || TELEGRAM_CHAT_ID || '').split(',').map(s=>s.trim()).filter(Boolean);
 async function sendTelegram(msg){
-  if(!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) return;
-  try{
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: msg })
-    });
-  }catch(e){ console.log('Telegram gagal:', e.message); }
+  if(!TELEGRAM_TOKEN || !TELEGRAM_CHAT_IDS.length) return;
+  // kirim ke semua tujuan: pribadi + channel, barengan
+  await Promise.all(TELEGRAM_CHAT_IDS.map(async (chat_id)=>{
+    try{
+      await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id, text: msg })
+      });
+    }catch(e){ console.log('Telegram gagal ke', chat_id, e.message); }
+  }));
 }
 
 function generateSetupId(){
@@ -204,9 +211,17 @@ function buildSignalResponse(){
 app.get('/', (req,res)=> res.send('ABEL BOT OK - /api/signal'));
 app.get('/api/signal', (req,res)=>{
   const sig = buildSignalResponse();
-  res.json({ ...sig, walls, wallsNear: walls, wallsFar, wallsFarCount: wallsFar.length, pendingOrders: sig.pending, touchedLevels: sig.touched, history: signalHistory, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF', harga: { xaut_mid: xautPrice, xauusd_goldprice: xauusdPrice, selisih, source: goldSource }, range: { low: 3893, high: 4060 }, exchanges, supabase: 'OK', uptime_menit: Math.floor((Date.now() - uptimeStart) / 60000), last_update: lastUpdate, last_done: lastDone, last_setup: lastSetup, current_setup: currentSetup });
+  res.json({ ...sig, walls, wallsNear: walls, wallsFar, wallsFarCount: wallsFar.length, pendingOrders: sig.pending, touchedLevels: sig.touched, history: signalHistory, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF', harga: { xaut_mid: xautPrice, xauusd_goldprice: xauusdPrice, selisih, source: goldSource }, range: { low: 3893, high: 4060 }, exchanges, supabase: 'OK', uptimeStart, uptime_menit: Math.floor((Date.now() - uptimeStart) / 60000), last_update: lastUpdate, last_done: lastDone, last_setup: lastSetup, current_setup: currentSetup });
 });
-app.get('/api/history', (req,res)=>{ res.json({ history: signalHistory, total: signalHistory.length }); });
+// RIWAYAT SESI INI - sejak server nyala (uptimeStart). Restart = reset, sesuai request lo.
+// signalHistory memang in-memory, jadi otomatis cuma isi sesi ini. Kita tambahin info sesi biar HTML bisa nampilin "Sejak Nyala: ..."
+app.get('/api/history', (req,res)=>{
+  const since = req.query.since ? parseInt(req.query.since) : uptimeStart;
+  const filtered = signalHistory.filter(x => (x.created_at || 0) >= since);
+  res.json({ history: filtered, total: filtered.length, uptimeStart, sesi_mulai: new Date(uptimeStart).toLocaleString('id-ID'), uptime_menit: Math.floor((Date.now() - uptimeStart) / 60000) });
+});
+// Alias biar gampang dipanggil dari tombol: /api/history-sesi
+app.get('/api/history-sesi', (req,res)=>{ res.redirect('/api/history'); });
 app.get('/api/test-telegram', async (req,res)=>{ const testId = generateSetupId(); await sendTelegram(`🎯 BUY NOW - Setup ${testId}\n\nEntry: $3954.19\nSL: $3949.19\nTP1: $3959.19\nTP2: $3964.19\nTembok Pemicu: BID 3935.90 - 58.38 XAUT - Betah 5m - OKX (jarak 12.4$)`); res.json({ ok: true, setup_id: testId, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF' }); });
 app.get('/api/unlock', (req,res)=>{
   if(currentSetup){
