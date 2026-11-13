@@ -36,6 +36,7 @@
   .mini small{color:#94a3b8;font-size:11px}
   .mini b{display:block;font-size:20px;margin:4px 0 2px}
   .mini span{font-size:11px;color:#94a3b8}
+  .mini span.xaut{color:#38bdf8;font-size:12px;font-weight:900;display:block;margin-top:2px}
   .status-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #1e293b;font-size:13px}
   .harga-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;max-width:1100px;margin:0 auto 12px}
   .harga-box{background:#1a222e;border-radius:12px;padding:12px;text-align:center}
@@ -120,10 +121,10 @@
     <div style="text-align:right"><div style="font-size:11px;color:#94a3b8">⏳ Udah Jalan</div><b id="jamTelat">-</b><div id="jamStatus" style="font-size:11px;color:#00e676">Masih fresh, gas masuk</div></div>
   </div>
   <div class="grid2">
-    <div class="mini"><small>Entry (Market)</small><b id="entryVal">0</b></div>
-    <div class="mini"><small>Stop Loss</small><b id="slVal">0</b></div>
-    <div class="mini"><small>TP 1 (50%)</small><b id="tp1Val">0</b></div>
-    <div class="mini"><small>TP 2</small><b id="tp2Val">0</b></div>
+    <div class="mini"><small>Entry (Market) - MT5</small><b id="entryVal">0</b><span class="xaut" id="entryXautVal">XAUT -</span></div>
+    <div class="mini"><small>Stop Loss - MT5</small><b id="slVal">0</b><span class="xaut" id="slXautVal">XAUT -</span></div>
+    <div class="mini"><small>TP 1 (50%) - MT5</small><b id="tp1Val">0</b><span class="xaut" id="tp1XautVal">XAUT -</span></div>
+    <div class="mini"><small>TP 2 - MT5</small><b id="tp2Val">0</b><span class="xaut" id="tp2XautVal">XAUT -</span></div>
   </div>
   <div class="status-row"><span>Setup</span><b id="setupVal" style="color:#facc15">-</b></div>
   <div class="status-row"><span>Tembok Pemicu (Setup Ini)</span><b id="wallVal">-</b></div>
@@ -239,7 +240,16 @@ async function load(){
     if(notifKey !== lastNotifId){ if(lastSignal === 'WAIT' && (sigRaw.includes('BUY') || sigRaw.includes('SELL'))){ sendNotif('🎯 ' + sigRaw + ' ' + setupId + ' di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : ''), 'Eksekusi MARKET di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : '') + ' | SL ' + (d.sl_mt5 ? '$' + d.sl_mt5.toFixed(2) : '') + ' | TP1 ' + (d.tp1_mt5 ? '$' + d.tp1_mt5.toFixed(2) : '') + ' | TP2 ' + (d.tp2_mt5 ? '$' + d.tp2_mt5.toFixed(2) : '') + '. Eksekusi sekarang.'); } else if(sigRaw === 'DONE' && (lastSignal.includes('BUY') || lastSignal.includes('SELL'))){ sendNotif('✅ Sinyal DONE ' + setupId + ' - ' + (d.last_done?.last_result || ''), 'Cek riwayat buat jurnaling.'); } lastNotifId = notifKey; }
     lastSignal = sigRaw;
     document.getElementById('entryVal').innerText = fmt(d.entry_mt5); document.getElementById('slVal').innerText = fmt(d.sl_mt5); document.getElementById('tp1Val').innerText = fmt(d.tp1_mt5); document.getElementById('tp2Val').innerText = fmt(d.tp2_mt5);
-    document.getElementById('emergencyVal').innerText = d.emergency_sl_mt5 ? fmt(d.emergency_sl_mt5) : '-'; document.getElementById('partialVal').innerText = d.partial || '50/50'; document.getElementById('reentryVal').innerText = d.reentry ? fmt(d.reentry.entry_mt5) + ' / SL ' + fmt(d.reentry.sl_mt5) : '-'; document.getElementById('lockVal').innerText = d.is_locked ? '🔒 ' + (d.lock_status || 'LOCKED') : (d.lock_status || 'Tidak terkunci');
+    // HARGA EXCHANGE / XAUT - MT5 + selisih (selisih = XAUT - XAUUSD)
+    const toXaut = (v)=> v ? fmt(v + selisih) : '-';
+    document.getElementById('entryXautVal').innerText = d.entry_mt5 ? 'XAUT ' + toXaut(d.entry_mt5) : 'XAUT -';
+    document.getElementById('slXautVal').innerText = d.sl_mt5 ? 'XAUT ' + toXaut(d.sl_mt5) : 'XAUT -';
+    document.getElementById('tp1XautVal').innerText = d.tp1_mt5 ? 'XAUT ' + toXaut(d.tp1_mt5) : 'XAUT -';
+    document.getElementById('tp2XautVal').innerText = d.tp2_mt5 ? 'XAUT ' + toXaut(d.tp2_mt5) : 'XAUT -';
+    document.getElementById('emergencyVal').innerText = d.emergency_sl_mt5 ? fmt(d.emergency_sl_mt5) + ' / XAUT ' + toXaut(d.emergency_sl_mt5) : '-';
+    document.getElementById('partialVal').innerText = d.partial || '50/50';
+    document.getElementById('reentryVal').innerText = d.reentry ? fmt(d.reentry.entry_mt5) + ' / XAUT ' + toXaut(d.reentry.entry_mt5) + ' / SL ' + fmt(d.reentry.sl_mt5) + ' / XAUT ' + toXaut(d.reentry.sl_mt5) : '-';
+    document.getElementById('lockVal').innerText = d.is_locked ? '🔒 ' + (d.lock_status || 'LOCKED') : (d.lock_status || 'Tidak terkunci');
     const lockedAt = d.lockedAt || null; const isActiveMarket = sigRaw.includes('BUY') || sigRaw.includes('SELL');
     if(isActiveMarket && lockedAt){ const dt = new Date(lockedAt); document.getElementById('jamAktif').innerText = dt.toLocaleTimeString('id-ID'); document.getElementById('jamTanggal').innerText = dt.toLocaleDateString('id-ID'); const diffMenit = Math.floor((Date.now() - dt.getTime())/60000); const diffDetik = Math.floor((Date.now() - dt.getTime())/1000) % 60; document.getElementById('jamTelat').innerText = diffMenit + 'm ' + diffDetik + 'd'; const statusEl = document.getElementById('jamStatus'); if(diffMenit <= 2){ statusEl.innerText = 'Market baru eksekusi, pantau TP1'; statusEl.style.color = '#00e676'; } else if(diffMenit <= 10){ statusEl.innerText = 'Market udah jalan ' + diffMenit + 'm, cek TP1'; statusEl.style.color = '#facc15'; } else { statusEl.innerText = 'Market udah ' + diffMenit + 'm belum TP1, pantau terus'; statusEl.style.color = '#ff5252'; } }
     else { document.getElementById('jamAktif').innerText = '-'; document.getElementById('jamTanggal').innerText = 'Belum ada sinyal aktif'; document.getElementById('jamTelat').innerText = '-'; document.getElementById('jamStatus').innerText = 'Nunggu sinyal...'; document.getElementById('jamStatus').style.color = '#94a3b8'; }
