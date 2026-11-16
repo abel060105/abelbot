@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ABEL FX ORDERBOOK - V10.3 SPOT + WS</title>
+<title>⚡ABEL FX</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0f172a">
 <meta name="mobile-web-app-capable" content="yes">
@@ -38,7 +38,6 @@
   .mini span{font-size:11px;color:#94a3b8}
   .mini span.xaut{color:#38bdf8;font-size:12px;font-weight:900;display:block;margin-top:2px}
   .status-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #1e293b;font-size:13px}
-  /* V10.3: HARGA ATAS CUMA 1 KOTAK XAUT - MT5 & SELISIH UDAH DIHAPUS */
   .harga-grid{display:grid;grid-template-columns:1fr;gap:10px;max-width:1100px;margin:0 auto 12px}
   .harga-box{background:#1a222e;border-radius:12px;padding:12px;text-align:center}
   .harga-box.highlight{border:2px solid #00e676}
@@ -90,8 +89,32 @@
 </style>
 </head>
 <body>
-<div class="topbar"><h1>⚡ ABEL FX ORDERBOOK - V10.3</h1><button class="btn-yellow" id="notifBtn" onclick="enableNotif()">🔔 AKTIFKAN NOTIF</button></div>
+<div class="topbar"><h1>⚡ABEL FX</h1><button class="btn-yellow" id="notifBtn" onclick="enableNotif()">🔔 AKTIFKAN NOTIF</button></div>
 
+<!-- 1. SINYAL AKTIF -->
+<div class="card" id="signalCard">
+  <div class="card-head">
+    <h2>🎯 SINYAL AKTIF</h2>
+    <button class="btn-dl" onclick="downloadCard('signalCard','sinyal-aktif')">⬇ Download Gambar</button>
+  </div>
+  <div class="label" style="margin-top:8px">Sinyal Saat Ini <span class="live">● LIVE</span> <span class="badge setup" id="setupBadge" style="display:none"></span></div>
+  <div class="signal WAIT" id="signalText">WAIT</div>
+  <div class="jam-box">
+    <div><div style="font-size:11px;color:#94a3b8">🕐 Sinyal Aktif Sejak</div><b id="jamAktif">-</b><div id="jamTanggal" style="font-size:11px;color:#94a3b8">-</div></div>
+    <div style="text-align:right"><div style="font-size:11px;color:#94a3b8">⏳ Udah Jalan</div><b id="jamTelat">-</b><div id="jamStatus" style="font-size:11px;color:#00e676">Masih fresh, gas masuk</div></div>
+  </div>
+  <div class="grid2">
+    <div class="mini"><small>Entry (Market) - XAUT</small><b id="entryVal">0</b><span class="xaut" id="entryXautVal">XAUT -</span></div>
+    <div class="mini"><small>Stop Loss -50 Pips (-5$)</small><b id="slVal">0</b><span class="xaut" id="slXautVal">XAUT -</span></div>
+    <div class="mini"><small>Take Profit +100 Pips (+10$) - 1 TP DOANG</small><b id="tpVal">0</b><span class="xaut" id="tpXautVal">XAUT -</span></div>
+  </div>
+  <div class="status-row"><span>Setup</span><b id="setupVal" style="color:#facc15">-</b></div>
+  <div class="status-row"><span>Tembok Pemicu (Setup)</span><b id="wallVal">-</b></div>
+  <div class="status-row"><span>Terakhir (Last Done)</span><b id="lastVal">-</b></div>
+  <div class="status-row"><span>Tembok Tersentuh</span><b id="touchedVal">-</b></div>
+</div>
+
+<!-- 2. PENDING ORDER -->
 <div class="card" id="pendingCard">
   <div class="card-head">
     <h2>📌 PENDING ORDER</h2>
@@ -110,32 +133,9 @@
   <div class="status-row" style="margin-top:8px"><span>Total Pending</span><b id="pendingCount">-</b></div>
 </div>
 
-<div class="card" id="signalCard">
-  <div class="card-head">
-    <h2>🎯 SINYAL AKTIF</h2>
-    <button class="btn-dl" onclick="downloadCard('signalCard','sinyal-aktif')">⬇ Download Gambar</button>
-  </div>
-  <div class="label" style="margin-top:8px">Sinyal Saat Ini <span class="live">● LIVE</span> <span class="badge setup" id="setupBadge" style="display:none"></span></div>
-  <div class="signal WAIT" id="signalText">WAIT</div>
-  <div class="jam-box">
-    <div><div style="font-size:11px;color:#94a3b8">🕐 Sinyal Aktif Sejak</div><b id="jamAktif">-</b><div id="jamTanggal" style="font-size:11px;color:#94a3b8">-</div></div>
-    <div style="text-align:right"><div style="font-size:11px;color:#94a3b8">⏳ Udah Jalan</div><b id="jamTelat">-</b><div id="jamStatus" style="font-size:11px;color:#00e676">Masih fresh, gas masuk</div></div>
-  </div>
-  <!-- V10.3: DULU 4 KOTAK (Entry/SL/TP1/TP2 MT5), SEKARANG 3 KOTAK (Entry/SL 50 pips/TP 100 pips XAUT) -->
-  <div class="grid2">
-    <div class="mini"><small>Entry (Market) - XAUT</small><b id="entryVal">0</b><span class="xaut" id="entryXautVal">XAUT -</span></div>
-    <div class="mini"><small>Stop Loss -50 Pips (-5$)</small><b id="slVal">0</b><span class="xaut" id="slXautVal">XAUT -</span></div>
-    <div class="mini"><small>Take Profit +100 Pips (+10$) - 1 TP DOANG</small><b id="tpVal">0</b><span class="xaut" id="tpXautVal">XAUT -</span></div>
-  </div>
-  <div class="status-row"><span>Setup</span><b id="setupVal" style="color:#facc15">-</b></div>
-  <div class="status-row"><span>Tembok Pemicu (Setup)</span><b id="wallVal">-</b></div>
-  <div class="status-row"><span>Terakhir (Last Done)</span><b id="lastVal">-</b></div>
-  <div class="status-row"><span>Tembok Tersentuh</span><b id="touchedVal">-</b></div>
-</div>
-
-<!-- V10.3: HARGA ATAS CUMA 1 KOTAK XAUT - KOTAK XAUUSD/MT5 + SELISIH UDAH DIHAPUS -->
+<!-- 3. BID / ASK -->
 <div class="harga-grid">
-  <div class="harga-box highlight"><div class="lbl">⭐ XAUT - HARGA SATU-SATUNYA (Bybit+OKX WS 200ms)</div><div class="val" id="xautPrice" style="color:#00e676">--</div><div class="sub">Harga mentah Bybit/OKX - buat tembok + sinyal - NO Gold-API - NO Selisih - NO Exness - NO MT5</div><div class="sub" id="wsInfo">Bybit: - • OKX: -</div></div>
+  <div class="harga-box highlight"><div class="val" id="xautPrice" style="color:#00e676">--</div><div class="sub" id="wsInfo">Bybit: - • OKX: -</div></div>
 </div>
 
 <div class="four-col" id="wallsCard">
@@ -145,6 +145,7 @@
   <div class="card"><div class="card-head"><h2>🟠 ASK Jauh</h2></div><div id="asksFar"><div class="empty">Loading...</div></div></div>
 </div>
 
+<!-- 4. RIWAYAT JURNALING -->
 <div class="card" id="historyCard">
   <div class="card-head">
     <h2>📚 RIWAYAT SINYAL - JURNALING</h2>
@@ -155,6 +156,7 @@
   <div class="status-row" style="margin-top:8px"><span>Winrate (1 TP)</span><b id="winrateVal">-</b></div>
 </div>
 
+<!-- 5. DASHBOARD KESELURUHAN -->
 <div class="card">
   <div style="display:flex;justify-content:space-between"><h2 style="font-size:13px;margin:0">📥 Download Semua Dashboard</h2><button class="btn-dl" onclick="downloadCard('wallsCard','bid-ask')">⬇ Download BID/ASK</button></div>
   <div class="status-row" style="margin-top:10px"><span>Bybit WS</span><b id="wsBybitVal">-</b></div>
@@ -163,7 +165,6 @@
   <div class="status-row"><span>Total Whale Level</span><b id="totalVal">-</b></div>
   <div class="status-row"><span>Uptime</span><b id="uptimeVal">-</b></div>
   <div class="status-row"><span>Last Update</span><b id="lastUpdateVal">-</b></div>
-  <div class="status-row"><span>Sumber Harga</span><b id="goldSourceVal">XAUT WS Bybit+OKX 200ms - NO Gold-API</b></div>
   <div class="status-row"><span>Sesi Info</span><b id="sesiInfo">-</b></div>
 </div>
 
@@ -175,7 +176,7 @@
   <button class="btn-dark" onclick="unlock()">🔓 BATALKAN LOCK MANUAL</button>
   <button class="btn-install" id="installBtn" onclick="installPWA()">📲 INSTALL APLIKASI</button>
 </div>
-<div id="status" style="text-align:center;font-size:11px;color:#94a3b8;margin-bottom:20px">Auto-refresh tiap 1 detik • Bybit+OKX WebSocket (200ms) • NO Gold-API • NO Selisih • NO Exness • Sinyal BUY/SELL NOW, SL 50 pips, TP 100 pips, 1 TP • Mesin jalan di server</div>
+<div id="status" style="text-align:center;font-size:11px;color:#94a3b8;margin-bottom:20px"></div>
 
 <div id="popupRiwayat">
   <div class="popup-box">
@@ -213,22 +214,19 @@ async function enableNotif(){
 }
 if(localStorage.getItem('abel_notif') === '1' && 'Notification' in window && Notification.permission === 'granted'){ notifEnabled = true; document.getElementById('notifBtn').innerText = '🔔 NOTIF AKTIF ✅'; }
 function playBeep(){ try{ const ctx = new (window.AudioContext || window.webkitAudioContext)(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value = 880; o.type = 'sine'; g.gain.value = 0.15; o.start(); o.stop(ctx.currentTime + 0.4); setTimeout(()=>{ const o2 = ctx.createOscillator(); const g2 = ctx.createGain(); o2.connect(g2); g2.connect(ctx.destination); o2.frequency.value = 880; g2.gain.value = 0.15; o2.start(); o2.stop(ctx.currentTime + 0.4); }, 500); }catch(e){} }
-function sendNotif(title, body){ if(!notifEnabled) return; playBeep(); if(navigator.vibrate) navigator.vibrate([200,100,200]); if('Notification' in window && Notification.permission === 'granted'){ try{ new Notification(title, { body, icon: '/icon-192.png', tag: 'abel-signal', requireInteraction: true }); }catch(e){} } document.title = '🔔 ' + title; setTimeout(()=>{ document.title = 'ABEL FX ORDERBOOK'; }, 5000); }
+function sendNotif(title, body){ if(!notifEnabled) return; playBeep(); if(navigator.vibrate) navigator.vibrate([200,100,200]); if('Notification' in window && Notification.permission === 'granted'){ try{ new Notification(title, { body, icon: '/icon-192.png', tag: 'abel-signal', requireInteraction: true }); }catch(e){} } document.title = '🔔 ' + title; setTimeout(()=>{ document.title = '⚡ABEL FX'; }, 5000); }
 async function downloadCard(cardId, fileName){ const el = document.getElementById(cardId); if(!el) return; try{ const canvas = await html2canvas(el, { backgroundColor: '#1a222e', scale: 2, useCORS: true }); const a = document.createElement('a'); const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-'); a.download = `abel-${fileName}-${ts}.png`; a.href = canvas.toDataURL('image/png'); a.click(); }catch(e){ alert('Gagal download: ' + e.message); } }
 function getNote(id){ return localStorage.getItem('abel_note_' + id) || ''; }
 function saveNote(id, val){ localStorage.setItem('abel_note_' + id, val); }
-// V10.3: CSV cuma Entry / SL / TP XAUT - gak ada TP1/TP2/MT5 lagi
 function downloadCSV(){ const rows = [['Setup','Tanggal','Jam','Sinyal','Entry_XAUT','SL_XAUT','TP_XAUT','SL_Pips','TP_Pips','Size','Hasil','Catatan']]; const hist = window._lastHistory || []; hist.forEach(h=>{ const dt = new Date(h.created_at); const e = h.entry ?? h.entry_mt5 ?? ''; const s = h.sl ?? h.sl_mt5 ?? ''; const t = h.tp ?? h.tp_mt5 ?? ''; rows.push([h.setup_id||'', dt.toLocaleDateString('id-ID'), dt.toLocaleTimeString('id-ID'), h.signal, e, s, t, 50, 100, h.size, h.result, getNote(h.id).replace(/,/g,';')]); }); const csv = rows.map(r=> r.join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'abel-jurnal-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); }
 async function testTelegram(){ try{ const r = await fetch(BASE_URL + '/api/test-telegram', { cache: 'no-store' }); const j = JSON.parse(await r.text()); alert('Telegram terkirim! Setup ' + j.setup_id + '\nFormat V10: BUY NOW, SL -50 pips, TP +100 pips'); load(); }catch(e){ alert('Gagal tes Telegram: ' + e.message); } }
 async function testWs(){ try{ const r = await fetch(BASE_URL + '/api/ws-test', { cache: 'no-store' }); const j = JSON.parse(await r.text()); alert('WS TEST - BYBIT+OKX\n\nBybit WS: ' + (j.ws_bybit_ok ? 'OK ✅' : 'OFF ❌') + ' - Last: ' + j.ws_last_bybit + '\nOKX WS: ' + (j.ws_okx_ok ? 'OK ✅' : 'OFF ❌') + ' - Last: ' + j.ws_last_okx + '\nBids cached: ' + j.bids_cached + '\nAsks cached: ' + j.asks_cached + '\nTop Bid: $' + j.top_bid + '\nTop Ask: $' + j.top_ask + '\nXAUT Price: $' + (j.xaut_price || 0) + '\n\nKalo OFF, cek Render Logs, pastikan npm install ws udah jalan.'); load(); }catch(e){ alert('Gagal tes WS: ' + e.message); } }
 async function load(){
-  document.getElementById('status').innerText = 'Menghubungkan...';
   try{
     const r = await fetch(API_URL, { cache: 'no-store' });
     const text = await r.text();
     if(!text.trim().startsWith('{')) throw new Error('Server bales HTML');
     const d = JSON.parse(text);
-    // V10.3: harga cuma XAUT WS doang - fallback ke field lama biar gak NaN kalo server belum V10
     const price = d.harga?.xaut ?? d.harga?.xaut_mid ?? d.harga?.xauusd_goldprice ?? 0;
     const wsBybit = d.harga?.ws_bybit || '-'; const wsOkx = d.harga?.ws_okx || '-';
     const sigRaw = d.signal || 'WAIT'; const sigEl = document.getElementById('signalText'); sigEl.innerText = sigRaw;
@@ -236,7 +234,6 @@ async function load(){
     const setupId = d.setup_id || ''; document.getElementById('setupVal').innerText = setupId || '-'; const badge = document.getElementById('setupBadge'); if(setupId){ badge.innerText = 'Setup ' + setupId; badge.style.display = 'inline-block'; } else { badge.style.display = 'none'; }
     document.getElementById('wallVal').innerText = d.wall ? `${d.wall.side} ${d.wall.price.toFixed(2)} - ${d.wall.size.toFixed(2)} XAUT - ${d.wall.sources} - Betah ${d.wall.age_menit}m` : '-';
     document.getElementById('lastVal').innerText = d.last_done ? d.last_done.last_result : (d.last_setup ? d.last_setup.setup_id + ' ' + (d.last_setup.result||'') : '-');
-    // V10.3: entry / sl / tp XAUT - fallback ke entry_mt5 lama kalo server belum V10
     const entry = d.entry ?? d.entry_mt5 ?? 0; const sl = d.sl ?? d.sl_mt5 ?? 0; const tp = d.tp ?? d.tp_mt5 ?? d.tp2_mt5 ?? 0;
     document.getElementById('entryVal').innerText = entry ? '$' + entry.toFixed(2) : '0';
     document.getElementById('slVal').innerText = sl ? '$' + sl.toFixed(2) : '0';
@@ -244,7 +241,6 @@ async function load(){
     document.getElementById('entryXautVal').innerText = entry ? 'XAUT $' + entry.toFixed(2) : 'XAUT -';
     document.getElementById('slXautVal').innerText = sl ? 'XAUT $' + sl.toFixed(2) + ' (-50 pips)' : 'XAUT -';
     document.getElementById('tpXautVal').innerText = tp ? 'XAUT $' + tp.toFixed(2) + ' (+100 pips)' : 'XAUT -';
-    // Jam aktif - V10.3: cuma 1 TP, gak ada TP1 lagi
     if(d.is_locked && d.lockedAt){
       const dt = new Date(d.lockedAt); const diffMenit = Math.floor((Date.now() - d.lockedAt)/60000);
       document.getElementById('jamAktif').innerText = dt.toLocaleTimeString('id-ID'); document.getElementById('jamTanggal').innerText = dt.toLocaleDateString('id-ID');
@@ -257,13 +253,10 @@ async function load(){
     document.getElementById('wsInfo').innerText = 'Bybit: ' + wsBybit + ' • OKX: ' + wsOkx;
     document.getElementById('wsBybitVal').innerText = wsBybit;
     document.getElementById('wsOkxVal').innerText = wsOkx;
-    document.getElementById('goldSourceVal').innerText = d.harga?.source || 'XAUT WS Bybit+OKX 200ms - NO Gold-API';
-    // V10.3: 4 kotak tembok - harga XAUT doang, GAK ADA MT5 lagi di bawahnya
     const render = (el, arr, cls) => { if(!arr.length){ document.getElementById(el).innerHTML = '<div class="empty">Gak ada whale di area ini</div>'; return; } document.getElementById(el).innerHTML = arr.map(l=>{ let jarak = price ? Math.abs(l.price - price).toFixed(1) + '$ dari harga' : ''; return `<div class="row"><div class="left ${cls}">${l.side} ${l.price.toFixed(2)}<small>${l.sources||''} • ${l.age_menit||0}m</small></div><div class="right">${l.size.toFixed(4)} XAUT<small>$${(l.size * l.price).toFixed(0)} • ${jarak}</small></div></div>`; }).join(''); };
     const wallsNear = d.wallsNear || d.walls || []; const wallsFar = d.wallsFar || [];
     render('bidsNear', wallsNear.filter(w=>w.side==='BID').sort((a,b)=>b.price-a.price).slice(0,6), 'BID'); render('asksNear', wallsNear.filter(w=>w.side==='ASK').sort((a,b)=>a.price-b.price).slice(0,6), 'ASK'); render('bidsFar', wallsFar.filter(w=>w.side==='BID').sort((a,b)=>b.size-a.size), 'FAR-BID'); render('asksFar', wallsFar.filter(w=>w.side==='ASK').sort((a,b)=>a.size-a.size), 'FAR-ASK');
     let pendingSource = Array.isArray(d.pendingOrders) ? d.pendingOrders : []; let touchedSource = Array.isArray(d.touchedLevels) ? d.touchedLevels : [];
-    // V10.3: pending - jarak ke harga XAUT, bukan MT5
     const renderPendingItem = (w)=>{ const isTouched = w.status === 'TERSENTUH'; const isBuy = w.side === 'BID'; const cls = isTouched ? 'touched' : (isBuy ? 'buy' : 'sell'); const badgeCls = isTouched ? 'touched' : (isBuy ? 'buy' : 'sell'); const badgeText = isTouched ? '🔥 TERSENTUH' : (isBuy ? 'BUY MARKET' : 'SELL MARKET'); const dist = w.distance ?? w.distance_mt5 ?? (price ? Math.abs(w.price - price) : 0); return `<div class="pending-item ${cls}"><div class="pending-top"><b>${w.side} ${w.price.toFixed(2)}</b><span class="badge ${badgeCls}">${badgeText}</span></div><div class="mt5">XAUT ${w.price.toFixed(2)} • ${isBuy?'BUY MARKET':'SELL MARKET'} di ${w.price.toFixed(2)}</div><div class="meta">${w.size.toFixed(4)} XAUT • $${(w.size * w.price).toFixed(0)} • ${w.sources||''} • Umur ${w.age_menit||0}m<br>Jarak ke harga XAUT: ${dist.toFixed(1)}$ ${isTouched?'• UDAH KENA!':'• Belum kena'}</div></div>`; };
     document.getElementById('pendingBidList').innerHTML = pendingSource.filter(w=> w.side==='BID').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada BID pending yang betah 5 menit - lagi nunggu...</div>';
     document.getElementById('pendingAskList').innerHTML = pendingSource.filter(w=> w.side==='ASK').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada ASK pending yang betah 5 menit - lagi nunggu...</div>';
@@ -273,7 +266,8 @@ async function load(){
     document.getElementById('totalVal').innerText = (d.walls?.length || 0) + ' level • Jauh: ' + (d.wallsFarCount || wallsFar.length || 0);
     document.getElementById('uptimeVal').innerText = (d.uptime_menit || 0) + ' menit';
     if(d.uptimeStart){ document.getElementById('sesiInfo').innerText = 'Sesi dimulai: ' + new Date(d.uptimeStart).toLocaleString('id-ID') + ' • ' + (d.uptime_menit || 0) + ' menit lalu • ' + (d.history ? d.history.length : 0) + ' sinyal sesi ini'; }
-    document.getElementById('lastUpdateVal').innerText = d.last_update ? new Date(d.last_update).toLocaleTimeString('id-ID') : '-'; document.getElementById('status').innerText = 'Update: ' + new Date().toLocaleTimeString('id-ID') + ' • Bybit+OKX WS 200ms • NO Gold-API • NO Exness • Mesin jalan di server • Refresh 1 detik';
+    document.getElementById('lastUpdateVal').innerText = d.last_update ? new Date(d.last_update).toLocaleTimeString('id-ID') : '-';
+    document.getElementById('status').innerText = '';
     if(d.signal && d.signal !== 'WAIT' && d.signal !== lastSignal){
       lastSignal = d.signal;
       if(d.lockedId && d.lockedId !== lastNotifId){ lastNotifId = d.lockedId; sendNotif('ABEL FX - ' + d.signal, 'Setup ' + (d.setup_id||'') + ' Entry $' + (entry||0).toFixed(2) + ' SL -50 pips TP +100 pips'); }
@@ -281,7 +275,7 @@ async function load(){
     if(d.signal === 'WAIT') lastSignal = 'WAIT';
     const hist = d.history || []; window._lastHistory = hist;
     if(hist.length){ document.getElementById('historyBody').innerHTML = hist.map(h=>{ const dt = new Date(h.created_at); const isWin = (h.result||'').includes('WIN'); const isLose = (h.result||'').includes('LOSE'); const resultColor = isWin ? '#00e676' : isLose ? '#ff5252' : h.result === 'AKTIF' ? '#facc15' : '#94a3b8'; const e = h.entry ?? h.entry_mt5 ?? 0; const s = h.sl ?? h.sl_mt5 ?? 0; const t = h.tp ?? h.tp_mt5 ?? h.tp2_mt5 ?? 0; return `<tr><td style="font-weight:900;color:#facc15">${h.setup_id||'-'}</td><td>${dt.toLocaleDateString('id-ID')}<br><small style="color:#94a3b8">${dt.toLocaleTimeString('id-ID')}</small></td><td style="font-weight:900;color:${h.signal.includes('BUY')?'#00e676':'#ff5252'}">${h.signal}</td><td>$${e.toFixed(2)}<br><small style="color:#94a3b8">${h.size.toFixed(2)} XAUT • ${h.sources||''}</small></td><td>SL $${s.toFixed(2)} (-50 pips)<br>TP $${t.toFixed(2)} (+100 pips)</td><td style="font-weight:900;color:${resultColor}">${h.result}${h.result_price ? '<br><small style="color:#94a3b8">$'+h.result_price.toFixed(2)+'</small>' : ''}${h.duration_menit ? '<br><small style="color:#94a3b8">'+h.duration_menit+'m</small>' : ''}</td><td><input class="hist-note" value="${getNote(h.id).replace(/"/g,'&quot;')}" placeholder="Tulis jurnal..." oninput="saveNote('${h.id}', this.value)" /></td></tr>`; }).join(''); const closed = hist.filter(h=> h.closed_at); const win = hist.filter(h=> (h.result||'').includes('WIN')).length; const wr = d.winrate_data || { winrate: closed.length ? Math.floor(win/closed.length*100) : 0 }; document.getElementById('winrateVal').innerText = closed.length ? win + ' WIN / ' + closed.length + ' closed = ' + wr.winrate + '% winrate (1 TP)' : '-'; } else { document.getElementById('historyBody').innerHTML = '<tr><td colspan="7" class="empty">Belum ada riwayat...</td></tr>'; }
-  }catch(e){ document.getElementById('status').innerText = 'Gagal: ' + e.message; }
+  }catch(e){ document.getElementById('status').innerText = ''; }
 }
 async function bukaRiwayatSesi(){
   document.getElementById('popupRiwayat').style.display = 'block'; document.getElementById('riwayatSesiIsi').innerHTML = 'Loading...';
