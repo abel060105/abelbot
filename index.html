@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ABEL FX ORDERBOOK - V10 XAUT ONLY</title>
+<title>ABEL FX ORDERBOOK - V10.2 XAUT ONLY + 4 KOTAK TEMBOK</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0f172a">
 <meta name="mobile-web-app-capable" content="yes">
@@ -33,12 +33,23 @@
   .signal.BUY{background:#16a34a;color:#fff}
   .signal.SELL{background:#dc2626;color:#fff}
   .signal.DONE{background:#facc15;color:#000}
+  /* V10.2: HARGA ATAS CUMA 1 KOTAK XAUT, GAK ADA MT5 / SELISIH LAGI */
   .harga-grid{display:grid;grid-template-columns:1fr;gap:12px;max-width:1100px;margin:0 auto 12px}
   .harga-box{background:#1a222e;border-radius:12px;padding:14px;text-align:center}
   .harga-box.highlight{border:2px solid #00e676}
   .harga-box .lbl{font-size:11px;color:#94a3b8}
-  .harga-box .val{font-size:32px;font-weight:900;margin:6px 0}
+  .harga-box .val{font-size:36px;font-weight:900;margin:6px 0}
   .harga-box .sub{font-size:11px;color:#94a3b8}
+  /* V10.2: 4 KOTAK TEMBOK BALIK LAGI - KAYAK DI SCREENSHOT LO */
+  .walls-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;max-width:1100px;margin:0 auto 12px}
+  .wall-col{background:#1a222e;border-radius:12px;padding:12px}
+  .wall-col h3{margin:0 0 10px;font-size:14px}
+  .wall-item{padding:10px 0;border-bottom:1px solid #334155;display:flex;justify-content:space-between;gap:8px}
+  .wall-item:last-child{border-bottom:none}
+  .wall-item .p{font-size:15px;font-weight:900}
+  .wall-item .p small{display:block;font-size:11px;color:#94a3b8;font-weight:400}
+  .wall-item .s{font-size:12px;font-weight:700;text-align:right;white-space:nowrap}
+  .wall-item .s span{font-size:11px;color:#94a3b8;font-weight:400;display:block}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;max-width:1100px;margin:0 auto 12px}
   .grid3 div{background:#1a222e;border-radius:12px;padding:12px;text-align:center}
   .grid3 .lbl{font-size:11px;color:#94a3b8}
@@ -52,13 +63,14 @@
   .popup-box{background:#1a222e;border-radius:12px;max-width:800px;margin:20px auto;padding:16px}
   .riw-item{background:#0f172a;border-radius:8px;padding:10px;margin-bottom:8px;font-size:13px}
   .notif-on{background:#16a34a !important}
-  @media(max-width:640px){ .grid3{grid-template-columns:1fr 1fr} .signal{font-size:22px} }
+  @media(max-width:900px){ .walls-grid{grid-template-columns:1fr 1fr} }
+  @media(max-width:640px){ .grid3{grid-template-columns:1fr 1fr} .signal{font-size:22px} .walls-grid{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
 
 <div class="topbar">
-  <h1>ABEL FX <span style="color:#facc15">V10 XAUT ONLY</span></h1>
+  <h1>ABEL FX <span style="color:#facc15">V10.2 XAUT ONLY</span></h1>
   <button class="btn-install" id="installBtn" onclick="installPWA()">📲 INSTALL APLIKASI</button>
 </div>
 
@@ -79,8 +91,29 @@
   </div>
 </div>
 
+<!-- V10.2: HARGA ATAS CUMA XAUT DOANG -->
 <div class="harga-grid">
-  <div class="harga-box highlight"><div class="lbl">XAUT (Orderbook Bybit+OKX WS) - HARGA SATU-SATUNYA</div><div class="val" id="xautPrice" style="color:#00e676">--</div><div class="sub">Harga mentah Bybit/OKX - buat tembok + sinyal - realtime WS 200ms - NO Gold-API - NO Selisih - NO Exness</div></div>
+  <div class="harga-box highlight"><div class="lbl">XAUT (Orderbook Bybit+OKX WS) - HARGA SATU-SATUNYA</div><div class="val" id="xautPrice" style="color:#00e676">--</div><div class="sub">Harga mentah Bybit/OKX - buat tembok + sinyal - realtime WS 200ms - NO Gold-API - NO Selisih - NO Exness - NO MT5</div></div>
+</div>
+
+<!-- V10.2: 4 KOTAK TEMBOK BALIK LAGI - INI YANG KEHAPUS KEMARIN, SORRY BRO -->
+<div class="walls-grid">
+  <div class="wall-col">
+    <h3>🟢 BID Dekat</h3>
+    <div id="bidDekatList" style="font-size:13px;color:#cbd5e1">Loading...</div>
+  </div>
+  <div class="wall-col">
+    <h3>🔴 ASK Dekat</h3>
+    <div id="askDekatList" style="font-size:13px;color:#cbd5e1">Loading...</div>
+  </div>
+  <div class="wall-col">
+    <h3>🔵 BID Jauh</h3>
+    <div id="bidJauhList" style="font-size:13px;color:#cbd5e1">Loading...</div>
+  </div>
+  <div class="wall-col">
+    <h3>🟠 ASK Jauh</h3>
+    <div id="askJauhList" style="font-size:13px;color:#cbd5e1">Loading...</div>
+  </div>
 </div>
 
 <div class="grid3">
@@ -126,7 +159,6 @@
 </div>
 
 <script>
-// V10.1 FIX: API BALIK KE abelbot (TANPA STRIP) - YANG KEMARIN abel-bot ITU SALAH, MAKANYA OFFLINE
 const API_URL = 'https://abelbot.onrender.com/api/signal';
 const BASE_URL = API_URL.replace('/api/signal','');
 function fmt(n){ return n ? '$' + n.toFixed(2) : '0'; }
@@ -157,10 +189,17 @@ function sendNotif(title, body){ if(!notifEnabled) return; playBeep(); if(naviga
 async function downloadCard(cardId, fileName){ const el = document.getElementById(cardId); if(!el) return; try{ const canvas = await html2canvas(el, { backgroundColor: '#1a222e', scale: 2, useCORS: true }); const a = document.createElement('a'); const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-'); a.download = `abel-${fileName}-${ts}.png`; a.href = canvas.toDataURL('image/png'); a.click(); }catch(e){ alert('Gagal download: ' + e.message); } }
 function getNote(id){ return localStorage.getItem('abel_note_' + id) || ''; }
 function saveNote(id, val){ localStorage.setItem('abel_note_' + id, val); }
-// V10: CSV cuma Entry, SL, TP - gak ada TP1/TP2/MT5 lagi
 function downloadCSV(){ const rows = [['Setup','Tanggal','Jam','Sinyal','Entry_XAUT','SL_XAUT','TP_XAUT','SL_Pips','TP_Pips','Size','Hasil','Catatan']]; const hist = window._lastHistory || []; hist.forEach(h=>{ const dt = new Date(h.created_at); rows.push([h.setup_id||'', dt.toLocaleDateString('id-ID'), dt.toLocaleTimeString('id-ID'), h.signal, h.entry ?? '', h.sl ?? '', h.tp ?? '', 50, 100, h.size, h.result, getNote(h.id).replace(/,/g,';')]); }); const csv = rows.map(r=> r.join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'abel-jurnal-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); }
 async function testTelegram(){ try{ const r = await fetch(BASE_URL + '/api/test-telegram', { cache: 'no-store' }); const j = JSON.parse(await r.text()); alert('Telegram terkirim! Setup ' + j.setup_id + '\nFormat V10: BUY NOW, SL -50 pips, TP +100 pips'); load(); }catch(e){ alert('Gagal tes Telegram: ' + e.message); } }
-async function testWs(){ try{ const r = await fetch(BASE_URL + '/api/ws-test', { cache: 'no-store' }); const j = JSON.parse(await r.text()); alert('WS TEST - BYBIT+OKX\n\nBybit WS: ' + (j.ws_bybit_ok ? 'OK ✅' : 'OFF ❌') + ' - Last: ' + j.ws_last_bybit + '\nOKX WS: ' + (j.ws_okx_ok ? 'OK ✅' : 'OFF ❌') + ' - Last: ' + j.ws_last_okx + '\nBids cached: ' + j.bids_cached + '\nAsks cached: ' + j.asks_cached + '\nTop Bid: $' + j.top_bid + '\nTop Ask: $' + j.top_ask + '\nXAUT Price: $' + (j.xaut_price || 0) + '\n\nKalo OFF, cek Render Logs, pastikan npm install ws udah jalan.'); load(); }catch(e){ alert('Gagal tes WS: ' + e.message); } }
+async function testWs(){ try{ const r = await fetch(BASE_URL + '/api/ws-test', { cache: 'no-store' }); const j = JSON.parse(await r.text()); alert('WS TEST - BYBIT+OKX\n\nBybit WS: ' + (j.ws_bybit_ok ? 'OK ✅' : 'OFF ❌') + ' - Last: ' + j.ws_last_bybit + '\nOKX WS: ' + (j.ws_okx_ok ? 'OK ✅' : 'OFF ❌') + ' - Last: ' + j.ws_last_okx + '\nBids cached: ' + j.bids_cached + '\nAsks cached: ' + j.asks_cached + '\nTop Bid: $' + j.top_bid + '\nTop Ask: $' + j.top_ask + '\nXAUT Price: $' + (j.xaut_price || 0)); load(); }catch(e){ alert('Gagal tes WS: ' + e.message); } }
+
+// V10.2: Render 1 tembok - CUMA XAUT, GAK ADA MT5 LAGI
+function renderWallItem(w, hargaNow){
+  const dist = Math.abs(w.price - hargaNow);
+  const notional = w.size * w.price;
+  const color = w.side === 'BID' ? '#00e676' : '#ff5252';
+  return `<div class="wall-item"><div><div class="p" style="color:${color}">${w.side}<br>$${w.price.toFixed(2)}</div><small style="color:#94a3b8">${w.sources||''} • ${w.age_menit}m</small></div><div class="s">${w.size.toFixed(4)} XAUT<span>$${Math.floor(notional).toLocaleString('en-US')} • ${dist.toFixed(2)}$ dari harga</span></div></div>`;
+}
 async function load(){
   document.getElementById('status').innerText = 'Menghubungkan...';
   try{
@@ -168,19 +207,16 @@ async function load(){
     const text = await r.text();
     if(!text.trim().startsWith('{')) throw new Error('Server bales HTML - Render mungkin lagi restart, tunggu 30 detik');
     const d = JSON.parse(text);
-    // V10: harga cuma XAUT doang, fallback ke field lama biar gak NaN kalo server belum V10
-    const price = d.harga?.xaut ?? d.harga?.xaut_mid ?? d.harga?.xauusd_goldprice ?? 0;
+    const price = d.harga?.xaut ?? d.harga?.xaut_mid ?? 0;
     const wsBybit = d.harga?.ws_bybit || '-'; const wsOkx = d.harga?.ws_okx || '-';
     const sigRaw = d.signal || 'WAIT'; const sigEl = document.getElementById('signalText'); sigEl.innerText = sigRaw;
     let sigCls = 'WAIT'; if(sigRaw.includes('BUY')) sigCls = 'BUY'; else if(sigRaw.includes('SELL')) sigCls = 'SELL'; else if(sigRaw === 'DONE') sigCls = 'DONE'; sigEl.className = 'signal ' + sigCls;
-    const setupId = d.setup_id || ''; document.getElementById('setupBadge'); const badge = document.getElementById('setupBadge'); if(setupId){ badge.innerText = 'Setup ' + setupId; badge.style.display = 'inline-block'; } else { badge.style.display = 'none'; }
-    // V10: entry / sl / tp baru, fallback ke entry_mt5 lama kalo server belum V10
+    const setupId = d.setup_id || ''; const badge = document.getElementById('setupBadge'); if(setupId){ badge.innerText = 'Setup ' + setupId; badge.style.display = 'inline-block'; } else { badge.style.display = 'none'; }
     const entry = d.entry ?? d.entry_mt5 ?? 0; const sl = d.sl ?? d.sl_mt5 ?? 0; const tp = d.tp ?? d.tp_mt5 ?? 0;
     document.getElementById('entryVal').innerText = entry ? '$' + entry.toFixed(2) : '-';
     document.getElementById('slVal').innerText = sl ? '$' + sl.toFixed(2) : '-';
     document.getElementById('tpVal').innerText = tp ? '$' + tp.toFixed(2) : '-';
     document.getElementById('lockInfo').innerText = d.lock_status || (d.last_done ? d.last_done.last_result : '-');
-    // Jam aktif - V10: cuma TP doang, gak ada TP1
     if(d.is_locked && d.lockedAt){
       const diffMenit = Math.floor((Date.now() - d.lockedAt)/60000);
       document.getElementById('jamInfo').innerText = 'Sinyal aktif udah ' + diffMenit + 'm • SL -50 pips • TP +100 pips • 1 TP doang';
@@ -188,7 +224,17 @@ async function load(){
     document.getElementById('xautPrice').innerText = price ? '$' + price.toFixed(2) : '--';
     document.getElementById('wsBybitVal').innerText = wsBybit;
     document.getElementById('wsOkxVal').innerText = wsOkx;
-    // Tembok pending - V10: price = XAUT asli, distance = jarak XAUT
+    // V10.2: 4 KOTAK TEMBOK - walls = Dekat, wallsFar = Jauh
+    const walls = d.walls || d.wallsNear || [];
+    const wallsFar = d.wallsFar || [];
+    const bidDekat = walls.filter(w=> w.side === 'BID').sort((a,b)=> b.price - a.price);
+    const askDekat = walls.filter(w=> w.side === 'ASK').sort((a,b)=> a.price - b.price);
+    const bidJauh = wallsFar.filter(w=> w.side === 'BID').sort((a,b)=> b.price - a.price);
+    const askJauh = wallsFar.filter(w=> w.side === 'ASK').sort((a,b)=> a.price - b.price);
+    document.getElementById('bidDekatList').innerHTML = bidDekat.length ? bidDekat.map(w=> renderWallItem(w, price)).join('') : '<div style="text-align:center;color:#94a3b8;padding:12px">Belum ada BID Dekat</div>';
+    document.getElementById('askDekatList').innerHTML = askDekat.length ? askDekat.map(w=> renderWallItem(w, price)).join('') : '<div style="text-align:center;color:#94a3b8;padding:12px">Belum ada ASK Dekat</div>';
+    document.getElementById('bidJauhList').innerHTML = bidJauh.length ? bidJauh.map(w=> renderWallItem(w, price)).join('') : '<div style="text-align:center;color:#94a3b8;padding:12px">Belum ada BID Jauh</div>';
+    document.getElementById('askJauhList').innerHTML = askJauh.length ? askJauh.map(w=> renderWallItem(w, price)).join('') : '<div style="text-align:center;color:#94a3b8;padding:12px">Belum ada ASK Jauh</div>';
     const pending = d.pendingOrders || d.pending || [];
     document.getElementById('pendingList').innerHTML = pending.length ? pending.map(w=>{
       const dist = w.distance ?? w.distance_mt5 ?? 0;
@@ -197,8 +243,8 @@ async function load(){
     const touched = d.touchedLevels || d.touched || [];
     document.getElementById('touchedList').innerHTML = touched.length ? touched.map(w=>`<div style="padding:8px 0;border-bottom:1px solid #334155;display:flex;justify-content:space-between"><span><b style="color:${w.side==='BID'?'#00e676':'#ff5252'}">${w.side}</b> $${w.price.toFixed(2)} • ${w.sources||''} • Betah ${w.age_menit}m • KESENGGOL</span><b>${w.size.toFixed(2)} XAUT</b></div>`).join('') : 'Belum ada yang kesenggol';
     document.getElementById('wallInfo').innerText = d.wall ? 'Tembok pemicu: ' + d.wall.side + ' $' + d.wall.price.toFixed(2) + ' - ' + d.wall.size.toFixed(2) + ' XAUT - Betah ' + d.wall.age_menit + 'm - ' + d.wall.sources : '-';
-    document.getElementById('totalVal').innerText = (d.walls?.length || 0) + ' level • Jauh: ' + (d.wallsFarCount || 0);
-    document.getElementById('status').innerText = 'Update: ' + new Date().toLocaleTimeString('id-ID') + ' • Bybit+OKX WS 200ms • NO Gold-API • NO Exness • Mesin jalan di server • API: abelbot.onrender.com';
+    document.getElementById('totalVal').innerText = (walls.length || 0) + ' level • Jauh: ' + (wallsFar.length || 0);
+    document.getElementById('status').innerText = 'Update: ' + new Date().toLocaleTimeString('id-ID') + ' • Bybit+OKX WS 200ms • NO Gold-API • NO Exness • API: abelbot.onrender.com';
     if(d.signal && d.signal !== 'WAIT' && d.signal !== lastSignal){
       lastSignal = d.signal;
       if(d.lockedId && d.lockedId !== lastNotifId){ lastNotifId = d.lockedId; sendNotif('ABEL FX - ' + d.signal, 'Setup ' + (d.setup_id||'') + ' Entry $' + (entry||0).toFixed(2) + ' SL -50 pips TP +100 pips'); }
@@ -213,10 +259,8 @@ async function load(){
         const e = h.entry ?? h.entry_mt5 ?? 0; const s = h.sl ?? h.sl_mt5 ?? 0; const t = h.tp ?? h.tp_mt5 ?? 0;
         return `<tr><td style="font-weight:900;color:#facc15">${h.setup_id||'-'}</td><td>${dt.toLocaleDateString('id-ID')}<br><small style="color:#94a3b8">${dt.toLocaleTimeString('id-ID')}</small></td><td style="font-weight:900;color:${h.signal.includes('BUY')?'#00e676':'#ff5252'}">${h.signal}</td><td>$${e.toFixed(2)}<br><small style="color:#94a3b8">${h.size.toFixed(2)} XAUT • ${h.sources||''}</small></td><td>SL $${s.toFixed(2)} (-50 pips)<br>TP $${t.toFixed(2)} (+100 pips)</td><td style="font-weight:900;color:${resultColor}">${h.result}${h.result_price ? '<br><small style="color:#94a3b8">$'+h.result_price.toFixed(2)+'</small>' : ''}${h.duration_menit ? '<br><small style="color:#94a3b8">'+h.duration_menit+'m</small>' : ''}</td><td><input class="hist-note" value="${getNote(h.id).replace(/"/g,'&quot;')}" placeholder="Tulis jurnal..." oninput="saveNote('${h.id}', this.value)" /></td></tr>`;
       }).join('');
-      // V10 WINRATE: WIN 1 TP doang, bukan TP2 lagi
       const closed = hist.filter(h=> h.closed_at);
       const win = hist.filter(h=> (h.result||'').includes('WIN')).length;
-      const lose = hist.filter(h=> (h.result||'').includes('LOSE')).length;
       const wr = d.winrate_data || { winrate: closed.length ? Math.floor(win/closed.length*100) : 0 };
       document.getElementById('winrateVal').innerText = closed.length ? win + ' WIN / ' + closed.length + ' closed = ' + wr.winrate + '% winrate' : '-';
     } else { document.getElementById('historyBody').innerHTML = '<tr><td colspan="7" class="empty">Belum ada riwayat...</td></tr>'; }
