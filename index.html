@@ -2,8 +2,8 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>ABEL BOT - V10 XAUT ONLY</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ABEL BOT - V10.1 XAUT ONLY</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0a0e17;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:12px;padding-bottom:80px}
@@ -12,6 +12,7 @@ body{background:#0a0e17;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFo
 .top h1 span{color:#f59e0b}
 .badge{font-size:11px;padding:4px 8px;border-radius:99px;background:#1e293b}
 .badge.live{background:#065f46;color:#a7f3d0}
+.badge.off{background:#7f1d1d;color:#fecaca}
 .price-card{background:linear-gradient(135deg,#111827,#1f2937);border:1px solid #374151;border-radius:16px;padding:16px;margin-bottom:12px;text-align:center}
 .price-card .label{font-size:11px;color:#9ca3af;letter-spacing:1px}
 .price-card .price{font-size:36px;font-weight:800;margin:4px 0}
@@ -50,10 +51,12 @@ h3{font-size:14px;margin:14px 0 8px}
 .hist .win{color:#34d399;font-weight:700}
 .hist .lose{color:#f87171;font-weight:700}
 .small{font-size:11px;color:#9ca3af;margin-top:6px;text-align:center}
+.debug{background:#7f1d1d;color:#fecaca;padding:10px;border-radius:10px;font-size:12px;margin-bottom:12px;display:none;word-break:break-all}
 </style>
 </head>
 <body>
-<div class="top"><h1>ABEL BOT <span>V10 XAUT ONLY</span></h1><span class="badge live" id="statusBadge">LIVE</span></div>
+<div class="top"><h1>ABEL BOT <span>V10.1 XAUT ONLY</span></h1><span class="badge off" id="statusBadge">OFFLINE</span></div>
+<div class="debug" id="debugBox"></div>
 
 <div class="price-card">
   <div class="label">HARGA XAUT - BYBIT + OKX WS 200ms</div>
@@ -83,40 +86,38 @@ h3{font-size:14px;margin:14px 0 8px}
 
 <h3>🧱 Tembok Pending (Betah &gt; 5m)</h3>
 <div id="pendingList"><p class="small">Loading...</p></div>
-
 <h3>🔥 Tembok Tersentuh</h3>
 <div id="touchedList"><p class="small">Belum ada yang kesenggol</p></div>
-
 <h3>📜 History Sesi Ini - 1 TP Only</h3>
 <div id="historyList"><p class="small">Belum ada sinyal</p></div>
 
 <button class="btn btn-test" onclick="testTelegram()">📩 TEST TELEGRAM - Format V10</button>
 <button class="btn btn-unlock" onclick="unlockSignal()">🔓 BATALKAN SINYAL AKTIF</button>
 <p class="small" id="lastUpdate">Last update: -</p>
-<p class="small">V10: Harga = XAUT WS 200ms. SL 50 pips (5$), TP 100 pips (10$). Winrate = WIN TP KENA vs LOSE SL KENA doang.</p>
+<p class="small" id="apiUrlText"></p>
 
 <script>
+// ⚠️ GANTI INI SAMA URL RENDER LO YANG BENER, YANG ADA DI DASHBOARD RENDER LO!
+// Contoh: https://abel-bot-xxxx.onrender.com - JANGAN ADA / DI AKHIR
 const API = 'https://abel-bot.onrender.com';
-let lastData = null;
+document.getElementById('apiUrlText').textContent = 'API: ' + API + '/api/signal';
 
 async function load(){
   try{
     const r = await fetch(API + '/api/signal');
+    if(!r.ok) throw new Error('HTTP ' + r.status + ' - Server balas error');
     const d = await r.json();
-    lastData = d;
-    // Harga XAUT - V10: field baru xaut, fallback ke xaut_mid / harga lama biar gak NaN
-    const harga = d.harga?.xaut || d.harga?.xaut_mid || d.harga?.xauusd_goldprice || 0;
+    document.getElementById('statusBadge').textContent = 'LIVE • V10';
+    document.getElementById('statusBadge').className = 'badge live';
+    document.getElementById('debugBox').style.display = 'none';
+    const harga = d.harga?.xaut || d.harga?.xaut_mid || 0;
     document.getElementById('hargaXaut').textContent = '$' + Number(harga).toFixed(2);
     document.getElementById('wsInfo').textContent = 'Bybit: ' + (d.harga?.ws_bybit||'-') + ' • OKX: ' + (d.harga?.ws_okx||'-');
     document.getElementById('bybitWs').textContent = d.harga?.ws_bybit || '-';
     document.getElementById('okxWs').textContent = d.harga?.ws_okx || '-';
-
-    // Winrate V10 - dari winrate_data server, 1 TP doang
     const wr = d.winrate_data || { total:0, win:0, lose:0, winrate:0 };
     document.getElementById('winrate').textContent = wr.winrate + '% (' + wr.win + '/' + wr.total + ')';
     document.getElementById('winlose').textContent = wr.win + 'W - ' + wr.lose + 'L';
-
-    // Sinyal - V10: entry, sl, tp (gak ada tp2 lagi)
     const card = document.getElementById('signalCard');
     const sig = (d.signal||'WAIT').toUpperCase();
     card.className = 'signal-card ' + (sig.includes('BUY') ? 'BUY' : sig.includes('SELL') ? 'SELL' : 'WAIT');
@@ -128,49 +129,32 @@ async function load(){
       document.getElementById('entryVal').textContent = '$' + Number(d.entry).toFixed(2);
       document.getElementById('slVal').textContent = '$' + Number(d.sl).toFixed(2);
       document.getElementById('tpVal').textContent = '$' + Number(d.tp).toFixed(2);
-    } else {
-      setupBox.style.display = 'none';
-    }
-    if(d.wall){
-      document.getElementById('wallInfo').textContent = 'Tembok pemicu: ' + d.wall.side + ' $' + Number(d.wall.price).toFixed(2) + ' - ' + Number(d.wall.size).toFixed(2) + ' XAUT - Betah ' + d.wall.age_menit + 'm - ' + d.wall.sources;
-    } else {
-      document.getElementById('wallInfo').textContent = '';
-    }
+    } else { setupBox.style.display = 'none'; }
+    if(d.wall){ document.getElementById('wallInfo').textContent = 'Tembok pemicu: ' + d.wall.side + ' $' + Number(d.wall.price).toFixed(2) + ' - ' + Number(d.wall.size).toFixed(2) + ' XAUT - Betah ' + d.wall.age_menit + 'm - ' + d.wall.sources; }
+    else { document.getElementById('wallInfo').textContent = ''; }
     document.getElementById('lockInfo').textContent = d.last_done ? 'Last: ' + d.last_done.last_result : '';
-
-    // Pending - V10: price = harga XAUT asli, distance = jarak XAUT
     const pending = d.pendingOrders || d.pending || [];
-    document.getElementById('pendingList').innerHTML = pending.length ? pending.map(w=>`
-      <div class="wall ${w.side}">
-        <div><div class="p">${w.side} $${Number(w.price).toFixed(2)}</div><div class="m">${w.sources} • Betah ${w.age_menit}m • Jarak ${(w.distance ?? w.distance_mt5 ?? 0).toFixed(1)}$</div></div>
-        <div class="s">${Number(w.size).toFixed(2)} XAUT<span>${w.instruction||''} • ${w.status||'PENDING'}</span></div>
-      </div>`).join('') : '<p class="small">Belum ada tembok yang betah 5 menit</p>';
-
+    document.getElementById('pendingList').innerHTML = pending.length ? pending.map(w=>`<div class="wall ${w.side}"><div><div class="p">${w.side} $${Number(w.price).toFixed(2)}</div><div class="m">${w.sources} • Betah ${w.age_menit}m • Jarak ${(w.distance ?? 0).toFixed(1)}$</div></div><div class="s">${Number(w.size).toFixed(2)} XAUT<span>${w.instruction||''} • ${w.status||'PENDING'}</span></div></div>`).join('') : '<p class="small">Belum ada tembok yang betah 5 menit</p>';
     const touched = d.touchedLevels || d.touched || [];
-    document.getElementById('touchedList').innerHTML = touched.length ? touched.map(w=>`
-      <div class="wall ${w.side}">
-        <div><div class="p">${w.side} $${Number(w.price).toFixed(2)}</div><div class="m">${w.sources} • Betah ${w.age_menit}m • KESENGGOL</div></div>
-        <div class="s">${Number(w.size).toFixed(2)} XAUT<span>${w.instruction||''}</span></div>
-      </div>`).join('') : '<p class="small">Belum ada yang kesenggol</p>';
-
-    // History - V10: WIN / LOSE 1 TP doang
+    document.getElementById('touchedList').innerHTML = touched.length ? touched.map(w=>`<div class="wall ${w.side}"><div><div class="p">${w.side} $${Number(w.price).toFixed(2)}</div><div class="m">${w.sources} • Betah ${w.age_menit}m • KESENGGOL</div></div><div class="s">${Number(w.size).toFixed(2)} XAUT<span>${w.instruction||''}</span></div></div>`).join('') : '<p class="small">Belum ada yang kesenggol</p>';
     const hist = d.history || [];
     document.getElementById('historyList').innerHTML = hist.length ? hist.slice(0,10).map(h=>{
-      const isWin = (h.result||'').includes('WIN');
-      const isLose = (h.result||'').includes('LOSE');
+      const isWin = (h.result||'').includes('WIN'); const isLose = (h.result||'').includes('LOSE');
       const cls = isWin ? 'win' : isLose ? 'lose' : '';
-      return `<div class="hist"><div class="row"><b>${h.signal} ${h.setup_id||''}</b><span class="${cls}">${h.result||'AKTIF'}</span></div><div class="row"><span>Entry $${Number(h.entry||h.entry_mt5||0).toFixed(2)} • SL $${Number(h.sl||h.sl_mt5||0).toFixed(2)} (-50 pips) • TP $${Number(h.tp||h.tp_mt5||0).toFixed(2)} (+100 pips)</span></div><div class="row"><span>${new Date(h.created_at).toLocaleTimeString('id-ID')}</span><span>${h.duration_menit||0}m</span></div></div>`;
+      return `<div class="hist"><div class="row"><b>${h.signal} ${h.setup_id||''}</b><span class="${cls}">${h.result||'AKTIF'}</span></div><div class="row"><span>Entry $${Number(h.entry||0).toFixed(2)} • SL $${Number(h.sl||0).toFixed(2)} (-50 pips) • TP $${Number(h.tp||0).toFixed(2)} (+100 pips)</span></div><div class="row"><span>${new Date(h.created_at).toLocaleTimeString('id-ID')}</span><span>${h.duration_menit||0}m</span></div></div>`;
     }).join('') : '<p class="small">Belum ada sinyal</p>';
-
-    document.getElementById('lastUpdate').textContent = 'Last update: ' + new Date().toLocaleTimeString('id-ID') + ' • Sesi mulai: ' + new Date(d.uptimeStart).toLocaleTimeString('id-ID');
-    document.getElementById('statusBadge').textContent = 'LIVE • V10';
+    document.getElementById('lastUpdate').textContent = 'Last update: ' + new Date().toLocaleTimeString('id-ID');
   }catch(e){
     document.getElementById('statusBadge').textContent = 'OFFLINE';
+    document.getElementById('statusBadge').className = 'badge off';
+    const db = document.getElementById('debugBox');
+    db.style.display = 'block';
+    db.textContent = 'GAGAL FETCH KE: ' + API + '/api/signal | Error: ' + e.message + ' | Cek: 1) URL Render lo bener gak? 2) Render lo udah Live belum? 3) server.js V10 udah di-commit belum?';
     console.log('load gagal', e.message);
   }
 }
 async function testTelegram(){
-  try{ const r = await fetch(API + '/api/test-telegram'); const d = await r.json(); alert('Telegram terkirim! Setup ' + d.setup_id); }catch(e){ alert('Gagal: ' + e.message); }
+  try{ const r = await fetch(API + '/api/test-telegram'); const d = await r.json(); alert('Telegram terkirim! Setup ' + d.setup_id); }catch(e){ alert('Gagal: ' + e.message + ' - Server OFFLINE'); }
 }
 async function unlockSignal(){
   try{ await fetch(API + '/api/unlock'); load(); }catch(e){ alert('Gagal: ' + e.message); }
