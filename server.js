@@ -2,9 +2,9 @@
 // MODIF: + TELEGRAM PRIBADI+CHANNEL + /api/history SESI INI
 // MODIF V8.3: HAPUS BINANCE TOTAL - CUMA BYBIT + OKX
 // MODIF V8.4: BYBIT VIA BYTICK (ANTI-BLOCK) + THRESHOLD DIPISAH PER EXCHANGE BIAR BYBIT GAK KE-FILTER OKX
-// MODIF V9.3 FULL: BYBIT WS BYTICK (ANTI-BLOCK) + FETCHORDERBOOKS GABUNGAN WS+REST (BIAR TEMBOK GAK ILANG SEBELAH) + EXNESS MARKET DATA API (TICKS/CANDLES, BUKAN QUOTES)
-// SERVER->BYBIT/OKX WEBSOCKET 200ms. SERVER->EXNESS POLLING 1 DETIK VIA MARKET DATA API. PWA->SERVER POLLING 1 DETIK.
-// CARA PASANG: npm install ws / tambah "ws" di package.json -> Render Environment isi EXNESS_API_KEY, EXNESS_API_SECRET, EXNESS_ACCOUNT_ID -> Deploy
+// MODIF V9.4 FULL: BYBIT WS BYTICK + FETCHORDERBOOKS GABUNGAN WS+REST + EXNESS MARKET DATA API THROTTLED (1 URL / 10 DETIK, GILIRAN, BACKOFF 60 DETIK KLO 429)
+// SERVER->BYBIT/OKX WEBSOCKET 200ms. SERVER->EXNESS POLLING 10 DETIK. PWA->SERVER POLLING 1 DETIK.
+// CARA PASANG: tambah ws di package.json -> Render Environment isi EXNESS_API_KEY, EXNESS_API_SECRET, EXNESS_ACCOUNT_ID -> Deploy
 const express = require('express');
 const cors = require('cors');
 const app = express();
@@ -14,11 +14,9 @@ const PORT = process.env.PORT || 10000;
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
-// DUKUNG PRIBADI + CHANNEL: isi TELEGRAM_CHAT_IDS = "1201491575,-1004487592477"
-// Kalau TELEGRAM_CHAT_IDS kosong, fallback ke TELEGRAM_CHAT_ID lama biar gak error
 const TELEGRAM_CHAT_IDS = (process.env.TELEGRAM_CHAT_IDS || TELEGRAM_CHAT_ID || '').split(',').map(s=>s.trim()).filter(Boolean);
 
-// ===== EXNESS MARKET DATA API - CUMA HARGA ACUAN MT5, POLLING 1 DETIK =====
+// ===== EXNESS MARKET DATA API - CUMA HARGA ACUAN MT5, POLLING 10 DETIK (THROTTLED BIAR GAK 429) =====
 const EXNESS_API_KEY = process.env.EXNESS_API_KEY || '';
 const EXNESS_API_SECRET = process.env.EXNESS_API_SECRET || '';
 const EXNESS_ACCOUNT_ID = process.env.EXNESS_ACCOUNT_ID || '';
@@ -54,7 +52,6 @@ let walls = [], wallsFar = [], xautPrice = 0, xauusdPrice = 0, lastKnownXauusd =
 let exchanges = { bybit: false, okx: false };
 let uptimeStart = Date.now(), lastUpdate = null;
 let firstSeenMap = new Map(), signalHistory = [];
-
 let currentSetup = null;
 let lastSetup = null;
 let lastDone = null;
@@ -90,36 +87,40 @@ function parseExnessQuote(d){
   }
   return null;
 }
+let exnessNextTry = 0, exnessTryIdx = 0;
 async function fetchExnessPrice(){
   if(!EXNESS_API_KEY){ exnessStatus='NO-KEY'; exnessLastError='EXNESS_API_KEY belum diisi di Render Environment'; return false; }
-  const bases = ['https://api.exness.com', 'https://www.exness-api.com'];
-  const headers = { 'Content-Type':'application/json','User-Agent':'ABEL-FX/9.3','Authorization':'Bearer '+EXNESS_API_KEY,'x-api-key':EXNESS_API_KEY,'X-API-Key':EXNESS_API_KEY };
+  if(Date.now() < exnessNextTry) return false;
+  const bases = ['https://api.exness.com'];
+  const headers = { 'Content-Type':'application/json','User-Agent':'ABEL-FX/9.4','Authorization':'Bearer '+EXNESS_API_KEY,'x-api-key':EXNESS_API_KEY,'X-API-Key':EXNESS_API_KEY };
   if(EXNESS_API_SECRET) headers['X-API-Secret']=EXNESS_API_SECRET;
-  const tries=[];
+  const allTries=[];
   for(const base of bases){
-    tries.push(base+'/v1/market-data/ticks?symbol=XAUUSD&limit=1');
-    tries.push(base+'/v1/ticks?symbol=XAUUSD&limit=1');
-    tries.push(base+'/api/v1/ticks?symbol=XAUUSD&limit=1');
-    tries.push(base+'/v1/market-data/candles?symbol=XAUUSD&timeframe=M1&limit=1');
-    tries.push(base+'/v1/candles?symbol=XAUUSD&timeframe=M1&limit=1');
-    tries.push(base+'/api/v1/candles?symbol=XAUUSD&interval=1m&limit=1');
+    allTries.push(base+'/v1/market-data/ticks?symbol=XAUUSD&limit=1');
+    allTries.push(base+'/v1/ticks?symbol=XAUUSD&limit=1');
+    allTries.push(base+'/api/v1/ticks?symbol=XAUUSD&limit=1');
+    allTries.push(base+'/v1/market-data/candles?symbol=XAUUSD&timeframe=M1&limit=1');
+    allTries.push(base+'/v1/candles?symbol=XAUUSD&timeframe=M1&limit=1');
+    allTries.push(base+'/api/v1/candles?symbol=XAUUSD&interval=1m&limit=1');
   }
-  for(const url of tries){
-    try{
-      const r=await fetch(url,{method:'GET',headers,signal:AbortSignal.timeout(5000)});
-      if(!r.ok){ exnessLastError='HTTP '+r.status+' di '+url; console.log('Exness try gagal: '+exnessLastError); continue; }
-      const d=await r.json().catch(()=>null);
-      const q=parseExnessQuote(d);
-      if(q){ exnessPrice=q.mid; xauusdPrice=q.mid; lastKnownXauusd=q.mid; goldSource='Exness Market Data API (tick terakhir)'; exnessStatus='EXNESS-OK'; exnessLastOk=Date.now(); exnessLastError=''; console.log('Exness OK via '+url+' harga '+q.mid); return true; }
-      const arr = d ? (d.data || d.candles || d.ticks || d.result || (Array.isArray(d) ? d : null)) : null;
-      if(arr && arr.length){
-        const last=arr[arr.length-1];
-        const close=parseFloat(last.close ?? last.c ?? last.price ?? last.bid ?? 0);
-        if(close>1000){ exnessPrice=close; xauusdPrice=close; lastKnownXauusd=close; goldSource='Exness Market Data API (candle/tick terakhir)'; exnessStatus='EXNESS-OK'; exnessLastOk=Date.now(); exnessLastError=''; console.log('Exness OK via '+url+' harga '+close); return true; }
-      }
-    }catch(e){ exnessLastError=e.message+' di '+url; console.log('Exness try error: '+exnessLastError); }
-  }
-  exnessStatus='EXNESS-GAGAL'; return false;
+  const url = allTries[exnessTryIdx % allTries.length];
+  exnessTryIdx++;
+  try{
+    const r=await fetch(url,{method:'GET',headers,signal:AbortSignal.timeout(5000)});
+    if(r.status===429){ exnessLastError='HTTP 429 Rate Limit di '+url+' - istirahat 60 detik'; exnessStatus='EXNESS-429'; exnessNextTry=Date.now()+60000; console.log('Exness try gagal: '+exnessLastError); return false; }
+    if(!r.ok){ exnessLastError='HTTP '+r.status+' di '+url; console.log('Exness try gagal: '+exnessLastError); return false; }
+    const d=await r.json().catch(()=>null);
+    const q=parseExnessQuote(d);
+    if(q){ exnessPrice=q.mid; xauusdPrice=q.mid; lastKnownXauusd=q.mid; goldSource='Exness Market Data API (tick terakhir)'; exnessStatus='EXNESS-OK'; exnessLastOk=Date.now(); exnessLastError=''; exnessNextTry=Date.now()+30000; console.log('Exness OK via '+url+' harga '+q.mid); return true; }
+    const arr = d ? (d.data || d.candles || d.ticks || d.result || (Array.isArray(d) ? d : null)) : null;
+    if(arr && arr.length){
+      const last=arr[arr.length-1];
+      const close=parseFloat(last.close ?? last.c ?? last.price ?? last.bid ?? 0);
+      if(close>1000){ exnessPrice=close; xauusdPrice=close; lastKnownXauusd=close; goldSource='Exness Market Data API (candle/tick terakhir)'; exnessStatus='EXNESS-OK'; exnessLastOk=Date.now(); exnessLastError=''; exnessNextTry=Date.now()+30000; console.log('Exness OK via '+url+' harga '+close); return true; }
+    }
+    exnessLastError='Format data gak dikenal di '+url; console.log('Exness try gagal: '+exnessLastError);
+  }catch(e){ exnessLastError=e.message+' di '+url; console.log('Exness try error: '+exnessLastError); }
+  return false;
 }
 async function fetchGoldPrice(){
   const okExness = await fetchExnessPrice();
@@ -130,7 +131,7 @@ async function fetchGoldPrice(){
   if(xautPrice > 1000){ xauusdPrice = xautPrice; goldSource = 'XAUT fallback'; return true; }
   return false;
 }
-// ===== WEBSOCKET BYBIT + OKX - V9.3 BYTICK =====
+// ===== WEBSOCKET BYBIT + OKX - V9.4 BYTICK =====
 function applyWsBook(source, bids, asks, isSnapshot){
   const book = wsBooks[source];
   if(isSnapshot){ book.bids.clear(); book.asks.clear(); }
@@ -358,7 +359,7 @@ async function tick(){
   }catch(e){ console.log('tick gagal', e.message); }
   tickRunning = false;
 }
-setInterval(async ()=>{ try{ await fetchGoldPrice(); }catch(e){} }, 1000);
+setInterval(async ()=>{ try{ await fetchGoldPrice(); }catch(e){} }, 10000);
 setInterval(tick, 1000); tick(); fetchGoldPrice();
 function buildSignalResponse(){
   const { pending, touched } = buildPendingOrders();
@@ -382,7 +383,7 @@ app.get('/api/history', (req,res)=>{
 app.get('/api/history-sesi', (req,res)=>{ res.redirect('/api/history'); });
 app.get('/api/exness-test', async (req,res)=>{
   const ok = await fetchExnessPrice();
-  res.json({ ok, source: goldSource, status: exnessStatus, harga_acuan_mt5: xauusdPrice, harga_exness: exnessPrice, last_error: exnessLastError, last_ok: exnessLastOk ? new Date(exnessLastOk).toLocaleString('id-ID') : null, key_terisi: !!EXNESS_API_KEY, secret_terisi: !!EXNESS_API_SECRET, account_terisi: !!EXNESS_ACCOUNT_ID, ws_bybit: wsBybitOk, ws_okx: wsOkxOk, ws_bids_cached: wsBooks.BYBIT.bids.size + wsBooks.OKX.bids.size, ws_asks_cached: wsBooks.BYBIT.asks.size + wsBooks.OKX.asks.size, note: 'Exness Market Data API ticks/candles. BID/ASK+tembok dari Bybit+OKX.' });
+  res.json({ ok, source: goldSource, status: exnessStatus, harga_acuan_mt5: xauusdPrice, harga_exness: exnessPrice, last_error: exnessLastError, last_ok: exnessLastOk ? new Date(exnessLastOk).toLocaleString('id-ID') : null, key_terisi: !!EXNESS_API_KEY, secret_terisi: !!EXNESS_API_SECRET, account_terisi: !!EXNESS_ACCOUNT_ID, ws_bybit: wsBybitOk, ws_okx: wsOkxOk, ws_bids_cached: wsBooks.BYBIT.bids.size + wsBooks.OKX.bids.size, ws_asks_cached: wsBooks.BYBIT.asks.size + wsBooks.OKX.asks.size, note: 'Exness Market Data API ticks/candles throttled 1 URL/10 detik. BID/ASK+tembok dari Bybit+OKX.' });
 });
 app.get('/api/ws-test', (req,res)=>{ const w=getWsOrderbooks(); res.json({ ws_bybit_ok: wsBybitOk, ws_okx_ok: wsOkxOk, ws_last_bybit: wsLastBybit ? new Date(wsLastBybit).toLocaleTimeString('id-ID') : '-', ws_last_okx: wsLastOkx ? new Date(wsLastOkx).toLocaleTimeString('id-ID') : '-', bids_cached: w.allBids.length, asks_cached: w.allAsks.length, top_bid: w.allBids.length ? Math.max(...w.allBids.map(x=>x.price)) : 0, top_ask: w.allAsks.length ? Math.min(...w.allAsks.map(x=>x.price)) : 0 }); });
 app.get('/api/test-telegram', async (req,res)=>{ const testId = generateSetupId(); await sendTelegram(`🎯 BUY NOW - Setup ${testId}\n\nEntry: $3954.19\nSL: $3949.19\nTP1: $3959.19\nTP2: $3964.19\nTembok Pemicu: BID 3935.90 - 58.38 XAUT - Betah 5m - OKX (jarak 12.4$)`); res.json({ ok: true, setup_id: testId, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF' }); });
@@ -395,4 +396,4 @@ app.get('/api/unlock', (req,res)=>{
   }
   res.json({ ok: true, msg: 'Lock dibatalkan' });
 });
-app.listen(PORT, ()=> console.log('ABEL BOT V9.3 REALTIME WS jalan di port ' + PORT + ' | WS lib: ' + (WSClient ? 'OK' : 'BELUM INSTALL ws') + ' | Exness: ' + (EXNESS_API_KEY ? 'TERISI' : 'KOSONG')));
+app.listen(PORT, ()=> console.log('ABEL BOT V9.4 REALTIME WS jalan di port ' + PORT + ' | WS lib: ' + (WSClient ? 'OK' : 'BELUM INSTALL ws') + ' | Exness: ' + (EXNESS_API_KEY ? 'TERISI' : 'KOSONG')));
