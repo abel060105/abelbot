@@ -2,320 +2,181 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ABEL FX ORDERBOOK - V9.2 REALTIME WS</title>
-<link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#0f172a">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="ABEL FX">
-<link rel="apple-touch-icon" href="/icon-192.png">
-<link rel="icon" type="image/png" href="/icon-192.png">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ABEL BOT - V10 XAUT ONLY</title>
 <style>
-  *{box-sizing:border-box}
-  body{margin:0;background:#0f172a;color:#e2e8f0;font-family:Arial,sans-serif;padding:12px}
-  .topbar{display:flex;justify-content:space-between;align-items:center;max-width:1100px;margin:0 auto 12px}
-  .topbar h1{font-size:18px;margin:0}
-  .card{background:#1a222e;border-radius:12px;padding:14px;margin:0 auto 12px;max-width:1100px}
-  .card-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
-  .card-head h2{margin:0;font-size:15px}
-  .btn-dl{background:#0ea5e9;color:#fff;border:0;padding:6px 10px;border-radius:8px;font-size:11px;cursor:pointer;font-weight:bold}
-  .btn-dark{background:#334155;color:#fff;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:bold}
-  .btn-green{background:#16a34a;color:#fff;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:bold}
-  .btn-yellow{background:#facc15;color:#000;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:bold}
-  .btn-center{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;max-width:1100px;margin:16px auto 8px;text-align:center}
-  .btn-install{background:#facc15;color:#000;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:900;display:none}
-  .label{font-size:11px;color:#94a3b8}
-  .live{color:#00e676;border:1px solid #00e676;padding:2px 6px;border-radius:20px;font-size:10px}
-  .signal{font-size:52px;font-weight:900;line-height:1;margin:8px 0}
-  .signal.BUY{color:#00e676}.signal.SELL{color:#ff5252}.signal.WAIT{color:#facc15}.signal.DONE{color:#94a3b8}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-  .mini{background:#0b1118;border-radius:10px;padding:10px}
-  .mini small{color:#94a3b8;font-size:11px}
-  .mini b{display:block;font-size:20px;margin:4px 0 2px}
-  .mini span{font-size:11px;color:#94a3b8}
-  .mini span.xaut{color:#38bdf8;font-size:12px;font-weight:900;display:block;margin-top:2px}
-  .status-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #1e293b;font-size:13px}
-  .harga-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;max-width:1100px;margin:0 auto 12px}
-  .harga-box{background:#1a222e;border-radius:12px;padding:12px;text-align:center}
-  .harga-box.highlight{border:2px solid #00e676}
-  .harga-box .lbl{font-size:11px;color:#94a3b8}
-  .harga-box .val{font-size:22px;font-weight:900;margin:6px 0}
-  .harga-box .sub{font-size:11px;color:#94a3b8}
-  .exness-card{border:2px solid #00e676 !important}
-  .exness-badge{display:inline-block;font-size:11px;font-weight:900;padding:4px 10px;border-radius:20px;margin-left:6px}
-  .exness-badge.OK{background:#00e676;color:#000}.exness-badge.FAIL{background:#ff5252;color:#fff}.exness-badge.WAIT{background:#facc15;color:#000}
-  .four-col{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;max-width:1100px;margin:0 auto 12px}
-  .four-col .card{margin:0}
-  .row{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #1e293b}
-  .row .left{font-weight:900;font-size:14px;line-height:1.3}
-  .row .left small{display:block;font-size:14px;font-weight:900;color:#facc15;margin-top:2px}
-  .row .left.BID{color:#60a5fa}.row .left.ASK{color:#f87171}
-  .row .left.FAR-BID{color:#38bdf8}.row .left.FAR-ASK{color:#fb923c}
-  .row .right{text-align:right;font-size:13px;font-weight:700}
-  .row .right small{display:block;font-size:11px;color:#94a3b8;font-weight:400}
-  .empty{color:#64748b;font-size:12px;padding:10px 0}
-  .pending-split{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
-  .pending-col{border-radius:10px;padding:10px;background:#0b1118}
-  .pending-col.bid-col{border:2px solid #00e676}
-  .pending-col.ask-col{border:2px solid #ff5252}
-  .pending-col h3{margin:0 0 8px;font-size:13px}
-  .pending-col.bid-col h3{color:#00e676}
-  .pending-col.ask-col h3{color:#ff5252}
-  .pending-item{border-radius:10px;padding:12px;background:#1a222e;border:2px solid #1e293b;margin-bottom:10px}
-  .pending-item.buy{border-color:#00e676}
-  .pending-item.sell{border-color:#ff5252}
-  .pending-item.touched{border-color:#facc15;background:#2a2a00}
-  .pending-top{display:flex;justify-content:space-between;align-items:center}
-  .pending-top b{font-size:16px}
-  .badge{font-size:11px;font-weight:900;padding:4px 8px;border-radius:20px}
-  .badge.buy{background:#00e676;color:#000}.badge.sell{background:#ff5252;color:#fff}.badge.touched{background:#facc15;color:#000}
-  .badge.setup{background:#facc15;color:#000}
-  .pending-item .mt5{font-size:14px;font-weight:900;color:#facc15;margin-top:4px}
-  .pending-item .meta{font-size:11px;color:#94a3b8;margin-top:6px;line-height:1.5}
-  .jam-box{background:#0b1118;border:1px solid #facc15;border-radius:10px;padding:10px;margin-top:12px;display:flex;justify-content:space-between}
-  .jam-box b{font-size:16px;color:#facc15}
-  .hist-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
-  .hist-table th,.hist-table td{padding:8px 6px;border-bottom:1px solid #1e293b;text-align:left;vertical-align:top}
-  .hist-table th{color:#94a3b8;font-size:11px}
-  .hist-note{width:100%;background:#0b1118;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px;font-size:12px}
-  .notif-on{color:#00e676}
-  .btn-riwayat{width:100%;padding:13px;background:#1e293b;color:#fff;border:1px solid #334155;border-radius:10px;font-weight:900;cursor:pointer;font-size:14px;margin-top:12px}
-  .btn-riwayat:hover{background:#334155}
-  .sesi-info{text-align:center;font-size:11px;color:#94a3b8;margin-top:6px}
-  #popupRiwayat{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:99;padding:16px}
-  .popup-box{background:#0f172a;max-width:620px;margin:20px auto;border-radius:14px;padding:16px;max-height:82vh;overflow:auto;border:1px solid #334155}
-  .riw-item{border-bottom:1px solid #1e293b;padding:10px 0;font-size:13px}
-  @media(max-width:700px){.four-col{grid-template-columns:1fr 1fr}.harga-grid{grid-template-columns:1fr}.pending-split{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}.signal{font-size:38px}.hist-table{font-size:11px}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0e17;color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:12px;padding-bottom:80px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.top h1{font-size:18px}
+.top h1 span{color:#f59e0b}
+.badge{font-size:11px;padding:4px 8px;border-radius:99px;background:#1e293b}
+.badge.live{background:#065f46;color:#a7f3d0}
+.price-card{background:linear-gradient(135deg,#111827,#1f2937);border:1px solid #374151;border-radius:16px;padding:16px;margin-bottom:12px;text-align:center}
+.price-card .label{font-size:11px;color:#9ca3af;letter-spacing:1px}
+.price-card .price{font-size:36px;font-weight:800;margin:4px 0}
+.price-card .sub{font-size:12px;color:#9ca3af}
+.price-card .sub b{color:#fff}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.card{background:#111827;border:1px solid #1f2937;border-radius:14px;padding:12px}
+.card .t{font-size:11px;color:#9ca3af}
+.card .v{font-size:18px;font-weight:700;margin-top:2px}
+.card .v.green{color:#34d399}
+.card .v.red{color:#f87171}
+.signal-card{border-radius:16px;padding:16px;margin-bottom:12px;border:1px solid #374151}
+.signal-card.WAIT{background:#111827}
+.signal-card.BUY{background:linear-gradient(135deg,#064e3b,#065f46);border-color:#059669}
+.signal-card.SELL{background:linear-gradient(135deg,#7f1d1d,#991b1b);border-color:#dc2626}
+.signal-card h2{font-size:22px}
+.signal-card p{font-size:13px;color:#d1d5db;margin-top:4px}
+.setup{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
+.setup div{background:rgba(0,0,0,.25);border-radius:10px;padding:10px;text-align:center}
+.setup div .l{font-size:10px;opacity:.8}
+.setup div .n{font-size:15px;font-weight:800;margin-top:2px}
+.setup div .pips{font-size:11px;opacity:.9}
+h3{font-size:14px;margin:14px 0 8px}
+.wall{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.wall.BID{border-left:4px solid #10b981}
+.wall.ASK{border-left:4px solid #ef4444}
+.wall .p{font-size:16px;font-weight:800}
+.wall .m{font-size:11px;color:#9ca3af}
+.wall .s{font-size:13px;font-weight:700;text-align:right}
+.wall .s span{font-size:11px;color:#9ca3af;font-weight:400;display:block}
+.btn{width:100%;padding:12px;border:none;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;margin-top:10px}
+.btn-test{background:#f59e0b;color:#000}
+.btn-unlock{background:#374151;color:#fff}
+.hist{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:12px;margin-bottom:8px}
+.hist .row{display:flex;justify-content:space-between;font-size:13px}
+.hist .win{color:#34d399;font-weight:700}
+.hist .lose{color:#f87171;font-weight:700}
+.small{font-size:11px;color:#9ca3af;margin-top:6px;text-align:center}
 </style>
 </head>
 <body>
-<div class="topbar"><h1>⚡ ABEL FX ORDERBOOK</h1><button class="btn-yellow" id="notifBtn" onclick="enableNotif()">🔔 AKTIFKAN NOTIF</button></div>
+<div class="top"><h1>ABEL BOT <span>V10 XAUT ONLY</span></h1><span class="badge live" id="statusBadge">LIVE</span></div>
 
-<div class="card" id="pendingCard">
-  <div class="card-head">
-    <h2>📌 PENDING ORDER</h2>
-    <button class="btn-dl" onclick="downloadCard('pendingCard','pending-order')">⬇ Download Gambar</button>
+<div class="price-card">
+  <div class="label">HARGA XAUT - BYBIT + OKX WS 200ms</div>
+  <div class="price" id="hargaXaut">$0.00</div>
+  <div class="sub">Sumber: <b>XAUT WS Langsung</b> • NO Gold-API • NO Selisih • NO Exness</div>
+  <div class="sub" id="wsInfo">Bybit: - • OKX: -</div>
+</div>
+
+<div class="grid2">
+  <div class="card"><div class="t">WINRATE (1 TP)</div><div class="v green" id="winrate">0% (0/0)</div></div>
+  <div class="card"><div class="t">WIN / LOSE</div><div class="v" id="winlose">0W - 0L</div></div>
+  <div class="card"><div class="t">BYBIT WS</div><div class="v" id="bybitWs">-</div></div>
+  <div class="card"><div class="t">OKX WS</div><div class="v" id="okxWs">-</div></div>
+</div>
+
+<div class="signal-card WAIT" id="signalCard">
+  <h2 id="signalTitle">WAIT</h2>
+  <p id="signalDesc">Nunggu tembok betah 5 menit, jarak &lt; 15$</p>
+  <div class="setup" id="setupBox" style="display:none">
+    <div><div class="l">ENTRY XAUT</div><div class="n" id="entryVal">-</div></div>
+    <div><div class="l">SL -50 PIPS</div><div class="n" id="slVal">-</div><div class="pips">-5.00$</div></div>
+    <div><div class="l">TP +100 PIPS</div><div class="n" id="tpVal">-</div><div class="pips">+10.00$</div></div>
   </div>
-  <div class="pending-split">
-    <div class="pending-col bid-col">
-      <h3>🟢 BID - BUY MARKET (Support) - Bybit+OKX WS</h3>
-      <div id="pendingBidList"><div class="empty">Loading BID...</div></div>
-    </div>
-    <div class="pending-col ask-col">
-      <h3>🔴 ASK - SELL MARKET (Resistance) - Bybit+OKX WS</h3>
-      <div id="pendingAskList"><div class="empty">Loading ASK...</div></div>
-    </div>
-  </div>
-  <div class="status-row" style="margin-top:8px"><span>Total Pending</span><b id="pendingCount">-</b></div>
+  <p id="wallInfo" style="margin-top:10px"></p>
+  <p id="lockInfo"></p>
 </div>
 
-<div class="card" id="signalCard">
-  <div class="card-head">
-    <h2>🎯 SINYAL AKTIF</h2>
-    <button class="btn-dl" onclick="downloadCard('signalCard','sinyal-aktif')">⬇ Download Gambar</button>
-  </div>
-  <div class="label" style="margin-top:8px">Sinyal Saat Ini <span class="live">● LIVE</span> <span class="badge setup" id="setupBadge" style="display:none"></span></div>
-  <div class="signal WAIT" id="signalText">WAIT</div>
-  <div class="jam-box">
-    <div><div style="font-size:11px;color:#94a3b8">🕐 Sinyal Aktif Sejak</div><b id="jamAktif">-</b><div id="jamTanggal" style="font-size:11px;color:#94a3b8">-</div></div>
-    <div style="text-align:right"><div style="font-size:11px;color:#94a3b8">⏳ Udah Jalan</div><b id="jamTelat">-</b><div id="jamStatus" style="font-size:11px;color:#00e676">Masih fresh, gas masuk</div></div>
-  </div>
-  <div class="grid2">
-    <div class="mini"><small>Entry (Market) - MT5</small><b id="entryVal">0</b><span class="xaut" id="entryXautVal">XAUT -</span></div>
-    <div class="mini"><small>Stop Loss - MT5</small><b id="slVal">0</b><span class="xaut" id="slXautVal">XAUT -</span></div>
-    <div class="mini"><small>TP 1 (50%) - MT5</small><b id="tp1Val">0</b><span class="xaut" id="tp1XautVal">XAUT -</span></div>
-    <div class="mini"><small>TP 2 - MT5</small><b id="tp2Val">0</b><span class="xaut" id="tp2XautVal">XAUT -</span></div>
-  </div>
-  <div class="status-row"><span>Setup</span><b id="setupVal" style="color:#facc15">-</b></div>
-  <div class="status-row"><span>Tembok Pemicu (Setup Ini)</span><b id="wallVal">-</b></div>
-  <div class="status-row"><span>Emergency SL</span><b id="emergencyVal">-</b></div>
-  <div class="status-row"><span>Partial</span><b id="partialVal">50/50</b></div>
-  <div class="status-row"><span>Re-Entry A</span><b id="reentryVal">-</b></div>
-  <div class="status-row"><span>Lock</span><b id="lockVal">-</b></div>
-  <div class="status-row"><span>Setup Terakhir (Last)</span><b id="lastVal" style="color:#94a3b8">-</b></div>
-  <div class="status-row"><span>Level TERSENTUH (Global)</span><b id="touchedVal" style="color:#facc15">-</b></div>
-  <button class="btn-riwayat" onclick="bukaRiwayatSesi()">📜 Riwayat Sinyal - Sejak Nyala</button>
-  <div class="sesi-info" id="sesiInfo">Sesi dimulai: - • Loading...</div>
-</div>
+<h3>🧱 Tembok Pending (Betah &gt; 5m)</h3>
+<div id="pendingList"><p class="small">Loading...</p></div>
 
-<div id="popupRiwayat">
-  <div class="popup-box">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-      <b>📜 Riwayat Sinyal - Sesi Ini</b>
-      <button class="btn-dl" onclick="tutupRiwayatSesi()">✕ Tutup</button>
-    </div>
-    <div id="riwayatSesiInfo" style="font-size:12px;color:#94a3b8;margin-top:6px"></div>
-    <div id="riwayatSesiIsi" style="margin-top:10px">Loading...</div>
-    <button class="btn-riwayat" onclick="tutupRiwayatSesi(); document.getElementById('historyCard').scrollIntoView({behavior:'smooth'})">📚 Lihat Jurnal Lengkap di Bawah</button>
-  </div>
-</div>
+<h3>🔥 Tembok Tersentuh</h3>
+<div id="touchedList"><p class="small">Belum ada yang kesenggol</p></div>
 
-<div class="harga-grid">
-  <div class="harga-box"><div class="lbl">XAUT (Orderbook Bybit+OKX WS)</div><div class="val" id="xautPrice">--</div><div class="sub">Harga mentah Bybit/OKX - buat tembok - realtime WS 200ms</div></div>
-  <div class="harga-box highlight"><div class="lbl">⭐ XAUUSD / MT5 (Acuan Exness)</div><div class="val" id="xauusdPrice" style="color:#00e676">--</div><div class="sub">Harga yang lo pake trading - dari Exness polling 1 detik</div></div>
-  <div class="harga-box"><div class="lbl">Selisih</div><div class="val" id="selisihPrice" style="font-size:18px">--</div><div class="sub" id="selisihDesc">XAUT - XAUUSD (Exness)</div></div>
-</div>
+<h3>📜 History Sesi Ini - 1 TP Only</h3>
+<div id="historyList"><p class="small">Belum ada sinyal</p></div>
 
-<!-- V9.2: EXNESS CUMA 1 HARGA ACUAN, BUKAN BID/ASK. BID/ASK + TEMBOK TETEP BYBIT+OKX WS -->
-<div class="card exness-card" id="exnessCard">
-  <div class="card-head"><h2>🏦 EXNESS - HARGA ACUAN MT5 <span id="exnessBadge" class="exness-badge WAIT">CEK...</span></h2><div style="display:flex;gap:6px"><button class="btn-dl" onclick="testWs()">🧪 TES WS</button><button class="btn-dl" onclick="testExness()">🧪 TES EXNESS</button></div></div>
-  <div style="font-size:12px;color:#94a3b8;margin-top:6px">Exness cuma ngasih 1 angka: harga XAUUSD realtime buat jadi acuan MT5 (polling 1 detik). BID/ASK + tembok + sinyal TETEP dari Bybit+OKX WebSocket (200ms) di atas. Kalo status GAGAL / FALLBACK, harga MT5 masih dari Gold-API cadangan. Bot MQL BELUM disambung.</div>
-  <div style="text-align:center;margin:14px 0 6px"><div style="font-size:11px;color:#94a3b8">HARGA ACUAN EXNESS - XAUUSD</div><div id="exnessPriceVal" style="font-size:36px;font-weight:900;color:#00e676">--</div><div id="exnessPriceSub" style="font-size:12px;color:#94a3b8">Akun Demo Raw Spread #31000220458 - Polling 1 detik</div></div>
-  <div class="status-row"><span>Status Exness</span><b id="exnessStatusVal">-</b></div>
-  <div class="status-row"><span>Sumber Harga MT5</span><b id="exnessSourceVal">-</b></div>
-  <div class="status-row"><span>Bybit WS (Orderbook)</span><b id="wsBybitVal">-</b></div>
-  <div class="status-row"><span>OKX WS (Orderbook)</span><b id="wsOkxVal">-</b></div>
-  <div class="status-row"><span>Error Terakhir Exness</span><b id="exnessErrorVal" style="font-size:11px;color:#94a3b8">-</b></div>
-</div>
-
-<div class="four-col" id="wallsCard">
-  <div class="card"><div class="card-head"><h2>🟢 BID Dekat - Bybit+OKX WS</h2></div><div id="bidsNear"><div class="empty">Loading...</div></div></div>
-  <div class="card"><div class="card-head"><h2>🔴 ASK Dekat - Bybit+OKX WS</h2></div><div id="asksNear"><div class="empty">Loading...</div></div></div>
-  <div class="card"><div class="card-head"><h2>🔵 BID Jauh - Bybit+OKX WS</h2></div><div id="bidsFar"><div class="empty">Loading...</div></div></div>
-  <div class="card"><div class="card-head"><h2>🟠 ASK Jauh - Bybit+OKX WS</h2></div><div id="asksFar"><div class="empty">Loading...</div></div></div>
-</div>
-
-<div class="card" id="historyCard">
-  <div class="card-head">
-    <h2>📚 RIWAYAT SINYAL - JURNALING</h2>
-    <div style="display:flex;gap:6px"><button class="btn-dl" onclick="downloadCSV()">⬇ CSV</button><button class="btn-dl" onclick="downloadCard('historyCard','riwayat')">⬇ Gambar</button></div>
-  </div>
-  <div style="font-size:12px;color:#94a3b8;margin-top:6px">Cari Setup di Telegram / di sini pake nomornya, misal #K7M2. Server nyala terus, riwayat kesimpen sampe 100 sinyal terakhir.</div>
-  <div style="overflow-x:auto"><table class="hist-table"><thead><tr><th>Setup</th><th>Tanggal / Jam</th><th>Sinyal</th><th>Entry</th><th>SL / TP</th><th>Hasil</th><th>Catatan (Jurnal)</th></tr></thead><tbody id="historyBody"><tr><td colspan="7" class="empty">Belum ada riwayat...</td></tr></tbody></table></div>
-  <div class="status-row" style="margin-top:8px"><span>Winrate TP2</span><b id="winrateVal">-</b></div>
-</div>
-
-<div class="card">
-  <div style="display:flex;justify-content:space-between"><h2 style="font-size:13px;margin:0">📥 Download Semua Dashboard</h2><button class="btn-dl" onclick="downloadCard('wallsCard','bid-ask')">⬇ Download BID/ASK</button></div>
-  <div class="status-row" style="margin-top:10px"><span>Supabase</span><b id="supabaseVal">-</b></div>
-  <div class="status-row"><span>Bybit / OKX (BID/ASK + Tembok - WS)</span><b id="exchangesVal">-</b></div>
-  <div class="status-row"><span>Bybit WS</span><b id="wsBybitVal2">-</b></div>
-  <div class="status-row"><span>OKX WS</span><b id="wsOkxVal2">-</b></div>
-  <div class="status-row"><span>Total Whale Level</span><b id="totalVal">-</b></div>
-  <div class="status-row"><span>Uptime</span><b id="uptimeVal">-</b></div>
-  <div class="status-row"><span>Last Update</span><b id="lastUpdateVal">-</b></div>
-  <div class="status-row"><span>Sumber Gold</span><b id="goldSourceVal">-</b></div>
-  <div class="status-row"><span>Exness Status (Harga Acuan)</span><b id="exnessStatusVal2">-</b></div>
-  <div class="status-row"><span>Exness Harga Acuan</span><b id="exnessPriceVal2">-</b></div>
-</div>
-
-<div class="btn-center">
-  <button class="btn-green" onclick="window.open(API_URL,'_blank')">LIHAT JSON MENTAH</button>
-  <button class="btn-dark" onclick="load()">🔄 REFRESH SEKARANG</button>
-  <button class="btn-dark" onclick="unlock()">🔓 BATALKAN LOCK MANUAL</button>
-  <button class="btn-install" id="installBtn" onclick="installPWA()">📲 INSTALL APLIKASI</button>
-</div>
-<div id="status" style="text-align:center;font-size:11px;color:#94a3b8;margin-bottom:20px">Auto-refresh tiap 1 detik • Bybit+OKX WebSocket (200ms) • Exness polling 1 detik • Mesin jalan di server</div>
+<button class="btn btn-test" onclick="testTelegram()">📩 TEST TELEGRAM - Format V10</button>
+<button class="btn btn-unlock" onclick="unlockSignal()">🔓 BATALKAN SINYAL AKTIF</button>
+<p class="small" id="lastUpdate">Last update: -</p>
+<p class="small">V10: Harga = XAUT WS 200ms. SL 50 pips (5$), TP 100 pips (10$). Winrate = WIN TP KENA vs LOSE SL KENA doang.</p>
 
 <script>
-const API_URL = 'https://abelbot.onrender.com/api/signal';
-const BASE_URL = API_URL.replace('/api/signal','');
-function fmt(n){ return n ? '$' + n.toFixed(2) : '0'; }
-let deferredPrompt = null;
-let lastSignal = 'WAIT';
-let notifEnabled = false;
-let lastNotifId = '';
-if('serviceWorker' in navigator){
-  window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('/sw.js').then(()=> console.log('SW OK')).catch(e=> console.log('SW gagal', e));
-  });
-}
-window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt = e; document.getElementById('installBtn').style.display = 'inline-block'; });
-window.addEventListener('appinstalled', ()=>{ document.getElementById('installBtn').style.display = 'none'; });
-async function installPWA(){
-  if(deferredPrompt){ deferredPrompt.prompt(); const r = await deferredPrompt.userChoice; if(r.outcome === 'accepted') document.getElementById('installBtn').style.display = 'none'; deferredPrompt = null; }
-  else { alert('Di Chrome HP: klik titik 3 di kanan atas > Tambahkan ke Layar Utama / Install App.\nDi Chrome Laptop: klik ikon Install di address bar (kanan).'); }
-}
-async function enableNotif(){
-  if(!('Notification' in window)){ alert('Browser ini gak support notif'); return; }
-  const perm = await Notification.requestPermission();
-  if(perm === 'granted'){ notifEnabled = true; localStorage.setItem('abel_notif','1'); document.getElementById('notifBtn').innerText = '🔔 NOTIF AKTIF ✅'; document.getElementById('notifBtn').classList.add('notif-on'); new Notification('ABEL FX - Notif Aktif', { body: 'Sinyal baru bakal bunyi + muncul notif di sini. Biarin PWA kebuka di background ya.', icon: '/icon-192.png' }); if(navigator.vibrate) navigator.vibrate(200); }
-  else { alert('Notif ditolak. Buka Settings browser > Site Settings > Notifications > Allow buat abelbot.vercel.app'); }
-}
-if(localStorage.getItem('abel_notif') === '1' && 'Notification' in window && Notification.permission === 'granted'){ notifEnabled = true; document.getElementById('notifBtn').innerText = '🔔 NOTIF AKTIF ✅'; }
-function playBeep(){ try{ const ctx = new (window.AudioContext || window.webkitAudioContext)(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value = 880; o.type = 'sine'; g.gain.value = 0.15; o.start(); o.stop(ctx.currentTime + 0.4); setTimeout(()=>{ const o2 = ctx.createOscillator(); const g2 = ctx.createGain(); o2.connect(g2); g2.connect(ctx.destination); o2.frequency.value = 880; g2.gain.value = 0.15; o2.start(); o2.stop(ctx.currentTime + 0.4); }, 500); }catch(e){} }
-function sendNotif(title, body){ if(!notifEnabled) return; playBeep(); if(navigator.vibrate) navigator.vibrate([200,100,200]); if('Notification' in window && Notification.permission === 'granted'){ try{ new Notification(title, { body, icon: '/icon-192.png', tag: 'abel-signal', requireInteraction: true }); }catch(e){} } document.title = '🔔 ' + title; setTimeout(()=>{ document.title = 'ABEL FX ORDERBOOK'; }, 5000); }
-async function downloadCard(cardId, fileName){ const el = document.getElementById(cardId); if(!el) return; try{ const canvas = await html2canvas(el, { backgroundColor: '#1a222e', scale: 2, useCORS: true }); const a = document.createElement('a'); const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-'); a.download = `abel-${fileName}-${ts}.png`; a.href = canvas.toDataURL('image/png'); a.click(); }catch(e){ alert('Gagal download: ' + e.message); } }
-function getNote(id){ return localStorage.getItem('abel_note_' + id) || ''; }
-function saveNote(id, val){ localStorage.setItem('abel_note_' + id, val); }
-function downloadCSV(){ const rows = [['Setup','Tanggal','Jam','Sinyal','Entry_MT5','SL_MT5','TP1_MT5','TP2_MT5','Size','Hasil','Catatan']]; const hist = window._lastHistory || []; hist.forEach(h=>{ const dt = new Date(h.created_at); rows.push([h.setup_id||'', dt.toLocaleDateString('id-ID'), dt.toLocaleTimeString('id-ID'), h.signal, h.entry_mt5, h.sl_mt5, h.tp1_mt5, h.tp2_mt5, h.size, h.result, getNote(h.id).replace(/,/g,';')]); }); const csv = rows.map(r=> r.join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'abel-jurnal-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); }
-async function testExness(){ try{ const r = await fetch(BASE_URL + '/api/exness-test', { cache: 'no-store' }); const j = JSON.parse(await r.text()); alert('EXNESS TEST - HARGA ACUAN\n\nOK: ' + j.ok + '\nStatus: ' + j.status + '\nHarga Exness: $' + (j.harga_exness || 0) + '\nHarga Acuan MT5: $' + (j.harga_acuan_mt5 || 0) + '\nKey: ' + (j.key_terisi ? 'TERISI' : 'KOSONG') + '\nSecret: ' + (j.secret_terisi ? 'TERISI' : 'KOSONG') + '\nError: ' + (j.last_error || '-') + '\n\nBID/ASK + tembok tetep dari Bybit+OKX WS, bukan dari sini.'); load(); }catch(e){ alert('Gagal tes Exness: ' + e.message); } }
-async function testWs(){ try{ const r = await fetch(BASE_URL + '/api/ws-test', { cache: 'no-store' }); const j = JSON.parse(await r.text()); alert('WS TEST - BYBIT+OKX\n\nBybit WS: ' + (j.ws_bybit_ok ? 'OK ✅' : 'OFF ❌') + ' - Last: ' + j.ws_last_bybit + '\nOKX WS: ' + (j.ws_okx_ok ? 'OK ✅' : 'OFF ❌') + ' - Last: ' + j.ws_last_okx + '\nBids cached: ' + j.bids_cached + '\nAsks cached: ' + j.asks_cached + '\nTop Bid: $' + j.top_bid + '\nTop Ask: $' + j.top_ask + '\n\nKalo OFF, cek Render Logs, pastikan npm install ws udah jalan.'); load(); }catch(e){ alert('Gagal tes WS: ' + e.message); } }
+const API = 'https://abel-bot.onrender.com';
+let lastData = null;
+
 async function load(){
-  document.getElementById('status').innerText = 'Menghubungkan...';
   try{
-    const r = await fetch(API_URL, { cache: 'no-store' });
-    const text = await r.text();
-    if(!text.trim().startsWith('{')) throw new Error('Server bales HTML');
-    const d = JSON.parse(text);
-    const price = d.harga?.xaut_mid || 0; const xauusd = d.harga?.xauusd_goldprice || 0; const selisih = d.harga?.selisih || 0;
-    const exPrice = d.harga?.xauusd_exness || 0; const exStatus = d.harga?.exness_status || '-'; const exSource = d.harga?.source || '-';
-    const wsBybit = d.harga?.ws_bybit || '-'; const wsOkx = d.harga?.ws_okx || '-';
-    const sigRaw = d.signal || 'WAIT'; const sigEl = document.getElementById('signalText'); sigEl.innerText = sigRaw;
-    let sigCls = 'WAIT'; if(sigRaw.includes('BUY')) sigCls = 'BUY'; else if(sigRaw.includes('SELL')) sigCls = 'SELL'; else if(sigRaw === 'DONE') sigCls = 'DONE'; sigEl.className = 'signal ' + sigCls;
-    const setupId = d.setup_id || ''; document.getElementById('setupVal').innerText = setupId || '-'; const badge = document.getElementById('setupBadge'); if(setupId){ badge.innerText = 'Setup ' + setupId; badge.style.display = 'inline-block'; } else { badge.style.display = 'none'; }
-    document.getElementById('wallVal').innerText = d.wall ? `${d.wall.side} ${d.wall.price.toFixed(2)} - ${d.wall.size.toFixed(2)} XAUT - ${d.wall.sources} - Betah ${d.wall.age_menit}m` : '-';
-    document.getElementById('lastVal').innerText = d.last_done ? d.last_done.last_result : (d.last_setup ? d.last_setup.setup_id + ' ' + d.last_setup.result : '-');
-    const notifKey = sigRaw + '-' + (d.lockedId || '');
-    if(notifKey !== lastNotifId){ if(lastSignal === 'WAIT' && (sigRaw.includes('BUY') || sigRaw.includes('SELL'))){ sendNotif('🎯 ' + sigRaw + ' ' + setupId + ' di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : ''), 'Eksekusi MARKET di ' + (d.entry_mt5 ? '$' + d.entry_mt5.toFixed(2) : '') + ' | SL ' + (d.sl_mt5 ? '$' + d.sl_mt5.toFixed(2) : '') + ' | TP1 ' + (d.tp1_mt5 ? '$' + d.tp1_mt5.toFixed(2) : '') + ' | TP2 ' + (d.tp2_mt5 ? '$' + d.tp2_mt5.toFixed(2) : '') + '. Eksekusi sekarang.'); } else if(sigRaw === 'DONE' && (lastSignal.includes('BUY') || lastSignal.includes('SELL'))){ sendNotif('✅ Sinyal DONE ' + setupId + ' - ' + (d.last_done?.last_result || ''), 'Cek riwayat buat jurnaling.'); } lastNotifId = notifKey; }
-    lastSignal = sigRaw;
-    document.getElementById('entryVal').innerText = fmt(d.entry_mt5); document.getElementById('slVal').innerText = fmt(d.sl_mt5); document.getElementById('tp1Val').innerText = fmt(d.tp1_mt5); document.getElementById('tp2Val').innerText = fmt(d.tp2_mt5);
-    const toXaut = (v)=> v ? fmt(v + selisih) : '-';
-    document.getElementById('entryXautVal').innerText = d.entry_mt5 ? 'XAUT ' + toXaut(d.entry_mt5) : 'XAUT -';
-    document.getElementById('slXautVal').innerText = d.sl_mt5 ? 'XAUT ' + toXaut(d.sl_mt5) : 'XAUT -';
-    document.getElementById('tp1XautVal').innerText = d.tp1_mt5 ? 'XAUT ' + toXaut(d.tp1_mt5) : 'XAUT -';
-    document.getElementById('tp2XautVal').innerText = d.tp2_mt5 ? 'XAUT ' + toXaut(d.tp2_mt5) : 'XAUT -';
-    document.getElementById('emergencyVal').innerText = d.emergency_sl_mt5 ? fmt(d.emergency_sl_mt5) + ' / XAUT ' + toXaut(d.emergency_sl_mt5) : '-';
-    document.getElementById('partialVal').innerText = d.partial || '50/50';
-    document.getElementById('reentryVal').innerText = d.reentry ? fmt(d.reentry.entry_mt5) + ' / XAUT ' + toXaut(d.reentry.entry_mt5) + ' / SL ' + fmt(d.reentry.sl_mt5) + ' / XAUT ' + toXaut(d.reentry.sl_mt5) : '-';
-    document.getElementById('lockVal').innerText = d.is_locked ? '🔒 ' + (d.lock_status || 'LOCKED') : (d.lock_status || 'Tidak terkunci');
-    const lockedAt = d.lockedAt || null; const isActiveMarket = sigRaw.includes('BUY') || sigRaw.includes('SELL');
-    if(isActiveMarket && lockedAt){ const dt = new Date(lockedAt); document.getElementById('jamAktif').innerText = dt.toLocaleTimeString('id-ID'); document.getElementById('jamTanggal').innerText = dt.toLocaleDateString('id-ID'); const diffMenit = Math.floor((Date.now() - dt.getTime())/60000); const diffDetik = Math.floor((Date.now() - dt.getTime())/1000) % 60; document.getElementById('jamTelat').innerText = diffMenit + 'm ' + diffDetik + 'd'; const statusEl = document.getElementById('jamStatus'); if(diffMenit <= 2){ statusEl.innerText = 'Market baru eksekusi, pantau TP1'; statusEl.style.color = '#00e676'; } else if(diffMenit <= 10){ statusEl.innerText = 'Market udah jalan ' + diffMenit + 'm, cek TP1'; statusEl.style.color = '#facc15'; } else { statusEl.innerText = 'Market udah ' + diffMenit + 'm belum TP1, pantau terus'; statusEl.style.color = '#ff5252'; } }
-    else { document.getElementById('jamAktif').innerText = '-'; document.getElementById('jamTanggal').innerText = 'Belum ada sinyal aktif'; document.getElementById('jamTelat').innerText = '-'; document.getElementById('jamStatus').innerText = 'Nunggu sinyal...'; document.getElementById('jamStatus').style.color = '#94a3b8'; }
-    document.getElementById('xautPrice').innerText = price ? '$' + price.toFixed(2) : '--'; document.getElementById('xauusdPrice').innerText = xauusd ? '$' + xauusd.toFixed(2) : '--'; document.getElementById('selisihPrice').innerText = (selisih>=0?'+':'') + selisih.toFixed(2) + '$'; document.getElementById('selisihDesc').innerText = selisih < 0 ? 'XAUT lebih murah ' + Math.abs(selisih).toFixed(2) + '$ dari MT5 (Exness)' : 'XAUT lebih mahal ' + selisih.toFixed(2) + '$ dari MT5 (Exness)'; document.getElementById('goldSourceVal').innerText = d.harga?.source || '-';
-    document.getElementById('exnessPriceVal').innerText = exPrice ? '$' + exPrice.toFixed(2) : '-- (fallback Gold-API)';
-    document.getElementById('exnessPriceSub').innerText = exPrice ? 'Harga acuan MT5 dari Exness - Update polling 1 detik' : 'Exness belum nyambung, pake Gold-API dulu';
-    document.getElementById('exnessStatusVal').innerText = exStatus;
-    document.getElementById('exnessSourceVal').innerText = exSource;
-    document.getElementById('wsBybitVal').innerText = wsBybit;
-    document.getElementById('wsOkxVal').innerText = wsOkx;
-    document.getElementById('exnessErrorVal').innerText = d.harga?.exness_last_error || '-';
-    const badge2 = document.getElementById('exnessBadge');
-    if(exStatus === 'EXNESS-OK'){ badge2.innerText = 'EXNESS OK ✅'; badge2.className = 'exness-badge OK'; }
-    else if(exStatus === 'NO-KEY'){ badge2.innerText = 'NO-KEY ⚠️'; badge2.className = 'exness-badge WAIT'; }
-    else { badge2.innerText = 'FALLBACK ⚠️ ' + exStatus; badge2.className = 'exness-badge FAIL'; }
-    const st2 = document.getElementById('exnessStatusVal2'); if(st2) st2.innerText = exStatus + ' | ' + exSource;
-    const pv2 = document.getElementById('exnessPriceVal2'); if(pv2) pv2.innerText = exPrice ? '$' + exPrice.toFixed(2) : '-';
-    document.getElementById('wsBybitVal2').innerText = wsBybit;
-    document.getElementById('wsOkxVal2').innerText = wsOkx;
-    const render = (el, arr, cls) => { if(!arr.length){ document.getElementById(el).innerHTML = '<div class="empty">Gak ada whale di area ini</div>'; return; } document.getElementById(el).innerHTML = arr.map(l=>{ let mt5 = l.price_mt5 || (l.price - selisih); let jarak = price ? Math.abs(l.price - price).toFixed(1) + '$ dari harga' : ''; return `<div class="row"><div class="left ${cls}">${l.side} ${l.price.toFixed(2)}<small>MT5 ${mt5.toFixed(2)}</small></div><div class="right">${l.size.toFixed(4)} XAUT<small>$${(l.size * l.price).toFixed(0)} • ${jarak} • ${l.sources||''} • ${l.age_menit||0}m</small></div></div>`; }).join(''); };
-    const wallsNear = d.wallsNear || d.walls || []; const wallsFar = d.wallsFar || [];
-    render('bidsNear', wallsNear.filter(w=>w.side==='BID').sort((a,b)=>b.price-a.price).slice(0,6), 'BID'); render('asksNear', wallsNear.filter(w=>w.side==='ASK').sort((a,b)=>a.price-b.price).slice(0,6), 'ASK'); render('bidsFar', wallsFar.filter(w=>w.side==='BID').sort((a,b)=>b.size-a.size), 'FAR-BID'); render('asksFar', wallsFar.filter(w=>w.side==='ASK').sort((a,b)=>b.size-a.size), 'FAR-ASK');
-    let pendingSource = Array.isArray(d.pendingOrders) ? d.pendingOrders : []; let touchedSource = Array.isArray(d.touchedLevels) ? d.touchedLevels : [];
-    const renderPendingItem = (w)=>{ const mt5 = w.price_mt5 || (w.price - selisih); const isTouched = w.status === 'TERSENTUH'; const isBuy = w.side === 'BID'; const cls = isTouched ? 'touched' : (isBuy ? 'buy' : 'sell'); const badgeCls = isTouched ? 'touched' : (isBuy ? 'buy' : 'sell'); const badgeText = isTouched ? '🔥 TERSENTUH' : (isBuy ? 'BUY MARKET' : 'SELL MARKET'); return `<div class="pending-item ${cls}"><div class="pending-top"><b>${w.side} ${w.price.toFixed(2)}</b><span class="badge ${badgeCls}">${badgeText}</span></div><div class="mt5">MT5 ${mt5.toFixed(2)} • ${isBuy?'BUY MARKET':'SELL MARKET'} di ${mt5.toFixed(2)}</div><div class="meta">${w.size.toFixed(4)} XAUT • $${(w.size * w.price).toFixed(0)} • ${w.sources||''} • Umur ${w.age_menit||0}m<br>Jarak ke harga MT5: ${(w.distance_mt5 ?? (xauusd?Math.abs(mt5-xauusd):0)).toFixed(1)}$ ${isTouched?'• UDAH KENA!':'• Belum kena'}</div></div>`; };
-    document.getElementById('pendingBidList').innerHTML = pendingSource.filter(w=> w.side==='BID').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada BID pending yang betah 5 menit - lagi nunggu...</div>';
-    document.getElementById('pendingAskList').innerHTML = pendingSource.filter(w=> w.side==='ASK').sort((a,b)=> b.size - a.size).map(renderPendingItem).join('') || '<div class="empty">Gak ada ASK pending yang betah 5 menit - lagi nunggu...</div>';
-    document.getElementById('pendingCount').innerText = pendingSource.length + ' pending • ' + touchedSource.length + ' tersentuh';
-    document.getElementById('touchedVal').innerText = touchedSource.length ? touchedSource.map(w=> `${w.side} ${w.price.toFixed(2)} (MT5 ${(w.price_mt5||w.price-selisih).toFixed(2)})`).join(' | ') : '-';
-    document.getElementById('supabaseVal').innerText = d.supabase || '-'; document.getElementById('exchangesVal').innerText = d.exchanges ? 'BYB:' + (d.exchanges.bybit?'OK':'X') + ' OKX:' + (d.exchanges.okx?'OK':'X') : '-'; document.getElementById('totalVal').innerText = (d.walls?.length || 0) + ' level • Jauh: ' + (d.wallsFarCount || 0);
-    document.getElementById('uptimeVal').innerText = (d.uptime_menit || 0) + ' menit';
-    if(d.uptimeStart){ document.getElementById('sesiInfo').innerText = 'Sesi dimulai: ' + new Date(d.uptimeStart).toLocaleString('id-ID') + ' • ' + (d.uptime_menit || 0) + ' menit lalu • ' + (d.history ? d.history.length : 0) + ' sinyal sesi ini'; }
-    document.getElementById('lastUpdateVal').innerText = d.last_update ? new Date(d.last_update).toLocaleTimeString('id-ID') : '-'; document.getElementById('status').innerText = 'Update: ' + new Date().toLocaleTimeString('id-ID') + ' • Bybit+OKX WS 200ms • Exness 1 detik • Mesin jalan di server';
-    const hist = d.history || []; window._lastHistory = hist;
-    if(hist.length){ document.getElementById('historyBody').innerHTML = hist.map(h=>{ const dt = new Date(h.created_at); const resultColor = h.result === 'TP2 KENA' ? '#00e676' : h.result === 'SL KENA' ? '#ff5252' : h.result === 'AKTIF' ? '#facc15' : '#94a3b8'; return `<tr><td style="font-weight:900;color:#facc15">${h.setup_id||'-'}</td><td>${dt.toLocaleDateString('id-ID')}<br><small style="color:#94a3b8">${dt.toLocaleTimeString('id-ID')}</small></td><td style="font-weight:900;color:${h.signal.includes('BUY')?'#00e676':'#ff5252'}">${h.signal}</td><td>$${h.entry_mt5.toFixed(2)}<br><small style="color:#94a3b8">${h.size.toFixed(2)} XAUT • ${h.sources||''}</small></td><td>SL $${h.sl_mt5.toFixed(2)}<br>TP1 $${h.tp1_mt5.toFixed(2)}<br>TP2 $${h.tp2_mt5.toFixed(2)}</td><td style="font-weight:900;color:${resultColor}">${h.result}${h.result_price ? '<br><small style="color:#94a3b8">$'+h.result_price.toFixed(2)+'</small>' : ''}${h.duration_menit ? '<br><small style="color:#94a3b8">'+h.duration_menit+'m</small>' : ''}</td><td><input class="hist-note" value="${getNote(h.id).replace(/"/g,'&quot;')}" placeholder="Tulis jurnal... misal: TP1, dll" oninput="saveNote('${h.id}', this.value)" /></td></tr>`; }).join(''); const closed = hist.filter(h=> h.result !== 'AKTIF'); const win = hist.filter(h=> h.result === 'TP2 KENA').length; document.getElementById('winrateVal').innerText = closed.length ? win + ' TP2 / ' + closed.length + ' closed = ' + Math.floor(win/closed.length*100) + '% winrate' : '-'; } else { document.getElementById('historyBody').innerHTML = '<tr><td colspan="7" class="empty">Belum ada riwayat...</td></tr>'; }
-  }catch(e){ document.getElementById('status').innerText = 'Gagal: ' + e.message; }
+    const r = await fetch(API + '/api/signal');
+    const d = await r.json();
+    lastData = d;
+    // Harga XAUT - V10: field baru xaut, fallback ke xaut_mid / harga lama biar gak NaN
+    const harga = d.harga?.xaut || d.harga?.xaut_mid || d.harga?.xauusd_goldprice || 0;
+    document.getElementById('hargaXaut').textContent = '$' + Number(harga).toFixed(2);
+    document.getElementById('wsInfo').textContent = 'Bybit: ' + (d.harga?.ws_bybit||'-') + ' • OKX: ' + (d.harga?.ws_okx||'-');
+    document.getElementById('bybitWs').textContent = d.harga?.ws_bybit || '-';
+    document.getElementById('okxWs').textContent = d.harga?.ws_okx || '-';
+
+    // Winrate V10 - dari winrate_data server, 1 TP doang
+    const wr = d.winrate_data || { total:0, win:0, lose:0, winrate:0 };
+    document.getElementById('winrate').textContent = wr.winrate + '% (' + wr.win + '/' + wr.total + ')';
+    document.getElementById('winlose').textContent = wr.win + 'W - ' + wr.lose + 'L';
+
+    // Sinyal - V10: entry, sl, tp (gak ada tp2 lagi)
+    const card = document.getElementById('signalCard');
+    const sig = (d.signal||'WAIT').toUpperCase();
+    card.className = 'signal-card ' + (sig.includes('BUY') ? 'BUY' : sig.includes('SELL') ? 'SELL' : 'WAIT');
+    document.getElementById('signalTitle').textContent = d.signal + (d.setup_id ? ' - ' + d.setup_id : '');
+    document.getElementById('signalDesc').textContent = d.lock_status || '';
+    const setupBox = document.getElementById('setupBox');
+    if(d.is_locked && d.entry){
+      setupBox.style.display = 'grid';
+      document.getElementById('entryVal').textContent = '$' + Number(d.entry).toFixed(2);
+      document.getElementById('slVal').textContent = '$' + Number(d.sl).toFixed(2);
+      document.getElementById('tpVal').textContent = '$' + Number(d.tp).toFixed(2);
+    } else {
+      setupBox.style.display = 'none';
+    }
+    if(d.wall){
+      document.getElementById('wallInfo').textContent = 'Tembok pemicu: ' + d.wall.side + ' $' + Number(d.wall.price).toFixed(2) + ' - ' + Number(d.wall.size).toFixed(2) + ' XAUT - Betah ' + d.wall.age_menit + 'm - ' + d.wall.sources;
+    } else {
+      document.getElementById('wallInfo').textContent = '';
+    }
+    document.getElementById('lockInfo').textContent = d.last_done ? 'Last: ' + d.last_done.last_result : '';
+
+    // Pending - V10: price = harga XAUT asli, distance = jarak XAUT
+    const pending = d.pendingOrders || d.pending || [];
+    document.getElementById('pendingList').innerHTML = pending.length ? pending.map(w=>`
+      <div class="wall ${w.side}">
+        <div><div class="p">${w.side} $${Number(w.price).toFixed(2)}</div><div class="m">${w.sources} • Betah ${w.age_menit}m • Jarak ${(w.distance ?? w.distance_mt5 ?? 0).toFixed(1)}$</div></div>
+        <div class="s">${Number(w.size).toFixed(2)} XAUT<span>${w.instruction||''} • ${w.status||'PENDING'}</span></div>
+      </div>`).join('') : '<p class="small">Belum ada tembok yang betah 5 menit</p>';
+
+    const touched = d.touchedLevels || d.touched || [];
+    document.getElementById('touchedList').innerHTML = touched.length ? touched.map(w=>`
+      <div class="wall ${w.side}">
+        <div><div class="p">${w.side} $${Number(w.price).toFixed(2)}</div><div class="m">${w.sources} • Betah ${w.age_menit}m • KESENGGOL</div></div>
+        <div class="s">${Number(w.size).toFixed(2)} XAUT<span>${w.instruction||''}</span></div>
+      </div>`).join('') : '<p class="small">Belum ada yang kesenggol</p>';
+
+    // History - V10: WIN / LOSE 1 TP doang
+    const hist = d.history || [];
+    document.getElementById('historyList').innerHTML = hist.length ? hist.slice(0,10).map(h=>{
+      const isWin = (h.result||'').includes('WIN');
+      const isLose = (h.result||'').includes('LOSE');
+      const cls = isWin ? 'win' : isLose ? 'lose' : '';
+      return `<div class="hist"><div class="row"><b>${h.signal} ${h.setup_id||''}</b><span class="${cls}">${h.result||'AKTIF'}</span></div><div class="row"><span>Entry $${Number(h.entry||h.entry_mt5||0).toFixed(2)} • SL $${Number(h.sl||h.sl_mt5||0).toFixed(2)} (-50 pips) • TP $${Number(h.tp||h.tp_mt5||0).toFixed(2)} (+100 pips)</span></div><div class="row"><span>${new Date(h.created_at).toLocaleTimeString('id-ID')}</span><span>${h.duration_menit||0}m</span></div></div>`;
+    }).join('') : '<p class="small">Belum ada sinyal</p>';
+
+    document.getElementById('lastUpdate').textContent = 'Last update: ' + new Date().toLocaleTimeString('id-ID') + ' • Sesi mulai: ' + new Date(d.uptimeStart).toLocaleTimeString('id-ID');
+    document.getElementById('statusBadge').textContent = 'LIVE • V10';
+  }catch(e){
+    document.getElementById('statusBadge').textContent = 'OFFLINE';
+    console.log('load gagal', e.message);
+  }
 }
-async function bukaRiwayatSesi(){
-  document.getElementById('popupRiwayat').style.display = 'block'; document.getElementById('riwayatSesiIsi').innerHTML = 'Loading...';
-  try{ const r = await fetch(BASE_URL + '/api/history', { cache: 'no-store' }); const j = JSON.parse(await r.text()); const hist = j.history || []; document.getElementById('riwayatSesiInfo').innerText = 'Sesi: ' + (j.sesi_mulai || '-') + ' • Total: ' + (j.total || hist.length) + ' sinyal • Uptime: ' + (j.uptime_menit || 0) + ' menit'; if(!hist.length){ document.getElementById('riwayatSesiIsi').innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8">Belum ada sinyal di sesi ini.<br>Bot baru nyala, tunggu sinyal pertama.</div>'; return; } document.getElementById('riwayatSesiIsi').innerHTML = hist.map(h=>{ const dt = new Date(h.created_at); const c = h.result === 'TP2 KENA' ? '#00e676' : h.result === 'SL KENA' ? '#ff5252' : '#facc15'; return `<div class="riw-item"><b style="color:${h.signal && h.signal.includes('BUY') ? '#00e676' : '#ff5252'}">${h.signal}</b> - <b style="color:${c}">${h.result || '-'}</b> <span style="float:right;color:#94a3b8;font-size:12px">${dt.toLocaleDateString('id-ID')} ${dt.toLocaleTimeString('id-ID')}</span><br><small style="color:#cbd5e1">Setup ${h.setup_id || '-'} | Entry $${h.entry_mt5 ? h.entry_mt5.toFixed(2) : '-'} | SL $${h.sl_mt5 ? h.sl_mt5.toFixed(2) : '-'} | TP1 $${h.tp1_mt5 ? h.tp1_mt5.toFixed(2) : '-'} | TP2 $${h.tp2_mt5 ? h.tp2_mt5.toFixed(2) : '-'}${h.result_price ? ' | Close $' + h.result_price.toFixed(2) : ''}${h.duration_menit ? ' | ' + h.duration_menit + 'm' : ''}</small></div>`; }).join(''); }catch(e){ document.getElementById('riwayatSesiIsi').innerHTML = 'Gagal load riwayat: ' + e.message; }
+async function testTelegram(){
+  try{ const r = await fetch(API + '/api/test-telegram'); const d = await r.json(); alert('Telegram terkirim! Setup ' + d.setup_id); }catch(e){ alert('Gagal: ' + e.message); }
 }
-function tutupRiwayatSesi(){ document.getElementById('popupRiwayat').style.display = 'none'; }
-document.addEventListener('click', (e)=>{ if(e.target && e.target.id === 'popupRiwayat') tutupRiwayatSesi(); });
-async function unlock(){ try{ const r = await fetch(BASE_URL + '/api/unlock'); const d = JSON.parse(await r.text()); alert(d.msg || 'Unlocked'); load(); }catch(e){ alert('Gagal unlock: ' + e.message); } }
-load(); setInterval(load, 1000);
+async function unlockSignal(){
+  try{ await fetch(API + '/api/unlock'); load(); }catch(e){ alert('Gagal: ' + e.message); }
+}
+load();
+setInterval(load, 1000);
 </script>
 </body>
 </html>
