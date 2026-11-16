@@ -1,10 +1,7 @@
-// ABEL BOT - V8.4 NO-BINANCE + THRESHOLD PER-EXCHANGE - MESIN DI SERVER, API CUMA BACA, 1 SETUP = 1 OBJEK
-// MODIF: + TELEGRAM PRIBADI+CHANNEL + /api/history SESI INI
-// MODIF V8.3: HAPUS BINANCE TOTAL - CUMA BYBIT + OKX
-// MODIF V8.4: BYBIT VIA BYTICK (ANTI-BLOCK) + THRESHOLD DIPISAH PER EXCHANGE BIAR BYBIT GAK KE-FILTER OKX
-// MODIF V9.4 FULL: BYBIT WS BYTICK + FETCHORDERBOOKS GABUNGAN WS+REST + EXNESS MARKET DATA API THROTTLED (1 URL / 10 DETIK, GILIRAN, BACKOFF 60 DETIK KLO 429)
-// SERVER->BYBIT/OKX WEBSOCKET 200ms. SERVER->EXNESS POLLING 10 DETIK. PWA->SERVER POLLING 1 DETIK.
-// CARA PASANG: tambah ws di package.json -> Render Environment isi EXNESS_API_KEY, EXNESS_API_SECRET, EXNESS_ACCOUNT_ID -> Deploy
+// ABEL BOT - V10 XAUT ONLY - NO GOLD-API, NO SELISIH, NO EXNESS, 1 TP ONLY
+// HARGA = XAUT WS BYBIT+OKX 200ms LANGSUNG. GAK ADA KONVERSI MT5.
+// SINYAL: BUY/SELL NOW, SL 50 PIPS (5$), TP 100 PIPS (10$). WINRATE HITUNG 1 TP DOANG.
+// SERVER->BYBIT/OKX WEBSOCKET 200ms. PWA->SERVER 1 DETIK.
 const express = require('express');
 const cors = require('cors');
 const app = express();
@@ -16,16 +13,11 @@ const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
 const TELEGRAM_CHAT_IDS = (process.env.TELEGRAM_CHAT_IDS || TELEGRAM_CHAT_ID || '').split(',').map(s=>s.trim()).filter(Boolean);
 
-// ===== EXNESS MARKET DATA API - CUMA HARGA ACUAN MT5, POLLING 10 DETIK (THROTTLED BIAR GAK 429) =====
-const EXNESS_API_KEY = process.env.EXNESS_API_KEY || '';
-const EXNESS_API_SECRET = process.env.EXNESS_API_SECRET || '';
-const EXNESS_ACCOUNT_ID = process.env.EXNESS_ACCOUNT_ID || '';
-let exnessPrice = 0, exnessLastOk = 0, exnessLastError = '';
-let exnessStatus = 'BELUM JALAN';
+// ===== V10: NO EXNESS, NO GOLD-API, NO SELISIH =====
+// Harga = XAUT WS langsung. Exness Trading API udah dihapus dari env, gak dipake lagi.
 
-// ===== WEBSOCKET BYBIT+OKX =====
 let WSClient = null;
-try{ WSClient = require('ws'); }catch(e){ console.log('Package ws belum ke-install, fallback REST polling. Jalankan: npm install ws'); }
+try{ WSClient = require('ws'); }catch(e){ console.log('Package ws belum ke-install, fallback REST. Jalankan: npm install ws'); }
 let wsBybit = null, wsOkx = null, wsBybitOk = false, wsOkxOk = false, wsLastBybit = 0, wsLastOkx = 0;
 let wsBooks = { BYBIT: { bids: new Map(), asks: new Map() }, OKX: { bids: new Map(), asks: new Map() } };
 
@@ -48,7 +40,7 @@ function generateSetupId(){
   return '#' + id;
 }
 
-let walls = [], wallsFar = [], xautPrice = 0, xauusdPrice = 0, lastKnownXauusd = 0, selisih = 0, goldSource = '-';
+let walls = [], wallsFar = [], xautPrice = 0;
 let exchanges = { bybit: false, okx: false };
 let uptimeStart = Date.now(), lastUpdate = null;
 let firstSeenMap = new Map(), signalHistory = [];
@@ -62,76 +54,14 @@ function closeHistory(id, result, resultPrice){
   if(h && !h.closed_at){ h.closed_at = Date.now(); h.result = result; h.result_price = resultPrice; h.duration_menit = Math.floor((h.closed_at - h.created_at)/60000); }
 }
 function getAgeMenit(key){ const t = firstSeenMap.get(key); if(!t) return 0; return Math.floor((Date.now() - t) / 60000); }
-function calcProfit(signal, entry, harga){
-  const p = signal === 'BUY' ? (harga - entry) : (entry - harga);
-  return (p >= 0 ? '+' : '') + p.toFixed(2) + '$';
+function calcProfitPips(signal, entry, harga){
+  // 1$ = 10 pips buat XAU
+  const dollar = signal === 'BUY' ? (harga - entry) : (entry - harga);
+  const pips = dollar * 10;
+  return (pips >= 0 ? '+' : '') + pips.toFixed(0) + ' pips (' + (dollar >= 0 ? '+' : '') + dollar.toFixed(2) + '$)';
 }
 
-function parseExnessQuote(d){
-  if(!d) return null;
-  const cands=[];
-  if(Array.isArray(d)) cands.push(...d);
-  if(d.data && Array.isArray(d.data)) cands.push(...d.data);
-  if(d.quotes && Array.isArray(d.quotes)) cands.push(...d.quotes);
-  if(d.result && Array.isArray(d.result)) cands.push(...d.result);
-  if(d.symbol || d.bid || d.ask || d.price || d.close) cands.push(d);
-  if(d.data && (d.data.bid || d.data.ask || d.data.price || d.data.close)) cands.push(d.data);
-  for(const q of cands){
-    const sym=(q.symbol||q.instrument||q.pair||q.name||'').toString().toUpperCase();
-    if(sym && !sym.includes('XAU')) continue;
-    const bid=parseFloat(q.bid ?? q.bidPrice ?? q.buy ?? q.b);
-    const ask=parseFloat(q.ask ?? q.askPrice ?? q.sell ?? q.a);
-    const mid=parseFloat(q.mid ?? q.price ?? q.last ?? q.close ?? q.c);
-    if(bid>1000 && ask>1000) return { mid:(bid+ask)/2 };
-    if(mid>1000) return { mid };
-  }
-  return null;
-}
-let exnessNextTry = 0, exnessTryIdx = 0;
-async function fetchExnessPrice(){
-  if(!EXNESS_API_KEY){ exnessStatus='NO-KEY'; exnessLastError='EXNESS_API_KEY belum diisi di Render Environment'; return false; }
-  if(Date.now() < exnessNextTry) return false;
-  const bases = ['https://api.exness.com'];
-  const headers = { 'Content-Type':'application/json','User-Agent':'ABEL-FX/9.4','Authorization':'Bearer '+EXNESS_API_KEY,'x-api-key':EXNESS_API_KEY,'X-API-Key':EXNESS_API_KEY };
-  if(EXNESS_API_SECRET) headers['X-API-Secret']=EXNESS_API_SECRET;
-  const allTries=[];
-  for(const base of bases){
-    allTries.push(base+'/v1/market-data/ticks?symbol=XAUUSD&limit=1');
-    allTries.push(base+'/v1/ticks?symbol=XAUUSD&limit=1');
-    allTries.push(base+'/api/v1/ticks?symbol=XAUUSD&limit=1');
-    allTries.push(base+'/v1/market-data/candles?symbol=XAUUSD&timeframe=M1&limit=1');
-    allTries.push(base+'/v1/candles?symbol=XAUUSD&timeframe=M1&limit=1');
-    allTries.push(base+'/api/v1/candles?symbol=XAUUSD&interval=1m&limit=1');
-  }
-  const url = allTries[exnessTryIdx % allTries.length];
-  exnessTryIdx++;
-  try{
-    const r=await fetch(url,{method:'GET',headers,signal:AbortSignal.timeout(5000)});
-    if(r.status===429){ exnessLastError='HTTP 429 Rate Limit di '+url+' - istirahat 60 detik'; exnessStatus='EXNESS-429'; exnessNextTry=Date.now()+60000; console.log('Exness try gagal: '+exnessLastError); return false; }
-    if(!r.ok){ exnessLastError='HTTP '+r.status+' di '+url; console.log('Exness try gagal: '+exnessLastError); return false; }
-    const d=await r.json().catch(()=>null);
-    const q=parseExnessQuote(d);
-    if(q){ exnessPrice=q.mid; xauusdPrice=q.mid; lastKnownXauusd=q.mid; goldSource='Exness Market Data API (tick terakhir)'; exnessStatus='EXNESS-OK'; exnessLastOk=Date.now(); exnessLastError=''; exnessNextTry=Date.now()+30000; console.log('Exness OK via '+url+' harga '+q.mid); return true; }
-    const arr = d ? (d.data || d.candles || d.ticks || d.result || (Array.isArray(d) ? d : null)) : null;
-    if(arr && arr.length){
-      const last=arr[arr.length-1];
-      const close=parseFloat(last.close ?? last.c ?? last.price ?? last.bid ?? 0);
-      if(close>1000){ exnessPrice=close; xauusdPrice=close; lastKnownXauusd=close; goldSource='Exness Market Data API (candle/tick terakhir)'; exnessStatus='EXNESS-OK'; exnessLastOk=Date.now(); exnessLastError=''; exnessNextTry=Date.now()+30000; console.log('Exness OK via '+url+' harga '+close); return true; }
-    }
-    exnessLastError='Format data gak dikenal di '+url; console.log('Exness try gagal: '+exnessLastError);
-  }catch(e){ exnessLastError=e.message+' di '+url; console.log('Exness try error: '+exnessLastError); }
-  return false;
-}
-async function fetchGoldPrice(){
-  const okExness = await fetchExnessPrice();
-  if(okExness) return true;
-  try{ const r = await fetch('https://api.gold-api.com/price/XAU', { signal: AbortSignal.timeout(4000), headers: { 'User-Agent': 'Mozilla/5.0' } }); const d = await r.json(); if(d && d.price && d.price > 1000){ xauusdPrice = d.price; lastKnownXauusd = d.price; goldSource = 'Gold-API (FALLBACK Exness gagal: ' + (exnessLastError || exnessStatus) + ')'; return true; } }catch(e){}
-  try{ const r = await fetch('https://data-asg.goldprice.org/dbXRates/USD', { signal: AbortSignal.timeout(4000), headers: { 'User-Agent': 'Mozilla/5.0' } }); const d = await r.json(); if(d && d.items && d.items[0] && d.items[0].xauPrice > 1000){ xauusdPrice = d.items[0].xauPrice; lastKnownXauusd = d.items[0].xauPrice; goldSource = 'GoldPrice.org (FALLBACK)'; return true; } }catch(e){}
-  if(lastKnownXauusd > 1000){ xauusdPrice = lastKnownXauusd; goldSource = goldSource + ' (last known)'; return true; }
-  if(xautPrice > 1000){ xauusdPrice = xautPrice; goldSource = 'XAUT fallback'; return true; }
-  return false;
-}
-// ===== WEBSOCKET BYBIT + OKX - V9.4 BYTICK =====
+// ===== WEBSOCKET BYBIT + OKX - XAUT ONLY =====
 function applyWsBook(source, bids, asks, isSnapshot){
   const book = wsBooks[source];
   if(isSnapshot){ book.bids.clear(); book.asks.clear(); }
@@ -167,7 +97,7 @@ function startBybitWS(){
           }
         }catch(e){}
       });
-      wsBybit.on('close', ()=>{ wsBybitOk=false; exchanges.bybit=false; console.log('BYBIT WS PUTUS dari ' + url + ', coba URL berikutnya / reconnect 2 detik...'); urlIdx = (urlIdx + 1) % urls.length; setTimeout(connect,2000); });
+      wsBybit.on('close', ()=>{ wsBybitOk=false; exchanges.bybit=false; console.log('BYBIT WS PUTUS dari ' + url + ', reconnect 2 detik...'); urlIdx = (urlIdx + 1) % urls.length; setTimeout(connect,2000); });
       wsBybit.on('error', (e)=>{ console.log('BYBIT WS ERROR ' + url + ' : ' + (e.message||e)); try{ wsBybit.close(); }catch(_){} });
     }catch(e){ console.log('Bybit WS gagal start', e.message); }
   };
@@ -216,12 +146,13 @@ async function fetchOrderbooks(){
   return { allBids, allAsks };
 }
 function mergeLevels(list){ const map = new Map(); list.forEach(o=>{ const key = o.price.toFixed(2); if(!map.has(key)) map.set(key, { price: o.price, size: 0, sources: new Set() }); const cur = map.get(key); cur.size += o.size; cur.sources.add(o.source); }); return [...map.values()].map(v=>({ price: v.price, size: v.size, sources: [...v.sources].join('+') })); }
+
+// ===== V10: HARGA = XAUT LANGSUNG, NO SELISIH =====
 function buildWalls(allBids, allAsks){
   const bidsAll = mergeLevels(allBids), asksAll = mergeLevels(allAsks);
   if(!bidsAll.length || !asksAll.length) return;
   const bestBid = Math.max(...bidsAll.map(b=> b.price)), bestAsk = Math.min(...asksAll.map(a=> a.price));
   xautPrice = (bestBid + bestAsk) / 2;
-  if(xauusdPrice > 1000) selisih = xautPrice - xauusdPrice;
   const activeKeys = new Set();
   bidsAll.forEach(o=> activeKeys.add('BID-' + o.price.toFixed(2)));
   asksAll.forEach(o=> activeKeys.add('ASK-' + o.price.toFixed(2)));
@@ -231,8 +162,8 @@ function buildWalls(allBids, allAsks){
     const key = side + '-' + o.price.toFixed(2);
     if(!firstSeenMap.has(key)) firstSeenMap.set(key, Date.now());
     const age = getAgeMenit(key);
-    const mt5 = o.price - selisih;
-    const wall = { side, price: o.price, price_mt5: Math.floor(mt5 * 100) / 100, size: o.size, sources: o.sources, age_menit: age, first_seen: firstSeenMap.get(key) };
+    // V10: price = harga XAUT asli, gak ada price_mt5 lagi
+    const wall = { side, price: o.price, size: o.size, sources: o.sources, age_menit: age, first_seen: firstSeenMap.get(key) };
     if(isFar) newFar.push(wall); else newWalls.push(wall);
   };
   const bySource = {};
@@ -263,72 +194,55 @@ function buildWalls(allBids, allAsks){
   walls = mergeFinal(newWalls);
   wallsFar = mergeFinal(newFar);
 }
+
+// ===== V10: PENDING - JARAK DARI HARGA XAUT LANGSUNG, BUKAN MT5 =====
 function buildPendingOrders(){
-  if(!walls.length || !xauusdPrice) return { pending: [], touched: [] };
+  if(!walls.length || !xautPrice) return { pending: [], touched: [] };
   const sorted = [...walls].sort((a,b)=> b.size - a.size).slice(0, 20); const pending = [], touched = [];
-  sorted.forEach(w=>{ if((w.age_menit || 0) < 5) return; const mt5 = w.price_mt5 || (w.price - selisih); const jarak = Math.abs(mt5 - xauusdPrice); const isTouched = jarak <= 3; const item = { ...w, price_mt5: Math.floor(mt5 * 100) / 100, instruction: w.side === 'BID' ? 'BUY' : 'SELL', status: isTouched ? 'TERSENTUH' : 'PENDING', distance_mt5: Math.floor(jarak * 100) / 100, notional: Math.floor(w.size * w.price) }; if(isTouched) touched.push(item); else pending.push(item); });
+  sorted.forEach(w=>{ if((w.age_menit || 0) < 5) return; const jarak = Math.abs(w.price - xautPrice); const isTouched = jarak <= 3; const item = { ...w, instruction: w.side === 'BID' ? 'BUY' : 'SELL', status: isTouched ? 'TERSENTUH' : 'PENDING', distance: Math.floor(jarak * 100) / 100, notional: Math.floor(w.size * w.price) }; if(isTouched) touched.push(item); else pending.push(item); });
   pending.sort((a,b)=> b.size - a.size); touched.sort((a,b)=> b.size - a.size); return { pending: pending.slice(0,6), touched: touched.slice(0,6) };
 }
+
+// ===== V10: SINYAL 1 TP DOANG - SL 50 PIPS (5$), TP 100 PIPS (10$) =====
 function checkSignal(){
   const { pending, touched } = buildPendingOrders();
   if(currentSetup){
     const s = currentSetup;
     const displaySignal = s.signal;
-    if(s.state === 'IN_POSITION'){
-      const kenaSL = displaySignal === 'BUY' ? xauusdPrice <= s.sl_mt5 : xauusdPrice >= s.sl_mt5;
-      if(kenaSL){
-        const profit = calcProfit(displaySignal, s.entry_mt5, xauusdPrice);
-        lastSetup = { ...s, state: 'CLOSED', result: 'SL KENA', result_price: xauusdPrice, closed_at: Date.now() };
-        lastDone = { last_result: displaySignal + ' SL KENA di ' + s.sl_mt5.toFixed(2) + ' - Setup ' + s.setup_id };
-        closeHistory(s.id, 'SL KENA', xauusdPrice);
-        sendTelegram(`❌ ${displaySignal} SL KENA - Setup ${s.setup_id}\n\nHarga: $${xauusdPrice.toFixed(2)}\nEntry tadi: $${s.entry_mt5.toFixed(2)}\nProfit: ${profit}`);
-        currentSetup = null;
-        return;
-      }
-      const kenaTP1 = displaySignal === 'BUY' ? xauusdPrice >= s.tp1_mt5 : xauusdPrice <= s.tp1_mt5;
-      if(kenaTP1){
-        s.state = 'TP1_HIT'; s.tp1_hit = true; s.tp1_at = Date.now();
-        const profit = calcProfit(displaySignal, s.entry_mt5, xauusdPrice);
-        sendTelegram(`🟢 ${displaySignal} TP1 KENA - Setup ${s.setup_id}\n\nHarga: $${xauusdPrice.toFixed(2)}\nEntry tadi: $${s.entry_mt5.toFixed(2)}\nProfit: ${profit}`);
-        return;
-      }
+    // Kena SL = LOSE
+    const kenaSL = displaySignal === 'BUY' ? xautPrice <= s.sl : xautPrice >= s.sl;
+    if(kenaSL){
+      const profit = calcProfitPips(displaySignal, s.entry, xautPrice);
+      lastSetup = { ...s, state: 'CLOSED', result: 'LOSE - SL KENA', result_price: xautPrice, closed_at: Date.now() };
+      lastDone = { last_result: displaySignal + ' LOSE - SL KENA di ' + s.sl.toFixed(2) + ' - Setup ' + s.setup_id };
+      closeHistory(s.id, 'LOSE - SL KENA', xautPrice);
+      sendTelegram(`❌ ${displaySignal} LOSE - Setup ${s.setup_id}\n\nHarga: $${xautPrice.toFixed(2)}\nEntry: $${s.entry.toFixed(2)}\nSL: $${s.sl.toFixed(2)} (-50 pips)\nHasil: ${profit}`);
+      currentSetup = null;
       return;
     }
-    if(s.state === 'TP1_HIT'){
-      const beLevel = s.entry_mt5;
-      const kenaBE = displaySignal === 'BUY' ? xauusdPrice <= beLevel : xauusdPrice >= beLevel;
-      if(kenaBE){
-        const profit = calcProfit(displaySignal, s.entry_mt5, xauusdPrice);
-        lastSetup = { ...s, state: 'CLOSED', result: 'BE KENA', result_price: beLevel, closed_at: Date.now() };
-        lastDone = { last_result: displaySignal + ' TP1 KENA, SISA BE - Setup ' + s.setup_id };
-        closeHistory(s.id, 'BE KENA', beLevel);
-        sendTelegram(`🟡 ${displaySignal} BE KENA - Setup ${s.setup_id}\n\nHarga: $${xauusdPrice.toFixed(2)}\nEntry tadi: $${s.entry_mt5.toFixed(2)}\nProfit: ${profit}`);
-        currentSetup = null;
-        return;
-      }
-      const kenaTP2 = displaySignal === 'BUY' ? xauusdPrice >= s.tp2_mt5 : xauusdPrice <= s.tp2_mt5;
-      if(kenaTP2){
-        const profit = calcProfit(displaySignal, s.entry_mt5, xauusdPrice);
-        lastSetup = { ...s, state: 'CLOSED', result: 'TP2 KENA', result_price: xauusdPrice, closed_at: Date.now() };
-        lastDone = { last_result: displaySignal + ' TP2 KENA di ' + s.tp2_mt5.toFixed(2) + ' - Setup ' + s.setup_id };
-        closeHistory(s.id, 'TP2 KENA', xauusdPrice);
-        sendTelegram(`✅ ${displaySignal} TP2 KENA - Setup ${s.setup_id}\n\nHarga: $${xauusdPrice.toFixed(2)}\nEntry tadi: $${s.entry_mt5.toFixed(2)}\nProfit: ${profit}`);
-        currentSetup = null;
-        return;
-      }
+    // Kena TP = WIN - CUMA 1 TP, GAK ADA TP2 / BE / TP1
+    const kenaTP = displaySignal === 'BUY' ? xautPrice >= s.tp : xautPrice <= s.tp;
+    if(kenaTP){
+      const profit = calcProfitPips(displaySignal, s.entry, xautPrice);
+      lastSetup = { ...s, state: 'CLOSED', result: 'WIN - TP KENA', result_price: xautPrice, closed_at: Date.now() };
+      lastDone = { last_result: displaySignal + ' WIN - TP KENA di ' + s.tp.toFixed(2) + ' - Setup ' + s.setup_id };
+      closeHistory(s.id, 'WIN - TP KENA', xautPrice);
+      sendTelegram(`✅ ${displaySignal} WIN - Setup ${s.setup_id}\n\nHarga: $${xautPrice.toFixed(2)}\nEntry: $${s.entry.toFixed(2)}\nTP: $${s.tp.toFixed(2)} (+100 pips)\nHasil: ${profit}`);
+      currentSetup = null;
       return;
     }
     return;
   }
-  if(!pending.length || !xauusdPrice) return;
-  const byJarak = [...pending].sort((a,b)=> a.distance_mt5 - b.distance_mt5);
+  if(!pending.length || !xautPrice) return;
+  const byJarak = [...pending].sort((a,b)=> a.distance - b.distance);
   const terdekat = byJarak[0];
-  if(terdekat.distance_mt5 > 15) return;
+  if(terdekat.distance > 15) return;
   const isBuy = terdekat.side === 'BID';
-  const entryMt5 = Math.floor(xauusdPrice * 100) / 100;
-  let slMt5, tp1Mt5, tp2Mt5, emergency, reentry;
-  if(isBuy){ slMt5 = entryMt5 - 5; tp1Mt5 = entryMt5 + 5; tp2Mt5 = entryMt5 + 10; emergency = entryMt5 - 8; reentry = { entry_mt5: entryMt5 - 3, sl_mt5: entryMt5 - 8 }; }
-  else { slMt5 = entryMt5 + 5; tp1Mt5 = entryMt5 - 5; tp2Mt5 = entryMt5 - 10; emergency = entryMt5 + 8; reentry = { entry_mt5: entryMt5 + 3, sl_mt5: entryMt5 + 8 }; }
+  const entry = Math.floor(xautPrice * 100) / 100;
+  // V10: SL 5$ = 50 pips, TP 10$ = 100 pips. 1$ = 10 pips.
+  let sl, tp;
+  if(isBuy){ sl = entry - 5; tp = entry + 10; }
+  else { sl = entry + 5; tp = entry - 10; }
   const setupId = generateSetupId();
   const displaySignal = isBuy ? 'BUY' : 'SELL';
   const now = Date.now();
@@ -337,15 +251,15 @@ function checkSignal(){
     setup_id: setupId,
     signal: displaySignal,
     state: 'IN_POSITION',
-    tp1_hit: false,
-    entry_mt5: entryMt5, sl_mt5: slMt5, tp1_mt5: tp1Mt5, tp2_mt5: tp2Mt5,
-    emergency_sl_mt5: emergency, partial: '50/50', reentry,
-    lockedAt: now, tp1_at: null, closed_at: null, result: 'AKTIF - MARKET',
-    wall: { side: terdekat.side, price: terdekat.price, size: terdekat.size, sources: terdekat.sources, age_menit: terdekat.age_menit, distance_mt5: terdekat.distance_mt5 },
-    lock_status: 'IN POSITION - ' + displaySignal + ' MARKET di ' + entryMt5.toFixed(2)
+    entry, sl, tp,
+    sl_pips: 50, tp_pips: 100,
+    lockedAt: now, closed_at: null, result: 'AKTIF',
+    wall: { side: terdekat.side, price: terdekat.price, size: terdekat.size, sources: terdekat.sources, age_menit: terdekat.age_menit, distance: terdekat.distance },
+    lock_status: 'IN POSITION - ' + displaySignal + ' di ' + entry.toFixed(2)
   };
-  addHistory({ id: currentSetup.id, setup_id: setupId, signal: displaySignal + ' MARKET', wall_side: terdekat.side, wall_price: terdekat.price, entry_mt5: entryMt5, entry_xaut: terdekat.price, sl_mt5: slMt5, tp1_mt5: tp1Mt5, tp2_mt5: tp2Mt5, size: terdekat.size, sources: terdekat.sources, age_menit: terdekat.age_menit, created_at: now, closed_at: null, result: 'AKTIF - MARKET', result_price: null, duration_menit: 0 });
-  sendTelegram(`🎯 ${displaySignal} NOW - Setup ${setupId}\n\nEntry: $${entryMt5.toFixed(2)}\nSL: $${slMt5.toFixed(2)}\nTP1: $${tp1Mt5.toFixed(2)}\nTP2: $${tp2Mt5.toFixed(2)}\nTembok Pemicu: ${terdekat.side} ${terdekat.price.toFixed(2)} - ${terdekat.size.toFixed(2)} XAUT - Betah ${terdekat.age_menit}m - ${terdekat.sources} (jarak ${terdekat.distance_mt5.toFixed(1)}$)`);
+  addHistory({ id: currentSetup.id, setup_id: setupId, signal: displaySignal + ' NOW', wall_side: terdekat.side, wall_price: terdekat.price, entry, sl, tp, sl_pips: 50, tp_pips: 100, size: terdekat.size, sources: terdekat.sources, age_menit: terdekat.age_menit, created_at: now, closed_at: null, result: 'AKTIF', result_price: null, duration_menit: 0 });
+  // V10 FORMAT TELEGRAM BARU - SIMPEL, GAK ADA TP2
+  sendTelegram(`🎯 ${displaySignal} NOW - Setup ${setupId}\n\nEntry: $${entry.toFixed(2)}\nSL: $${sl.toFixed(2)} (-50 pips)\nTP: $${tp.toFixed(2)} (+100 pips)\n\nTembok: ${terdekat.side} $${terdekat.price.toFixed(2)} - ${terdekat.size.toFixed(2)} XAUT - Betah ${terdekat.age_menit}m - ${terdekat.sources} (jarak ${terdekat.distance.toFixed(1)}$)`);
 }
 let tickRunning = false;
 async function tick(){
@@ -359,41 +273,44 @@ async function tick(){
   }catch(e){ console.log('tick gagal', e.message); }
   tickRunning = false;
 }
-setInterval(async ()=>{ try{ await fetchGoldPrice(); }catch(e){} }, 10000);
-setInterval(tick, 1000); tick(); fetchGoldPrice();
+setInterval(tick, 1000); tick();
 function buildSignalResponse(){
   const { pending, touched } = buildPendingOrders();
   if(currentSetup){
     const s = currentSetup;
-    const sigText = s.state === 'TP1_HIT' ? s.signal + ' - TP1 KENA' : s.signal + ' - AKTIF';
-    return { signal: sigText, reason: '', setup_id: s.setup_id, pending, touched, entry_mt5: s.entry_mt5, sl_mt5: s.sl_mt5, tp1_mt5: s.tp1_mt5, tp2_mt5: s.tp2_mt5, emergency_sl_mt5: s.emergency_sl_mt5, partial: s.partial, reentry: s.reentry, is_locked: true, lockedState: s.state, lockedAt: s.lockedAt, lockedId: s.id, lockedTp1Hit: s.tp1_hit, lock_status: s.lock_status, wall: s.wall };
+    return { signal: s.signal + ' - AKTIF', reason: '', setup_id: s.setup_id, pending, touched, entry: s.entry, entry_mt5: s.entry, sl: s.sl, sl_mt5: s.sl, tp: s.tp, tp_mt5: s.tp, sl_pips: 50, tp_pips: 100, is_locked: true, lockedState: s.state, lockedAt: s.lockedAt, lockedId: s.id, lock_status: s.lock_status, wall: s.wall };
   }
-  return { signal: 'WAIT', reason: '', setup_id: '', pending, touched, entry_mt5: 0, sl_mt5: 0, tp1_mt5: 0, tp2_mt5: 0, emergency_sl_mt5: 0, partial: '50/50', reentry: null, is_locked: false, lockedState: 'IDLE', lockedAt: null, lockedId: null, lockedTp1Hit: false, lock_status: lastSetup ? 'Last: ' + (lastDone ? lastDone.last_result : lastSetup.result) : 'Tidak terkunci', wall: null };
+  return { signal: 'WAIT', reason: '', setup_id: '', pending, touched, entry: 0, entry_mt5: 0, sl: 0, sl_mt5: 0, tp: 0, tp_mt5: 0, sl_pips: 50, tp_pips: 100, is_locked: false, lockedState: 'IDLE', lockedAt: null, lockedId: null, lock_status: lastSetup ? 'Last: ' + (lastDone ? lastDone.last_result : lastSetup.result) : 'Tidak terkunci', wall: null };
 }
-app.get('/', (req,res)=> res.send('ABEL BOT OK - /api/signal'));
+function calcWinrate(){
+  const closed = signalHistory.filter(x=> x.closed_at);
+  const win = closed.filter(x=> (x.result||'').includes('WIN')).length;
+  const lose = closed.filter(x=> (x.result||'').includes('LOSE')).length;
+  const total = win + lose;
+  return { total, win, lose, winrate: total ? Math.round(win/total*100) : 0 };
+}
+app.get('/', (req,res)=> res.send('ABEL BOT OK - /api/signal - V10 XAUT ONLY'));
 app.get('/api/signal', (req,res)=>{
   const sig = buildSignalResponse();
-  res.json({ ...sig, walls, wallsNear: walls, wallsFar, wallsFarCount: wallsFar.length, pendingOrders: sig.pending, touchedLevels: sig.touched, history: signalHistory, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF', harga: { xaut_mid: xautPrice, xauusd_goldprice: xauusdPrice, xauusd_exness: exnessPrice, selisih, source: goldSource, exness_status: exnessStatus, exness_last_error: exnessLastError, exness_last_ok: exnessLastOk, ws_bybit: wsBybitOk ? 'WS-OK' : 'WS-OFF/REST', ws_okx: wsOkxOk ? 'WS-OK' : 'WS-OFF/REST', ws_last_bybit: wsLastBybit, ws_last_okx: wsLastOkx }, range: { low: 3893, high: 4060 }, exchanges, supabase: 'OK', uptimeStart, uptime_menit: Math.floor((Date.now() - uptimeStart) / 60000), last_update: lastUpdate, last_done: lastDone, last_setup: lastSetup, current_setup: currentSetup });
+  const wr = calcWinrate();
+  res.json({ ...sig, walls, wallsNear: walls, wallsFar, wallsFarCount: wallsFar.length, pendingOrders: sig.pending, touchedLevels: sig.touched, history: signalHistory, winrate_data: wr, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF', harga: { xaut: xautPrice, xaut_mid: xautPrice, source: 'XAUT WS Bybit+OKX 200ms - NO GOLD-API, NO SELISIH, NO EXNESS', ws_bybit: wsBybitOk ? 'WS-OK' : 'WS-OFF/REST', ws_okx: wsOkxOk ? 'WS-OK' : 'WS-OFF/REST', ws_last_bybit: wsLastBybit, ws_last_okx: wsLastOkx }, exchanges, uptimeStart, uptime_menit: Math.floor((Date.now() - uptimeStart) / 60000), last_update: lastUpdate, last_done: lastDone, last_setup: lastSetup, current_setup: currentSetup });
 });
 app.get('/api/history', (req,res)=>{
   const since = req.query.since ? parseInt(req.query.since) : uptimeStart;
   const filtered = signalHistory.filter(x => (x.created_at || 0) >= since);
-  res.json({ history: filtered, total: filtered.length, uptimeStart, sesi_mulai: new Date(uptimeStart).toLocaleString('id-ID'), uptime_menit: Math.floor((Date.now() - uptimeStart) / 60000) });
+  const wr = calcWinrate();
+  res.json({ history: filtered, total: filtered.length, winrate_data: wr, uptimeStart, sesi_mulai: new Date(uptimeStart).toLocaleString('id-ID'), uptime_menit: Math.floor((Date.now() - uptimeStart) / 60000) });
 });
 app.get('/api/history-sesi', (req,res)=>{ res.redirect('/api/history'); });
-app.get('/api/exness-test', async (req,res)=>{
-  const ok = await fetchExnessPrice();
-  res.json({ ok, source: goldSource, status: exnessStatus, harga_acuan_mt5: xauusdPrice, harga_exness: exnessPrice, last_error: exnessLastError, last_ok: exnessLastOk ? new Date(exnessLastOk).toLocaleString('id-ID') : null, key_terisi: !!EXNESS_API_KEY, secret_terisi: !!EXNESS_API_SECRET, account_terisi: !!EXNESS_ACCOUNT_ID, ws_bybit: wsBybitOk, ws_okx: wsOkxOk, ws_bids_cached: wsBooks.BYBIT.bids.size + wsBooks.OKX.bids.size, ws_asks_cached: wsBooks.BYBIT.asks.size + wsBooks.OKX.asks.size, note: 'Exness Market Data API ticks/candles throttled 1 URL/10 detik. BID/ASK+tembok dari Bybit+OKX.' });
-});
-app.get('/api/ws-test', (req,res)=>{ const w=getWsOrderbooks(); res.json({ ws_bybit_ok: wsBybitOk, ws_okx_ok: wsOkxOk, ws_last_bybit: wsLastBybit ? new Date(wsLastBybit).toLocaleTimeString('id-ID') : '-', ws_last_okx: wsLastOkx ? new Date(wsLastOkx).toLocaleTimeString('id-ID') : '-', bids_cached: w.allBids.length, asks_cached: w.allAsks.length, top_bid: w.allBids.length ? Math.max(...w.allBids.map(x=>x.price)) : 0, top_ask: w.allAsks.length ? Math.min(...w.allAsks.map(x=>x.price)) : 0 }); });
-app.get('/api/test-telegram', async (req,res)=>{ const testId = generateSetupId(); await sendTelegram(`🎯 BUY NOW - Setup ${testId}\n\nEntry: $3954.19\nSL: $3949.19\nTP1: $3959.19\nTP2: $3964.19\nTembok Pemicu: BID 3935.90 - 58.38 XAUT - Betah 5m - OKX (jarak 12.4$)`); res.json({ ok: true, setup_id: testId, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF' }); });
+app.get('/api/ws-test', (req,res)=>{ const w=getWsOrderbooks(); res.json({ ws_bybit_ok: wsBybitOk, ws_okx_ok: wsOkxOk, ws_last_bybit: wsLastBybit ? new Date(wsLastBybit).toLocaleTimeString('id-ID') : '-', ws_last_okx: wsLastOkx ? new Date(wsLastOkx).toLocaleTimeString('id-ID') : '-', bids_cached: w.allBids.length, asks_cached: w.allAsks.length, top_bid: w.allBids.length ? Math.max(...w.allBids.map(x=>x.price)) : 0, top_ask: w.allAsks.length ? Math.min(...w.allAsks.map(x=>x.price)) : 0, xaut_price: xautPrice }); });
+app.get('/api/test-telegram', async (req,res)=>{ const testId = generateSetupId(); await sendTelegram(`🎯 BUY NOW - Setup ${testId}\n\nEntry: $3854.19\nSL: $3849.19 (-50 pips)\nTP: $3864.19 (+100 pips)\n\nTembok: BID $3852.90 - 58.38 XAUT - Betah 5m - OKX (jarak 1.2$)`); res.json({ ok: true, setup_id: testId, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF' }); });
 app.get('/api/unlock', (req,res)=>{
   if(currentSetup){
-    lastSetup = { ...currentSetup, state: 'CLOSED', result: 'MANUAL / DIBATALKAN', result_price: xauusdPrice, closed_at: Date.now() };
-    closeHistory(currentSetup.id, 'MANUAL / DIBATALKAN', xauusdPrice);
+    lastSetup = { ...currentSetup, state: 'CLOSED', result: 'MANUAL / DIBATALKAN', result_price: xautPrice, closed_at: Date.now() };
+    closeHistory(currentSetup.id, 'MANUAL / DIBATALKAN', xautPrice);
     lastDone = { last_result: 'Dibatalkan manual - Setup ' + currentSetup.setup_id };
     currentSetup = null;
   }
   res.json({ ok: true, msg: 'Lock dibatalkan' });
 });
-app.listen(PORT, ()=> console.log('ABEL BOT V9.4 REALTIME WS jalan di port ' + PORT + ' | WS lib: ' + (WSClient ? 'OK' : 'BELUM INSTALL ws') + ' | Exness: ' + (EXNESS_API_KEY ? 'TERISI' : 'KOSONG')));
+app.listen(PORT, ()=> console.log('ABEL BOT V10 XAUT ONLY jalan di port ' + PORT + ' | WS lib: ' + (WSClient ? 'OK' : 'BELUM INSTALL ws') + ' | Harga: XAUT WS 200ms langsung, NO GOLD-API, NO EXNESS'));
