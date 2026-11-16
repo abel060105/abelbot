@@ -38,12 +38,13 @@
   .mini span{font-size:11px;color:#94a3b8}
   .mini span.xaut{color:#38bdf8;font-size:12px;font-weight:900;display:block;margin-top:2px}
   .status-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #1e293b;font-size:13px}
-  .harga-grid{display:grid;grid-template-columns:1fr;gap:10px;max-width:1100px;margin:0 auto 12px}
   .harga-box{background:#1a222e;border-radius:12px;padding:12px;text-align:center}
   .harga-box.highlight{border:2px solid #00e676}
-  .harga-box .lbl{font-size:11px;color:#94a3b8}
   .harga-box .val{font-size:32px;font-weight:900;margin:6px 0}
   .harga-box .sub{font-size:11px;color:#94a3b8}
+  .harga-in-signal{background:#0b1118;border:2px solid #00e676;border-radius:12px;padding:12px;text-align:center;margin-top:10px}
+  .harga-in-signal .val{font-size:36px;font-weight:900;margin:6px 0;color:#00e676}
+  .harga-in-signal .sub{font-size:11px;color:#94a3b8}
   .four-col{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;max-width:1100px;margin:0 auto 12px}
   .four-col .card{margin:0}
   .row{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #1e293b}
@@ -85,19 +86,21 @@
   #popupRiwayat{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:99;padding:16px}
   .popup-box{background:#0f172a;max-width:620px;margin:20px auto;border-radius:14px;padding:16px;max-height:82vh;overflow:auto;border:1px solid #334155}
   .riw-item{border-bottom:1px solid #1e293b;padding:10px 0;font-size:13px}
-  @media(max-width:700px){.four-col{grid-template-columns:1fr 1fr}.harga-grid{grid-template-columns:1fr}.pending-split{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}.signal{font-size:38px}.hist-table{font-size:11px}}
+  @media(max-width:700px){.four-col{grid-template-columns:1fr 1fr}.pending-split{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}.signal{font-size:38px}.hist-table{font-size:11px}}
 </style>
 </head>
 <body>
 <div class="topbar"><h1>⚡ABEL FX</h1><button class="btn-yellow" id="notifBtn" onclick="enableNotif()">🔔 AKTIFKAN NOTIF</button></div>
 
-<!-- 1. SINYAL AKTIF -->
+<!-- 1. SINYAL AKTIF - HARGA GEDE PINDAH KE SINI, DI ATAS WAIT -->
 <div class="card" id="signalCard">
   <div class="card-head">
     <h2>🎯 SINYAL AKTIF</h2>
     <button class="btn-dl" onclick="downloadCard('signalCard','sinyal-aktif')">⬇ Download Gambar</button>
   </div>
-  <div class="label" style="margin-top:8px">Sinyal Saat Ini <span class="live">● LIVE</span> <span class="badge setup" id="setupBadge" style="display:none"></span></div>
+  <!-- KOTAK HARGA GEDE - DI ATAS WAIT -->
+  <div class="harga-in-signal"><div class="val" id="xautPrice">--</div><div class="sub" id="wsInfo">Bybit: - • OKX: -</div></div>
+  <div class="label" style="margin-top:10px">Sinyal Saat Ini <span class="live">● LIVE</span> <span class="badge setup" id="setupBadge" style="display:none"></span></div>
   <div class="signal WAIT" id="signalText">WAIT</div>
   <div class="jam-box">
     <div><div style="font-size:11px;color:#94a3b8">🕐 Sinyal Aktif Sejak</div><b id="jamAktif">-</b><div id="jamTanggal" style="font-size:11px;color:#94a3b8">-</div></div>
@@ -133,11 +136,7 @@
   <div class="status-row" style="margin-top:8px"><span>Total Pending</span><b id="pendingCount">-</b></div>
 </div>
 
-<!-- 3. BID / ASK -->
-<div class="harga-grid">
-  <div class="harga-box highlight"><div class="val" id="xautPrice" style="color:#00e676">--</div><div class="sub" id="wsInfo">Bybit: - • OKX: -</div></div>
-</div>
-
+<!-- 3. BID / ASK - TINGGAL 4 KOTAK, HARGANYA UDAH PINDAH KE ATAS WAIT -->
 <div class="four-col" id="wallsCard">
   <div class="card"><div class="card-head"><h2>🟢 BID Dekat</h2></div><div id="bidsNear"><div class="empty">Loading...</div></div></div>
   <div class="card"><div class="card-head"><h2>🔴 ASK Dekat</h2></div><div id="asksNear"><div class="empty">Loading...</div></div></div>
@@ -220,7 +219,7 @@ function getNote(id){ return localStorage.getItem('abel_note_' + id) || ''; }
 function saveNote(id, val){ localStorage.setItem('abel_note_' + id, val); }
 function downloadCSV(){ const rows = [['Setup','Tanggal','Jam','Sinyal','Entry_XAUT','SL_XAUT','TP_XAUT','SL_Pips','TP_Pips','Size','Hasil','Catatan']]; const hist = window._lastHistory || []; hist.forEach(h=>{ const dt = new Date(h.created_at); const e = h.entry ?? h.entry_mt5 ?? ''; const s = h.sl ?? h.sl_mt5 ?? ''; const t = h.tp ?? h.tp_mt5 ?? ''; rows.push([h.setup_id||'', dt.toLocaleDateString('id-ID'), dt.toLocaleTimeString('id-ID'), h.signal, e, s, t, 50, 100, h.size, h.result, getNote(h.id).replace(/,/g,';')]); }); const csv = rows.map(r=> r.join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'abel-jurnal-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); }
 async function testTelegram(){ try{ const r = await fetch(BASE_URL + '/api/test-telegram', { cache: 'no-store' }); const j = JSON.parse(await r.text()); alert('Telegram terkirim! Setup ' + j.setup_id + '\nFormat V10: BUY NOW, SL -50 pips, TP +100 pips'); load(); }catch(e){ alert('Gagal tes Telegram: ' + e.message); } }
-async function testWs(){ try{ const r = await fetch(BASE_URL + '/api/ws-test', { cache: 'no-store' }); const j = JSON.parse(await r.text()); alert('WS TEST - BYBIT+OKX\n\nBybit WS: ' + (j.ws_bybit_ok ? 'OK ✅' : 'OFF ❌') + ' - Last: ' + j.ws_last_bybit + '\nOKX WS: ' + (j.ws_okx_ok ? 'OK ✅' : 'OFF ❌') + ' - Last: ' + j.ws_last_okx + '\nBids cached: ' + j.bids_cached + '\nAsks cached: ' + j.asks_cached + '\nTop Bid: $' + j.top_bid + '\nTop Ask: $' + j.top_ask + '\nXAUT Price: $' + (j.xaut_price || 0) + '\n\nKalo OFF, cek Render Logs, pastikan npm install ws udah jalan.'); load(); }catch(e){ alert('Gagal tes WS: ' + e.message); } }
+async function testWs(){ try{ const r = await fetch(BASE_URL + '/api/ws-test', { cache: 'no-store' }); const j = JSON.parse(await r.text()); alert('WS TEST - BYBIT+OKX\n\nBybit WS: ' + (j.ws_bybit_ok ? 'OK ✅' : 'OFF ❌') + ' - Last: ' + j.ws_last_bybit + '\nOKX WS: ' + (j.ws_okx_ok ? 'OK ✅' : 'OFF ❌') + ' - Last: ' + j.ws_last_okx + '\nBids cached: ' + j.bids_cached + '\nAsks cached: ' + j.asks_cached + '\nTop Bid: $' + j.top_bid + '\nTop Ask: $' + j.top_ask + '\nXAUT Price: $' + (j.xaut_price || 0)); load(); }catch(e){ alert('Gagal tes WS: ' + e.message); } }
 async function load(){
   try{
     const r = await fetch(API_URL, { cache: 'no-store' });
