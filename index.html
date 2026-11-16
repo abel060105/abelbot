@@ -40,7 +40,9 @@
   .status-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #1e293b;font-size:13px}
   .harga-in-signal{background:#0b1118;border:2px solid #00e676;border-radius:12px;padding:12px;text-align:center;margin-top:10px}
   .harga-in-signal .val{font-size:36px;font-weight:900;margin:6px 0;color:#00e676}
-  .harga-in-signal .sub{font-size:11px;color:#94a3b8}
+  .harga-duplikat{background:#0b1118;border:2px solid #00e676;border-radius:12px;padding:12px;text-align:center;max-width:1100px;margin:0 auto 12px}
+  .harga-duplikat .val{font-size:36px;font-weight:900;margin:6px 0;color:#00e676}
+  .harga-duplikat .lbl{font-size:11px;color:#94a3b8}
   .four-col{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;max-width:1100px;margin:0 auto 12px}
   .four-col .card{margin:0}
   .row{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #1e293b}
@@ -86,13 +88,13 @@
 <body>
 <div class="topbar"><h1>⚡ABEL FX</h1><button class="btn-yellow" id="notifBtn" onclick="enableNotif()">🔔 AKTIFKAN NOTIF</button></div>
 
-<!-- 1. SINYAL AKTIF -->
+<!-- 1. SINYAL AKTIF - HARGA PERTAMA, TANPA TULISAN BYBIT/OKX DI BAWAHNYA -->
 <div class="card" id="signalCard">
   <div class="card-head">
     <h2>🎯 SINYAL AKTIF</h2>
     <button class="btn-dl" onclick="downloadCard('signalCard','sinyal-aktif')">⬇ Download Gambar</button>
   </div>
-  <div class="harga-in-signal"><div class="val" id="xautPrice">--</div><div class="sub" id="wsInfo">Bybit: - • OKX: -</div></div>
+  <div class="harga-in-signal"><div class="val" id="xautPrice">--</div></div>
   <div class="label" style="margin-top:10px">Sinyal Saat Ini <span class="live">● LIVE</span> <span class="badge setup" id="setupBadge" style="display:none"></span></div>
   <div class="signal WAIT" id="signalText">WAIT</div>
   <div class="jam-box">
@@ -119,6 +121,9 @@
   </div>
   <div class="status-row" style="margin-top:8px"><span>Total Pending</span><b id="pendingCount">-</b></div>
 </div>
+
+<!-- HARGA REALTIME DUPLIKAT - DI BAWAH PENDING ORDER, BIAR GAK SCROLL KE ATAS -->
+<div class="harga-duplikat" id="hargaDuplikat"><div class="lbl">HARGA REALTIME - XAUT</div><div class="val" id="xautPrice2">--</div></div>
 
 <!-- 3. BID / ASK -->
 <div class="four-col" id="wallsCard">
@@ -172,7 +177,6 @@
 const API_URL = 'https://abelbot.onrender.com/api/signal';
 const BASE_URL = API_URL.replace('/api/signal','');
 function fmtInt(n){ return '$' + Math.round(n); }
-// Format zona: kalo low == high, tampil single. Kalo beda, tampil "low - high"
 function fmtZona(low, high){ if(Math.round(low) === Math.round(high)) return fmtInt(low); return fmtInt(low) + ' - ' + fmtInt(high); }
 let deferredPrompt = null;
 let lastSignal = 'WAIT';
@@ -192,21 +196,11 @@ function saveNote(id, val){ localStorage.setItem('abel_note_' + id, val); }
 function downloadCSV(){ const rows = [['Setup','Tanggal','Jam','Sinyal','Entry_Low','Entry_High','SL_Low','SL_High','TP_Low','TP_High','Size','Hasil','Catatan']]; const hist = window._lastHistory || []; hist.forEach(h=>{ const dt = new Date(h.created_at); rows.push([h.setup_id||'', dt.toLocaleDateString('id-ID'), dt.toLocaleTimeString('id-ID'), h.signal, h.entry_low ?? h.entry ?? '', h.entry_high ?? '', h.sl_low ?? h.sl ?? '', h.sl_high ?? '', h.tp_low ?? h.tp ?? '', h.tp_high ?? '', h.size, h.result, getNote(h.id).replace(/,/g,';')]); }); const csv = rows.map(r=> r.join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'abel-jurnal-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); }
 async function testTelegram(){ try{ const r = await fetch(BASE_URL + '/api/test-telegram', { cache: 'no-store' }); const j = JSON.parse(await r.text()); alert('Telegram terkirim! Setup ' + j.setup_id + '\nFormat baru: Zona ngikutin jarak, SL 50 pips, TP 50 pips'); load(); }catch(e){ alert('Gagal tes Telegram: ' + e.message); } }
 async function testWs(){ try{ const r = await fetch(BASE_URL + '/api/ws-test', { cache: 'no-store' }); const j = JSON.parse(await r.text()); alert('WS TEST - BYBIT+OKX\nBybit: ' + (j.ws_bybit_ok ? 'OK ✅' : 'OFF ❌') + '\nOKX: ' + (j.ws_okx_ok ? 'OK ✅' : 'OFF ❌') + '\nXAUT: $' + (j.xaut_price || 0)); load(); }catch(e){ alert('Gagal tes WS: ' + e.message); } }
-
-// === LOGIC BARU: ZONA NYESUAIIN TEMBOK + JARAK ===
-// BUY: Entry = [tembok , tembok + jarak] -> tembok di bawah, harga di atas
-// SELL: Entry = [tembok - jarak , tembok] -> tembok di atas, harga di bawah
-// SL & TP semua 50 pips (5$) dari zona entry
 function hitungZona(wallPrice, hargaSekarang, isBuy){
   const jarak = Math.max(0, Math.min(3, Math.round(Math.abs(hargaSekarang - wallPrice))));
   const wall = Math.floor(wallPrice);
-  if(isBuy){
-    const entryLow = wall, entryHigh = wall + jarak;
-    return { jarak, entryLow, entryHigh, slLow: entryLow - 5, slHigh: entryHigh - 5, tpLow: entryLow + 5, tpHigh: entryHigh + 5 };
-  } else {
-    const entryLow = wall - jarak, entryHigh = wall;
-    return { jarak, entryLow, entryHigh, slLow: entryLow + 5, slHigh: entryHigh + 5, tpLow: entryLow - 5, tpHigh: entryHigh - 5 };
-  }
+  if(isBuy){ const entryLow = wall, entryHigh = wall + jarak; return { jarak, entryLow, entryHigh, slLow: entryLow - 5, slHigh: entryHigh - 5, tpLow: entryLow + 5, tpHigh: entryHigh + 5 }; }
+  else { const entryLow = wall - jarak, entryHigh = wall; return { jarak, entryLow, entryHigh, slLow: entryLow + 5, slHigh: entryHigh + 5, tpLow: entryLow - 5, tpHigh: entryHigh - 5 }; }
 }
 async function load(){
   try{
@@ -221,7 +215,6 @@ async function load(){
     const setupId = d.setup_id || ''; document.getElementById('setupVal').innerText = setupId || '-'; const badge = document.getElementById('setupBadge'); if(setupId){ badge.innerText = 'Setup ' + setupId; badge.style.display = 'inline-block'; } else { badge.style.display = 'none'; }
     const wallPrice = d.wall ? d.wall.price : (d.entry ?? 0);
     const isBuy = sigRaw.includes('BUY');
-    // Kalo server udah kirim zona baru, pake itu. Kalo belum, hitung di frontend dari tembok + jarak
     let zona = null;
     if(d.entry_low != null && d.entry_high != null){ zona = { jarak: d.jarak ?? Math.abs(price - wallPrice), entryLow: d.entry_low, entryHigh: d.entry_high, slLow: d.sl_low, slHigh: d.sl_high, tpLow: d.tp_low, tpHigh: d.tp_high }; }
     else if(wallPrice && price){ zona = hitungZona(wallPrice, price, isBuy); }
@@ -246,8 +239,10 @@ async function load(){
       if(diffMenit < 15){ statusEl.innerText = 'Masih fresh, gas masuk'; statusEl.style.color = '#00e676'; }
       else { statusEl.innerText = 'Market udah ' + diffMenit + 'm belum TP, pantau terus'; statusEl.style.color = '#ff5252'; }
     } else { document.getElementById('jamAktif').innerText = '-'; document.getElementById('jamTanggal').innerText = 'Belum ada sinyal aktif'; document.getElementById('jamTelat').innerText = '-'; document.getElementById('jamStatus').innerText = 'Nunggu sinyal...'; document.getElementById('jamStatus').style.color = '#94a3b8'; }
-    document.getElementById('xautPrice').innerText = price ? '$' + price.toFixed(2) : '--';
-    document.getElementById('wsInfo').innerText = 'Bybit: ' + wsBybit + ' • OKX: ' + wsOkx;
+    // HARGA REALTIME - UPDATE 2 KOTAK SEKALIGUS, TANPA TULISAN WS DI BAWAHNYA
+    const hargaTxt = price ? '$' + price.toFixed(2) : '--';
+    document.getElementById('xautPrice').innerText = hargaTxt;
+    document.getElementById('xautPrice2').innerText = hargaTxt;
     document.getElementById('wsBybitVal').innerText = wsBybit;
     document.getElementById('wsOkxVal').innerText = wsOkx;
     const render = (el, arr, cls) => { if(!arr.length){ document.getElementById(el).innerHTML = '<div class="empty">Gak ada whale di area ini</div>'; return; } document.getElementById(el).innerHTML = arr.map(l=>{ let jarak = price ? Math.abs(l.price - price).toFixed(1) + '$ dari harga' : ''; return `<div class="row"><div class="left ${cls}">${l.side} ${l.price.toFixed(2)}<small>${l.sources||''} • ${l.age_menit||0}m</small></div><div class="right">${l.size.toFixed(4)} XAUT<small>$${(l.size * l.price).toFixed(0)} • ${jarak}</small></div></div>`; }).join(''); };
