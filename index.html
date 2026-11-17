@@ -96,26 +96,13 @@
 <body>
 <div class="topbar"><h1>⚡ABEL FX</h1><button class="btn-yellow" id="notifBtn" onclick="enableNotif()">🔔 AKTIFKAN NOTIF</button></div>
 <div class="card" id="signalCard">
-  <div class="card-head">
-    <h2>🎯 SINYAL AKTIF</h2>
-    <button class="btn-dl" onclick="downloadCard('signalCard','sinyal-aktif')">⬇ Download Gambar</button>
-  </div>
+  <div class="card-head"><h2>🎯 SINYAL AKTIF</h2><button class="btn-dl" onclick="downloadCard('signalCard','sinyal-aktif')">⬇ Download Gambar</button></div>
   <div class="harga-in-signal"><div class="val" id="xautPrice">--</div><div class="lbl" style="font-size:11px;color:#94a3b8">XAUT - Bybit + OKX (Tembok)</div></div>
-  <div class="exness-box">
-    <div><div style="font-size:11px;color:#94a3b8">💹 Harga Exness (Yang Ke-Order)</div><b id="exnessPrice">-</b><div id="exnessSimbol" style="font-size:11px;color:#94a3b8">-</div></div>
-    <div style="text-align:right"><div style="font-size:11px;color:#94a3b8">Akun</div><b id="akunVal" style="font-size:13px">-</b><div id="lotVal" style="font-size:11px;color:#94a3b8">-</div></div>
-  </div>
-  <div class="pnl-box" id="pnlBox">
-    <div class="lbl">PnL Live</div>
-    <div class="val flat" id="pnlVal">-</div>
-    <div class="sub" id="pnlSub">-</div>
-  </div>
+  <div class="exness-box"><div><div style="font-size:11px;color:#94a3b8">💹 Harga Exness (Yang Ke-Order)</div><b id="exnessPrice">-</b><div id="exnessSimbol" style="font-size:11px;color:#94a3b8">-</div></div><div style="text-align:right"><div style="font-size:11px;color:#94a3b8">Akun</div><b id="akunVal" style="font-size:13px">-</b><div id="lotVal" style="font-size:11px;color:#94a3b8">-</div></div></div>
+  <div class="pnl-box" id="pnlBox"><div class="lbl">PnL Live</div><div class="val flat" id="pnlVal">-</div><div class="sub" id="pnlSub">-</div></div>
   <div class="label" style="margin-top:10px">Sinyal Saat Ini <span class="live">● LIVE</span> <span class="badge setup" id="setupBadge" style="display:none"></span></div>
   <div class="signal WAIT" id="signalText">WAIT</div>
-  <div class="jam-box">
-    <div><div style="font-size:11px;color:#94a3b8">🕐 Sinyal Aktif Sejak</div><b id="jamAktif">-</b><div id="jamTanggal" style="font-size:11px;color:#94a3b8">-</div></div>
-    <div style="text-align:right"><div style="font-size:11px;color:#94a3b8">⏳ Udah Jalan</div><b id="jamTelat">-</b><div id="jamStatus" style="font-size:11px;color:#00e676">Masih fresh, gas masuk</div></div>
-  </div>
+  <div class="jam-box"><div><div style="font-size:11px;color:#94a3b8">🕐 Sinyal Aktif Sejak</div><b id="jamAktif">-</b><div id="jamTanggal" style="font-size:11px;color:#94a3b8">-</div></div><div style="text-align:right"><div style="font-size:11px;color:#94a3b8">⏳ Udah Jalan</div><b id="jamTelat">-</b><div id="jamStatus" style="font-size:11px;color:#00e676">Masih fresh, gas masuk</div></div></div>
   <div class="grid2">
     <div class="mini"><small>Entry - Exness (Yang Ke-Order)</small><b id="entryVal">-</b><span class="xaut" id="entryXautVal">XAUT -</span><span class="exness" id="entryExnessVal">Exness -</span></div>
     <div class="mini"><small id="slLabel">SL -50 Pips dari Entry</small><b id="slVal">-</b><span class="xaut" id="slXautVal">XAUT -</span><span class="exness" id="slExnessVal">Exness -</span></div>
@@ -185,27 +172,10 @@ const BASE_URL = API_URL.replace('/api/signal','');
 function fmtInt(n){ return '$' + Math.round(n); }
 function fmtZona(low, high){ if(Math.round(low) === Math.round(high)) return fmtInt(low); return fmtInt(low) + ' - ' + fmtInt(high); }
 function fmtHarga(v){ if(!v) return '-'; return '$' + parseFloat(v).toFixed(2); }
-function fmtNominal(n){
-  if(n===null||n===undefined||isNaN(n)) return '-';
-  let sign = n<0?'-':(n>0?'+':'');
-  let abs = Math.abs(n);
-  let txt = abs>=1000 ? Math.round(abs).toLocaleString('en-US').replace(/,/g,'.') : (Number.isInteger(abs)?String(abs):abs.toFixed(2));
-  return sign+txt;
-}
-function cleanHasil(result){
-  if(!result) return '-';
-  let r = String(result);
-  if(r.includes('WIN')) return 'WIN - TP KENA';
-  if(r.includes('LOSE')) return 'LOSE - SL KENA';
-  if(r.includes('MANUAL')) return 'MANUAL / DIBATALKAN';
-  if(r.includes('AKTIF')) return 'AKTIF';
-  return r;
-}
+function fmtNominal(n){ if(n===null||n===undefined||isNaN(n)) return '-'; let sign = n<0?'-':(n>0?'+':''); let abs = Math.abs(n); let txt = abs>=1000 ? Math.round(abs).toLocaleString('en-US').replace(/,/g,'.') : (Number.isInteger(abs)?String(abs):abs.toFixed(2)); return sign+txt; }
+function cleanHasil(result){ if(!result) return '-'; let r = String(result); if(r.includes('WIN')) return 'WIN - TP KENA'; if(r.includes('LOSE')) return 'LOSE - SL KENA'; if(r.includes('MANUAL')) return 'MANUAL / DIBATALKAN'; if(r.includes('AKTIF')) return 'AKTIF'; return r; }
 function safeSet(id, txt){ try{ var el = document.getElementById(id); if(el) el.innerText = txt; }catch(e){} }
-let deferredPrompt = null;
-let lastSignal = 'WAIT';
-let notifEnabled = false;
-let lastNotifId = '';
+let deferredPrompt = null; let lastSignal = 'WAIT'; let notifEnabled = false; let lastNotifId = '';
 if('serviceWorker' in navigator){ window.addEventListener('load', function(){ navigator.serviceWorker.register('/sw.js').then(function(){ console.log('SW OK'); }).catch(function(e){ console.log('SW gagal', e); }); }); }
 window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); deferredPrompt = e; document.getElementById('installBtn').style.display = 'inline-block'; });
 window.addEventListener('appinstalled', function(){ document.getElementById('installBtn').style.display = 'none'; });
@@ -218,145 +188,15 @@ async function downloadCard(cardId, fileName){ const el = document.getElementByI
 function getNote(id){ return localStorage.getItem('abel_note_' + id) || ''; }
 function saveNote(id, val){ localStorage.setItem('abel_note_' + id, val); }
 function downloadCSV(){ const rows = [['Setup','Tanggal','Jam','Sinyal','Entry_Exness','SL_Exness','TP_Exness','Entry_Low','Entry_High','SL_Low','SL_High','TP_Low','TP_High','Size','Hasil','Catatan']]; const hist = window._lastHistory || []; hist.forEach(function(h){ const dt = new Date(h.created_at); rows.push([h.setup_id||'', dt.toLocaleDateString('id-ID'), dt.toLocaleTimeString('id-ID'), h.signal, h.exness_entry || '', h.exness_sl || '', h.exness_tp || '', h.entry_low || h.entry || '', h.entry_high || '', h.sl_low || h.sl || '', h.sl_high || '', h.tp_low || h.tp || '', h.tp_high || '', h.size, cleanHasil(h.result), getNote(h.id).replace(/,/g,';')]); }); const csv = rows.map(function(r){ return r.join(','); }).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'abel-jurnal-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); }
-async function testTelegram(){ try{ const r = await fetch(BASE_URL + '/api/test-telegram', { cache: 'no-store' }); const j = JSON.parse(await r.text()); alert('Telegram terkirim! Setup ' + j.setup_id + '\nFormat baru: Zona ngikutin jarak, SL 50 pips, TP 50 pips'); load(); }catch(e){ alert('Gagal tes Telegram: ' + e.message); } }
-async function testWs(){ try{ const r = await fetch(BASE_URL + '/api/ws-test', { cache: 'no-store' }); const j = JSON.parse(await r.text()); alert('WS TEST - BYBIT+OKX\nBybit: ' + (j.ws_bybit_ok ? 'OK ✅' : 'OFF ❌') + '\nOKX: ' + (j.ws_okx_ok ? 'OK ✅' : 'OFF ❌') + '\nXAUT: $' + (j.xaut_price || 0) + '\nExness: $' + (j.exness_price || 0)); load(); }catch(e){ alert('Gagal tes WS: ' + e.message); } }
-function hitungZona(wallPrice, hargaSekarang, isBuy){
-  const jarak = Math.max(0, Math.min(3, Math.round(Math.abs(hargaSekarang - wallPrice))));
-  const wall = Math.floor(wallPrice);
-  if(isBuy){ const entryLow = wall, entryHigh = wall + jarak; return { jarak: jarak, entryLow: entryLow, entryHigh: entryHigh, slLow: entryLow - 5, slHigh: entryHigh - 5, tpLow: entryLow + 5, tpHigh: entryHigh + 5 }; }
-  else { const entryLow = wall - jarak, entryHigh = wall; return { jarak: jarak, entryLow: entryLow, entryHigh: entryHigh, slLow: entryLow + 5, slHigh: entryHigh + 5, tpLow: entryLow - 5, tpHigh: entryHigh - 5 }; }
-}
+async function testTelegram(){ try{ const r = await fetch(BASE_URL + '/api/test-telegram', { cache: 'no-store' }); const j = JSON.parse(await r.text()); alert('Telegram terkirim! Setup ' + j.setup_id); load(); }catch(e){ alert('Gagal tes Telegram: ' + e.message); } }
+async function testWs(){ try{ const r = await fetch(BASE_URL + '/api/ws-test', { cache: 'no-store' }); const j = JSON.parse(await r.text()); alert('WS TEST\nBybit: ' + (j.ws_bybit_ok ? 'OK' : 'OFF') + '\nOKX: ' + (j.ws_okx_ok ? 'OK' : 'OFF') + '\nXAUT: $' + (j.xaut_price || 0) + '\nExness: $' + (j.exness_price || 0)); load(); }catch(e){ alert('Gagal tes WS: ' + e.message); } }
+function hitungZona(wallPrice, hargaSekarang, isBuy){ const jarak = Math.max(0, Math.min(3, Math.round(Math.abs(hargaSekarang - wallPrice)))); const wall = Math.floor(wallPrice); if(isBuy){ const entryLow = wall, entryHigh = wall + jarak; return { jarak, entryLow, entryHigh, slLow: entryLow - 5, slHigh: entryHigh - 5, tpLow: entryLow + 5, tpHigh: entryHigh + 5 }; } else { const entryLow = wall - jarak, entryHigh = wall; return { jarak, entryLow, entryHigh, slLow: entryLow + 5, slHigh: entryHigh + 5, tpLow: entryLow - 5, tpHigh: entryHigh - 5 }; } }
 async function load(){
   try{
     const r = await fetch(API_URL, { cache: 'no-store' });
     const text = await r.text();
     if(!text.trim().startsWith('{')) throw new Error('Server bales HTML');
     const d = JSON.parse(text);
-    const price = (d.harga && (d.harga.xaut || d.harga.xaut_mid)) || d.xaut_price || d.xautPrice || 0;
-    const exnessPrice = (d.harga && (d.harga.exness || d.harga.exness_price)) || d.exness_price || d.exnessPrice || 0;
-    const cfg = d.config || {};
-    let slPipsTxt = '50', tpPipsTxt = '50', sltpTxt = 'FIX 50 / 50';
-    if(cfg.sl_mode === 'FLEKSIBEL'){ slPipsTxt = cfg.sl_min + '-' + cfg.sl_max; tpPipsTxt = cfg.tp_min + '-' + cfg.tp_max; sltpTxt = 'FLEKSIBEL SL ' + slPipsTxt + ' / TP ' + tpPipsTxt; }
-    else if(cfg.sl_fix){ slPipsTxt = String(cfg.sl_fix); tpPipsTxt = String(cfg.tp_fix); sltpTxt = 'FIX ' + slPipsTxt + ' / ' + tpPipsTxt; }
-    else if(d.sl_pips){ slPipsTxt = String(d.sl_pips); tpPipsTxt = String(d.tp_pips); sltpTxt = 'FIX ' + slPipsTxt + ' / ' + tpPipsTxt; }
-    safeSet('slLabel', 'SL -' + slPipsTxt + ' Pips dari Entry');
-    safeSet('tpLabel', 'TP +' + tpPipsTxt + ' Pips dari Entry');
-    safeSet('sltpVal', sltpTxt);
-    safeSet('logicVal', 'Jarak ' + (cfg.jarak_min != null ? cfg.jarak_min : 0) + '-' + (cfg.jarak_max != null ? cfg.jarak_max : 3) + '$ • Betah ' + (cfg.betah != null ? cfg.betah : 5) + 'm • Ratio ' + (cfg.ratio != null ? cfg.ratio : 5) + 'x • Zona = Tembok s/d Harga Sekarang • ' + sltpTxt);
-    safeSet('winrateLabel', 'Winrate (' + sltpTxt + ')');
-    const wsBybit = (d.harga && d.harga.ws_bybit) || '-'; const wsOkx = (d.harga && d.harga.ws_okx) || '-';
-    const sigRaw = d.signal || 'WAIT'; const sigEl = document.getElementById('signalText'); if(sigEl){ sigEl.innerText = sigRaw; let sigCls = 'WAIT'; if(sigRaw.indexOf('BUY') !== -1) sigCls = 'BUY'; else if(sigRaw.indexOf('SELL') !== -1) sigCls = 'SELL'; else if(sigRaw === 'DONE') sigCls = 'DONE'; sigEl.className = 'signal ' + sigCls; }
-    const setupId = d.setup_id || ''; safeSet('setupVal', setupId || '-'); const badge = document.getElementById('setupBadge'); if(badge){ if(setupId){ badge.innerText = 'Setup ' + setupId; badge.style.display = 'inline-block'; } else { badge.style.display = 'none'; } }
-    const wallPrice = d.wall ? d.wall.price : (d.entry || 0);
-    const isBuy = sigRaw.indexOf('BUY') !== -1;
-    let zona = null;
-    if(d.entry_low != null && d.entry_high != null){ zona = { jarak: (d.jarak != null ? d.jarak : Math.abs(price - wallPrice)), entryLow: d.entry_low, entryHigh: d.entry_high, slLow: d.sl_low, slHigh: d.sl_high, tpLow: d.tp_low, tpHigh: d.tp_high }; }
-    else if(wallPrice && price){ zona = hitungZona(wallPrice, price, isBuy); }
-    let exEntry = (d.exness_entry != null ? d.exness_entry : d.entry) || 0;
-    let exSL = (d.exness_sl != null ? d.exness_sl : d.sl) || 0;
-    let exTP = (d.exness_tp != null ? d.exness_tp : d.tp) || 0;
-    let entryTxt = '-', slTxt = '-', tpTxt = '-';
-    if(d.is_locked || setupId){ entryTxt = exEntry ? fmtHarga(exEntry) : (zona ? fmtZona(zona.entryLow, zona.entryHigh) : '-'); slTxt = exSL ? fmtHarga(exSL) : (zona ? fmtZona(zona.slLow, zona.slHigh) : '-'); tpTxt = exTP ? fmtHarga(exTP) : (zona ? fmtZona(zona.tpLow, zona.tpHigh) : '-'); }
-    else if(zona){ entryTxt = fmtZona(zona.entryLow, zona.entryHigh); slTxt = fmtZona(zona.slLow, zona.slHigh); tpTxt = fmtZona(zona.tpLow, zona.tpHigh); }
-    safeSet('entryVal', entryTxt); safeSet('slVal', slTxt); safeSet('tpVal', tpTxt);
-    const jarakTxt = zona ? zona.jarak + '$' : '-';
-    const zonaLebar = zona ? (Math.round(zona.entryHigh - zona.entryLow) * 10) + ' pips' : '-';
-    safeSet('entryXautVal', zona ? 'XAUT Zona ' + fmtZona(zona.entryLow, zona.entryHigh) + ' (' + zonaLebar + ', jarak ' + jarakTxt + ')' : 'XAUT -');
-    safeSet('slXautVal', zona ? 'XAUT SL ' + fmtZona(zona.slLow, zona.slHigh) : 'XAUT -');
-    safeSet('tpXautVal', zona ? 'XAUT TP ' + fmtZona(zona.tpLow, zona.tpHigh) : 'XAUT -');
-    safeSet('entryExnessVal', exEntry ? 'Exness Entry ' + fmtHarga(exEntry) : 'Exness -');
-    safeSet('slExnessVal', exSL ? 'Exness SL ' + fmtHarga(exSL) + ' (-' + (d.exness_sl_pips || slPipsTxt) + ' pips)' : 'Exness -');
-    safeSet('tpExnessVal', exTP ? 'Exness TP ' + fmtHarga(exTP) + ' (+' + (d.exness_tp_pips || tpPipsTxt) + ' pips)' : 'Exness -');
-    safeSet('exnessPrice', exnessPrice ? fmtHarga(exnessPrice) : '-');
-    safeSet('exnessSimbol', (cfg.simbol || d.simbol || 'XAUUSD') + (cfg.isCent ? ' (Cent)' : ''));
-    safeSet('akunVal', cfg.akun_label ? cfg.akun_label + ' ' + (cfg.akun_id || '') : '-');
-    safeSet('lotVal', 'Lot ' + (cfg.lot != null ? cfg.lot : (d.lot != null ? d.lot : '-')));
-    safeSet('exnessPrice2', 'Exness: ' + (exnessPrice ? fmtHarga(exnessPrice) : '-'));
-    safeSet('exnessStatusVal', cfg.exness_connected ? 'Nyambung ✅ (' + (cfg.akun_label || '') + ')' : 'Belum nyambung - ketik /akun di Tele');
-    safeSet('jamBotVal', cfg.jam24 ? '24 jam (00:00 - 23:59 WIB)' : ((cfg.jam_start || '-') + ' - ' + (cfg.jam_end || '-') + ' WIB' + (cfg.jam_wib_now ? ' (sekarang ' + cfg.jam_wib_now + ' WIB)' : '')));
-    safeSet('autoVal', cfg.auto_entry ? 'NYALA ✅' : 'MATI ⏸️ (sinyal tetep jalan)');
-    let pnlBox = document.getElementById('pnlBox');
-    let pnlValEl = document.getElementById('pnlVal');
-    let pnlNom = (d.pnl_nominal != null ? d.pnl_nominal : d.pnl_live);
-    if(d.is_locked && pnlNom !== null && pnlNom !== undefined && pnlBox && pnlValEl){
-      pnlBox.style.display = 'block';
-      let pnlTxt = d.pnl_text || fmtNominal(pnlNom);
-      pnlValEl.innerText = pnlTxt;
-      pnlValEl.className = 'val ' + (pnlNom > 0 ? 'pos' : pnlNom < 0 ? 'neg' : 'flat');
-      safeSet('pnlSub', 'Entry Exness ' + fmtHarga(exEntry) + ' • Sekarang ' + fmtHarga(exnessPrice || price) + ' • Lot ' + (cfg.lot != null ? cfg.lot : (d.lot != null ? d.lot : '-')) + ' • ' + (d.pnl_pips ? (d.pnl_pips >= 0 ? '+' : '') + d.pnl_pips.toFixed(0) + ' pips' : ''));
-    } else if(pnlBox){ pnlBox.style.display = 'none'; }
-    const jarakWall = d.wall ? (d.wall.distance != null ? d.wall.distance : Math.abs(price - d.wall.price)) : 0;
-    safeSet('wallVal', d.wall ? (d.wall.side + ' ' + d.wall.price.toFixed(2) + ' - ' + d.wall.size.toFixed(2) + ' XAUT - Betah ' + d.wall.age_menit + 'm - ' + d.wall.sources + ' (jarak ' + jarakWall.toFixed(1) + '$)') : '-');
-    safeSet('lastVal', d.last_done ? cleanHasil(d.last_done.last_result) + ' - ' + (d.last_done.last_result || '') : (d.last_setup ? d.last_setup.setup_id + ' ' + cleanHasil(d.last_setup.result || '') : '-'));
-    if(d.is_locked && d.lockedAt){
-      const dt = new Date(d.lockedAt); const diffMenit = Math.floor((Date.now() - d.lockedAt)/60000);
-      safeSet('jamAktif', dt.toLocaleTimeString('id-ID')); safeSet('jamTanggal', dt.toLocaleDateString('id-ID')); safeSet('jamTelat', diffMenit + ' menit');
-      const statusEl = document.getElementById('jamStatus');
-      if(statusEl){ if(diffMenit < 15){ statusEl.innerText = 'Masih fresh, gas masuk'; statusEl.style.color = '#00e676'; } else { statusEl.innerText = 'Market udah ' + diffMenit + 'm belum TP, pantau terus'; statusEl.style.color = '#ff5252'; } }
-    } else { safeSet('jamAktif', '-'); safeSet('jamTanggal', 'Belum ada sinyal aktif'); safeSet('jamTelat', '-'); const js2 = document.getElementById('jamStatus'); if(js2){ js2.innerText = 'Nunggu sinyal...'; js2.style.color = '#94a3b8'; } }
-    const hargaTxt = price ? '$' + price.toFixed(2) : '--';
-    safeSet('xautPrice', hargaTxt); safeSet('xautPrice2', hargaTxt);
-    safeSet('wsBybitVal', wsBybit); safeSet('wsOkxVal', wsOkx);
-    const render = function(el, arr, cls){ var elDom = document.getElementById(el); if(!elDom) return; if(!arr || !arr.length){ elDom.innerHTML = '<div class="empty">Gak ada whale di area ini</div>'; return; } elDom.innerHTML = arr.map(function(l){ let jarak2 = price ? Math.abs(l.price - price).toFixed(1) + '$ dari harga' : ''; return '<div class="row"><div class="left ' + cls + '">' + l.side + ' ' + l.price.toFixed(2) + '<small>' + (l.sources || '') + ' • ' + (l.age_menit || 0) + 'm</small></div><div class="right">' + l.size.toFixed(4) + ' XAUT<small>$' + (l.size * l.price).toFixed(0) + ' • ' + jarak2 + '</small></div></div>'; }).join(''); };
-    const wallsNear = d.wallsNear || d.walls || []; const wallsFar = d.wallsFar || [];
-    render('bidsNear', wallsNear.filter(function(w){ return w.side==='BID'; }).sort(function(a,b){ return b.price-a.price; }).slice(0,6), 'BID');
-    render('asksNear', wallsNear.filter(function(w){ return w.side==='ASK'; }).sort(function(a,b){ return a.price-b.price; }).slice(0,6), 'ASK');
-    render('bidsFar', wallsFar.filter(function(w){ return w.side==='BID'; }).sort(function(a,b){ return b.size-a.size; }), 'FAR-BID');
-    render('asksFar', wallsFar.filter(function(w){ return w.side==='ASK'; }).sort(function(a,b){ return a.size-a.size; }), 'FAR-ASK');
-    let pendingSource = Array.isArray(d.pendingOrders) ? d.pendingOrders : (Array.isArray(d.pending) ? d.pending : []); let touchedSource = Array.isArray(d.touchedLevels) ? d.touchedLevels : (Array.isArray(d.touched) ? d.touched : []);
-    const renderPendingItem = function(w){ const isTouched = w.status === 'TERSENTUH'; const isBuy2 = w.side === 'BID'; const cls2 = isTouched ? 'touched' : (isBuy2 ? 'buy' : 'sell'); const badgeCls = isTouched ? 'touched' : (isBuy2 ? 'buy' : 'sell'); const badgeText = isTouched ? '🔥 TERSENTUH' : (isBuy2 ? 'BUY MARKET' : 'SELL MARKET'); const dist = (w.distance != null ? w.distance : (price ? Math.abs(w.price - price) : 0)); return '<div class="pending-item ' + cls2 + '"><div class="pending-top"><b>' + w.side + ' ' + w.price.toFixed(2) + '</b><span class="badge ' + badgeCls + '">' + badgeText + '</span></div><div class="mt5">XAUT ' + w.price.toFixed(2) + ' • ' + (isBuy2?'BUY MARKET':'SELL MARKET') + ' di ' + w.price.toFixed(2) + '</div><div class="meta">' + w.size.toFixed(4) + ' XAUT • $' + (w.size * w.price).toFixed(0) + ' • ' + (w.sources || '') + ' • Umur ' + (w.age_menit || 0) + 'm<br>Jarak ke harga XAUT: ' + dist.toFixed(1) + '$ ' + (isTouched?'• UDAH KENA!':'• Belum kena') + '</div></div>'; };
-    const pbEl = document.getElementById('pendingBidList'); if(pbEl){ pbEl.innerHTML = pendingSource.filter(function(w){ return w.side==='BID'; }).sort(function(a,b){ return b.size - a.size; }).map(renderPendingItem).join('') || '<div class="empty">Gak ada BID pending yang betah 5 menit - lagi nunggu...</div>'; }
-    const paEl = document.getElementById('pendingAskList'); if(paEl){ paEl.innerHTML = pendingSource.filter(function(w){ return w.side==='ASK'; }).sort(function(a,b){ return b.size - a.size; }).map(renderPendingItem).join('') || '<div class="empty">Gak ada ASK pending yang betah 5 menit - lagi nunggu...</div>'; }
-    safeSet('pendingCount', pendingSource.length + ' pending • ' + touchedSource.length + ' tersentuh');
-    safeSet('touchedVal', touchedSource.length ? touchedSource.map(function(w){ return w.side + ' ' + w.price.toFixed(2); }).join(' | ') : '-');
-    safeSet('exchangesVal', d.exchanges ? 'BYB:' + (d.exchanges.bybit?'OK':'X') + ' OKX:' + (d.exchanges.okx?'OK':'X') : '-');
-    safeSet('totalVal', (d.walls ? d.walls.length : 0) + ' level • Jauh: ' + (d.wallsFarCount || wallsFar.length || 0));
-    safeSet('uptimeVal', (d.uptime_menit || 0) + ' menit');
-    if(d.uptimeStart){ safeSet('sesiInfo', 'Sesi dimulai: ' + new Date(d.uptimeStart).toLocaleString('id-ID') + ' • ' + (d.uptime_menit || 0) + ' menit lalu • ' + (d.history ? d.history.length : 0) + ' sinyal sesi ini'); }
-    safeSet('lastUpdateVal', d.last_update ? new Date(d.last_update).toLocaleTimeString('id-ID') : '-');
-    safeSet('status', '');
-    if(d.signal && d.signal !== 'WAIT' && d.signal !== lastSignal){ lastSignal = d.signal; if(d.lockedId && d.lockedId !== lastNotifId){ lastNotifId = d.lockedId; sendNotif('ABEL FX - ' + d.signal, 'Setup ' + (d.setup_id||'') + ' Entry Exness ' + entryTxt + ' SL ' + slPipsTxt + ' pips TP ' + tpPipsTxt + ' pips'); } }
-    if(d.signal === 'WAIT') lastSignal = 'WAIT';
-    const hist = d.history || []; window._lastHistory = hist;
-    const hb = document.getElementById('historyBody');
-    if(hb){
-      if(hist.length){ hb.innerHTML = hist.map(function(h){ const dt = new Date(h.created_at); const hasilBersih = cleanHasil(h.result); const isWin = hasilBersih.indexOf('WIN') !== -1; const isLose = hasilBersih.indexOf('LOSE') !== -1; const resultColor = isWin ? '#00e676' : isLose ? '#ff5252' : h.result === 'AKTIF' ? '#facc15' : '#94a3b8'; const hExEntry = (h.exness_entry != null ? h.exness_entry : (h.entry != null ? h.entry : (h.entry_low != null ? h.entry_low : 0))); const hExSL = (h.exness_sl != null ? h.exness_sl : (h.sl != null ? h.sl : (h.sl_low != null ? h.sl_low : 0))); const hExTP = (h.exness_tp != null ? h.exness_tp : (h.tp != null ? h.tp : (h.tp_low != null ? h.tp_low : 0))); const hSlPips = h.exness_sl_pips || h.sl_pips || slPipsTxt; const hTpPips = h.exness_tp_pips || h.tp_pips || tpPipsTxt; return '<tr><td style="font-weight:900;color:#facc15">' + (h.setup_id || '-') + '</td><td>' + dt.toLocaleDateString('id-ID') + '<br><small style="color:#94a3b8">' + dt.toLocaleTimeString('id-ID') + '</small></td><td style="font-weight:900;color:' + (h.signal.indexOf('BUY') !== -1 ? '#00e676' : '#ff5252') + '">' + h.signal + '</td><td>' + fmtHarga(hExEntry) + '<br><small style="color:#94a3b8">' + (h.size ? h.size.toFixed(2) + ' XAUT • ' : '') + (h.sources || '') + ' • XAUT ' + fmtZona(h.entry_low != null ? h.entry_low : (h.entry || 0), h.entry_high != null ? h.entry_high : (h.entry_low != null ? h.entry_low : (h.entry || 0))) + '</small></td><td>SL ' + fmtHarga(hExSL) + ' (-' + hSlPips + ' pips)<br>TP ' + fmtHarga(hExTP) + ' (+' + hTpPips + ' pips)</td><td style="font-weight:900;color:' + resultColor + '">' + hasilBersih + (h.duration_menit ? '<br><small style="color:#94a3b8">' + h.duration_menit + 'm</small>' : '') + '</td><td><input class="hist-note" value="' + getNote(h.id).replace(/"/g,'&quot;') + '" placeholder="Tulis jurnal..." oninput="saveNote(\'' + h.id + '\', this.value)" /></td></tr>'; }).join(''); const closed = hist.filter(function(h){ return h.closed_at; }); const win = hist.filter(function(h){ return (h.result || '').indexOf('WIN') !== -1; }).length; const wr = d.winrate_data || { winrate: closed.length ? Math.floor(win/closed.length*100) : 0 }; safeSet('winrateVal', closed.length ? win + ' WIN / ' + closed.length + ' closed = ' + wr.winrate + '% winrate (' + sltpTxt + ')' : '-'); } else { hb.innerHTML = '<tr><td colspan="7" class="empty">Belum ada riwayat...</td></tr>'; }
-    }
-  }catch(e){ const st = document.getElementById('status'); if(st) st.innerText = 'Load gagal: ' + e.message; console.log('load gagal', e); }
-}
-async function bukaRiwayatSesi(){
-  document.getElementById('popupRiwayat').style.display = 'block';
-  document.getElementById('riwayatSesiIsi').innerHTML = 'Loading...';
-  try{
-    const r = await fetch(BASE_URL + '/api/history', { cache: 'no-store' });
-    const j = JSON.parse(await r.text());
-    const hist = j.history || [];
-    document.getElementById('riwayatSesiInfo').innerText = 'Sesi: ' + (j.sesi_mulai || '-') + ' • Total: ' + (j.total || hist.length) + ' sinyal • Uptime: ' + (j.uptime_menit || 0) + ' menit • Winrate: ' + (j.winrate_data ? j.winrate_data.winrate + '%' : '-');
-    if(!hist.length){ document.getElementById('riwayatSesiIsi').innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8">Belum ada sinyal di sesi ini.</div>'; return; }
-    document.getElementById('riwayatSesiIsi').innerHTML = hist.map(function(h){ const dt = new Date(h.created_at); const hasilBersih = cleanHasil(h.result); const c = hasilBersih.indexOf('WIN') !== -1 ? '#00e676' : hasilBersih.indexOf('LOSE') !== -1 ? '#ff5252' : '#facc15'; const hExEntry = (h.exness_entry != null ? h.exness_entry : (h.entry != null ? h.entry : (h.entry_low != null ? h.entry_low : 0))); const hExSL = (h.exness_sl != null ? h.exness_sl : (h.sl != null ? h.sl : (h.sl_low != null ? h.sl_low : 0))); const hExTP = (h.exness_tp != null ? h.exness_tp : (h.tp != null ? h.tp : (h.tp_low != null ? h.tp_low : 0))); return '<div class="riw-item"><b style="color:' + (h.signal && h.signal.indexOf('BUY') !== -1 ? '#00e676' : '#ff5252') + '">' + h.signal + '</b> - <b style="color:' + c + '">' + hasilBersih + '</b> <span style="float:right;color:#94a3b8;font-size:12px">' + dt.toLocaleDateString('id-ID') + ' ' + dt.toLocaleTimeString('id```js
--') + '</span><br><small style="color:#cbd5e1">Setup ' + (h.setup_id || '-') + ' | Entry Exness ' + fmtHarga(hExEntry) + ' | SL ' + fmtHarga(hExSL) + ' | TP ' + fmtHarga(hExTP) + '</small></div>'; }).join('');
-  }catch(e){ document.getElementById('riwayatSesiIsi').innerHTML = 'Gagal load riwayat: ' + e.message; }
-}
-function tutupRiwayatSesi(){ document.getElementById('popupRiwayat').style.display = 'none'; }
-document.addEventListener('click', function(e){ if(e.target && e.target.id === 'popupRiwayat') tutupRiwayatSesi(); });
-async function unlock(){ try{ const r = await fetch(BASE_URL + '/api/unlock'); const d = JSON.parse(await r.text()); alert(d.msg || 'Unlocked'); load(); }catch(e){ alert('Gagal unlock: ' + e.message); } }
-load(); setInterval(load, 1000);
-</script>
-</body>
-</html>
-function hitungZona(wallPrice, hargaSekarang, isBuy){
-  const jarak = Math.max(0, Math.min(3, Math.round(Math.abs(hargaSekarang - wallPrice))));
-  const wall = Math.floor(wallPrice);
-  if(isBuy){ const entryLow = wall, entryHigh = wall + jarak; return { jarak, entryLow, entryHigh, slLow: entryLow - 5, slHigh: entryHigh - 5, tpLow: entryLow + 5, tpHigh: entryHigh + 5 }; }
-  else { const entryLow = wall - jarak, entryHigh = wall; return { jarak, entryLow, entryHigh, slLow: entryLow + 5, slHigh: entryHigh + 5, tpLow: entryLow - 5, tpHigh: entryHigh - 5 }; }
-}
-async function load(){
-  try{
-    const r = await fetch(API_URL, { cache: 'no-store' });
-    const text = await r.text();
-    if(!text.trim().startsWith('{')) throw new Error('Server bales HTML');
-    const d = JSON.parse(text);
-    // V15 FIX: baca 2 format, biar Render lama / baru sama-sama kebaca
     const price = (d.harga && d.harga.xaut) ? d.harga.xaut : (d.harga && d.harga.xaut_mid ? d.harga.xaut_mid : (d.xaut_price || 0));
     const exnessPrice = (d.harga && d.harga.exness) ? d.harga.exness : (d.exness_price || 0);
     const cfg = d.config || {};
@@ -390,9 +230,7 @@ async function load(){
     if(d.is_locked || setupId){ entryTxt = exEntry ? fmtHarga(exEntry) : (zona ? fmtZona(zona.entryLow, zona.entryHigh) : '-'); slTxt = exSL ? fmtHarga(exSL) : (zona ? fmtZona(zona.slLow, zona.slHigh) : '-'); tpTxt = exTP ? fmtHarga(exTP) : (zona ? fmtZona(zona.tpLow, zona.tpHigh) : '-'); }
     else if(zona){ entryTxt = fmtZona(zona.entryLow, zona.entryHigh); slTxt = fmtZona(zona.slLow, zona.slHigh); tpTxt = fmtZona(zona.tpLow, zona.tpHigh); }
     safeSet('entryVal', entryTxt); safeSet('slVal', slTxt); safeSet('tpVal', tpTxt);
-    const jarakTxt = zona ? zona.jarak + '$' : '-';
-    const zonaLebar = zona ? (Math.round(zona.entryHigh - zona.entryLow) * 10) + ' pips' : '-';
-    safeSet('entryXautVal', zona ? 'XAUT Zona ' + fmtZona(zona.entryLow, zona.entryHigh) + ' (' + zonaLebar + ', jarak ' + jarakTxt + ')' : 'XAUT -');
+    safeSet('entryXautVal', zona ? 'XAUT Zona ' + fmtZona(zona.entryLow, zona.entryHigh) + ' (' + (Math.round(zona.entryHigh - zona.entryLow) * 10) + ' pips, jarak ' + zona.jarak + '$)' : 'XAUT -');
     safeSet('slXautVal', zona ? 'XAUT SL ' + fmtZona(zona.slLow, zona.slHigh) : 'XAUT -');
     safeSet('tpXautVal', zona ? 'XAUT TP ' + fmtZona(zona.tpLow, zona.tpHigh) : 'XAUT -');
     safeSet('entryExnessVal', exEntry ? 'Exness Entry ' + fmtHarga(exEntry) : 'Exness -');
@@ -406,49 +244,26 @@ async function load(){
     safeSet('exnessStatusVal', cfg.exness_connected ? 'Nyambung ✅ (' + (cfg.akun_label || '') + ')' : 'Belum nyambung - ketik /akun di Tele');
     safeSet('jamBotVal', cfg.jam24 ? '24 jam (00:00 - 23:59 WIB)' : ((cfg.jam_start || '-') + ' - ' + (cfg.jam_end || '-') + ' WIB' + (cfg.jam_wib_now ? ' (sekarang ' + cfg.jam_wib_now + ' WIB)' : '')));
     safeSet('autoVal', cfg.auto_entry ? 'NYALA ✅' : 'MATI ⏸️ (sinyal tetep jalan)');
-    let pnlBox = document.getElementById('pnlBox');
-    let pnlValEl = document.getElementById('pnlVal');
+    let pnlBox = document.getElementById('pnlBox'); let pnlValEl = document.getElementById('pnlVal');
     let pnlNom = (d.pnl_nominal !== undefined ? d.pnl_nominal : d.pnl_live);
     if(pnlBox && pnlValEl){
-      if(d.is_locked && pnlNom !== null && pnlNom !== undefined){
-        pnlBox.style.display = 'block';
-        let pnlTxt = d.pnl_text || fmtNominal(pnlNom);
-        pnlValEl.innerText = pnlTxt;
-        pnlValEl.className = 'val ' + (pnlNom > 0 ? 'pos' : pnlNom < 0 ? 'neg' : 'flat');
-        safeSet('pnlSub', 'Entry Exness ' + fmtHarga(exEntry) + ' • Sekarang ' + fmtHarga(exnessPrice || price) + ' • Lot ' + (cfg.lot !== undefined ? cfg.lot : (d.lot || '-')) + ' • ' + (d.pnl_pips ? (d.pnl_pips >= 0 ? '+' : '') + d.pnl_pips.toFixed(0) + ' pips' : ''));
-      } else { pnlBox.style.display = 'none'; }
+      if(d.is_locked && pnlNom !== null && pnlNom !== undefined){ pnlBox.style.display = 'block'; pnlValEl.innerText = d.pnl_text || fmtNominal(pnlNom); pnlValEl.className = 'val ' + (pnlNom > 0 ? 'pos' : pnlNom < 0 ? 'neg' : 'flat'); safeSet('pnlSub', 'Entry Exness ' + fmtHarga(exEntry) + ' • Sekarang ' + fmtHarga(exnessPrice || price) + ' • Lot ' + (cfg.lot !== undefined ? cfg.lot : (d.lot || '-')) + ' • ' + (d.pnl_pips ? (d.pnl_pips >= 0 ? '+' : '') + d.pnl_pips.toFixed(0) + ' pips' : '')); } else { pnlBox.style.display = 'none'; }
     }
     const jarakWall = d.wall ? (d.wall.distance !== undefined ? d.wall.distance : Math.abs(price - d.wall.price)) : 0;
     safeSet('wallVal', d.wall ? d.wall.side + ' ' + d.wall.price.toFixed(2) + ' - ' + d.wall.size.toFixed(2) + ' XAUT - Betah ' + d.wall.age_menit + 'm - ' + d.wall.sources + ' (jarak ' + jarakWall.toFixed(1) + '$)' : '-');
     safeSet('lastVal', d.last_done ? cleanHasil(d.last_done.last_result) + ' - ' + (d.last_done.last_result || '') : (d.last_setup ? d.last_setup.setup_id + ' ' + cleanHasil(d.last_setup.result || '') : '-'));
-    if(d.is_locked && d.lockedAt){
-      const dt = new Date(d.lockedAt); const diffMenit = Math.floor((Date.now() - d.lockedAt)/60000);
-      safeSet('jamAktif', dt.toLocaleTimeString('id-ID')); safeSet('jamTanggal', dt.toLocaleDateString('id-ID')); safeSet('jamTelat', diffMenit + ' menit');
-      const statusEl = document.getElementById('jamStatus');
-      if(statusEl){ if(diffMenit < 15){ statusEl.innerText = 'Masih fresh, gas masuk'; statusEl.style.color = '#00e676'; } else { statusEl.innerText = 'Market udah ' + diffMenit + 'm belum TP, pantau terus'; statusEl.style.color = '#ff5252'; } }
-    } else { safeSet('jamAktif', '-'); safeSet('jamTanggal', 'Belum ada sinyal aktif'); safeSet('jamTelat', '-'); const sEl = document.getElementById('jamStatus'); if(sEl){ sEl.innerText = 'Nunggu sinyal...'; sEl.style.color = '#94a3b8'; } }
+    if(d.is_locked && d.lockedAt){ const dt = new Date(d.lockedAt); const diffMenit = Math.floor((Date.now() - d.lockedAt)/60000); safeSet('jamAktif', dt.toLocaleTimeString('id-ID')); safeSet('jamTanggal', dt.toLocaleDateString('id-ID')); safeSet('jamTelat', diffMenit + ' menit'); const statusEl = document.getElementById('jamStatus'); if(statusEl){ if(diffMenit < 15){ statusEl.innerText = 'Masih fresh, gas masuk'; statusEl.style.color = '#00e676'; } else { statusEl.innerText = 'Market udah ' + diffMenit + 'm belum TP, pantau terus'; statusEl.style.color = '#ff5252'; } } } else { safeSet('jamAktif', '-'); safeSet('jamTanggal', 'Belum ada sinyal aktif'); safeSet('jamTelat', '-'); const sEl = document.getElementById('jamStatus'); if(sEl){ sEl.innerText = 'Nunggu sinyal...'; sEl.style.color = '#94a3b8'; } }
     const hargaTxt = price ? '$' + price.toFixed(2) : '--';
     safeSet('xautPrice', hargaTxt); safeSet('xautPrice2', hargaTxt);
     safeSet('wsBybitVal', wsBybit); safeSet('wsOkxVal', wsOkx);
-    const render = function(el, arr, cls){
-      const target = document.getElementById(el); if(!target) return;
-      if(!arr || !arr.length){ target.innerHTML = '<div class="empty">Gak ada whale di area ini</div>'; return; }
-      target.innerHTML = arr.map(function(l){ let jarak = price ? Math.abs(l.price - price).toFixed(1) + '$ dari harga' : ''; return '<div class="row"><div class="left ' + cls + '">' + l.side + ' ' + l.price.toFixed(2) + '<small>' + (l.sources || '') + ' • ' + (l.age_menit || 0) + 'm</small></div><div class="right">' + l.size.toFixed(4) + ' XAUT<small>$' + (l.size * l.price).toFixed(0) + ' • ' + jarak + '</small></div></div>'; }).join('');
-    };
+    const render = function(el, arr, cls){ const target = document.getElementById(el); if(!target) return; if(!arr || !arr.length){ target.innerHTML = '<div class="empty">Gak ada whale di area ini</div>'; return; } target.innerHTML = arr.map(function(l){ let jarak = price ? Math.abs(l.price - price).toFixed(1) + '$ dari harga' : ''; return '<div class="row"><div class="left ' + cls + '">' + l.side + ' ' + l.price.toFixed(2) + '<small>' + (l.sources || '') + ' • ' + (l.age_menit || 0) + 'm</small></div><div class="right">' + l.size.toFixed(4) + ' XAUT<small>$' + (l.size * l.price).toFixed(0) + ' • ' + jarak + '</small></div></div>'; }).join(''); };
     const wallsNear = d.wallsNear || d.walls || []; const wallsFar = d.wallsFar || [];
     render('bidsNear', wallsNear.filter(function(w){ return w.side === 'BID'; }).sort(function(a,b){ return b.price - a.price; }).slice(0,6), 'BID');
     render('asksNear', wallsNear.filter(function(w){ return w.side === 'ASK'; }).sort(function(a,b){ return a.price - b.price; }).slice(0,6), 'ASK');
     render('bidsFar', wallsFar.filter(function(w){ return w.side === 'BID'; }).sort(function(a,b){ return b.size - a.size; }), 'FAR-BID');
     render('asksFar', wallsFar.filter(function(w){ return w.side === 'ASK'; }).sort(function(a,b){ return b.size - a.size; }), 'FAR-ASK');
     let pendingSource = Array.isArray(d.pendingOrders) ? d.pendingOrders : []; let touchedSource = Array.isArray(d.touchedLevels) ? d.touchedLevels : [];
-    const renderPendingItem = function(w){
-      const isTouched = w.status === 'TERSENTUH'; const isBuy2 = w.side === 'BID';
-      const cls = isTouched ? 'touched' : (isBuy2 ? 'buy' : 'sell');
-      const badgeCls = isTouched ? 'touched' : (isBuy2 ? 'buy' : 'sell');
-      const badgeText = isTouched ? '🔥 TERSENTUH' : (isBuy2 ? 'BUY MARKET' : 'SELL MARKET');
-      const dist = (w.distance !== undefined ? w.distance : (price ? Math.abs(w.price - price) : 0));
-      return '<div class="pending-item ' + cls + '"><div class="pending-top"><b>' + w.side + ' ' + w.price.toFixed(2) + '</b><span class="badge ' + badgeCls + '">' + badgeText + '</span></div><div class="mt5">XAUT ' + w.price.toFixed(2) + ' • ' + (isBuy2 ? 'BUY MARKET' : 'SELL MARKET') + ' di ' + w.price.toFixed(2) + '</div><div class="meta">' + w.size.toFixed(4) + ' XAUT • $' + (w.size * w.price).toFixed(0) + ' • ' + (w.sources || '') + ' • Umur ' + (w.age_menit || 0) + 'm<br>Jarak ke harga XAUT: ' + dist.toFixed(1) + '$ ' + (isTouched ? '• UDAH KENA!' : '• Belum kena') + '</div></div>';
-    };
+    const renderPendingItem = function(w){ const isTouched = w.status === 'TERSENTUH'; const isBuy2 = w.side === 'BID'; const cls = isTouched ? 'touched' : (isBuy2 ? 'buy' : 'sell'); const badgeCls = isTouched ? 'touched' : (isBuy2 ? 'buy' : 'sell'); const badgeText = isTouched ? '🔥 TERSENTUH' : (isBuy2 ? 'BUY MARKET' : 'SELL MARKET'); const dist = (w.distance !== undefined ? w.distance : (price ? Math.abs(w.price - price) : 0)); return '<div class="pending-item ' + cls + '"><div class="pending-top"><b>' + w.side + ' ' + w.price.toFixed(2) + '</b><span class="badge ' + badgeCls + '">' + badgeText + '</span></div><div class="mt5">XAUT ' + w.price.toFixed(2) + ' • ' + (isBuy2 ? 'BUY MARKET' : 'SELL MARKET') + ' di ' + w.price.toFixed(2) + '</div><div class="meta">' + w.size.toFixed(4) + ' XAUT • $' + (w.size * w.price).toFixed(0) + ' • ' + (w.sources || '') + ' • Umur ' + (w.age_menit || 0) + 'm<br>Jarak ke harga XAUT: ' + dist.toFixed(1) + '$ ' + (isTouched ? '• UDAH KENA!' : '• Belum kena') + '</div></div>'; };
     const bidEl = document.getElementById('pendingBidList'); if(bidEl) bidEl.innerHTML = pendingSource.filter(function(w){ return w.side === 'BID'; }).sort(function(a,b){ return b.size - a.size; }).map(renderPendingItem).join('') || '<div class="empty">Gak ada BID pending yang betah 5 menit - lagi nunggu...</div>';
     const askEl = document.getElementById('pendingAskList'); if(askEl) askEl.innerHTML = pendingSource.filter(function(w){ return w.side === 'ASK'; }).sort(function(a,b){ return b.size - a.size; }).map(renderPendingItem).join('') || '<div class="empty">Gak ada ASK pending yang betah 5 menit - lagi nunggu...</div>';
     safeSet('pendingCount', pendingSource.length + ' pending • ' + touchedSource.length + ' tersentuh');
@@ -465,41 +280,13 @@ async function load(){
     const histBody = document.getElementById('historyBody');
     if(histBody){
       if(hist.length){
-        histBody.innerHTML = hist.map(function(h){
-          const dt = new Date(h.created_at); const hasilBersih = cleanHasil(h.result);
-          const isWin = hasilBersih.indexOf('WIN') !== -1; const isLose = hasilBersih.indexOf('LOSE') !== -1;
-          const resultColor = isWin ? '#00e676' : isLose ? '#ff5252' : h.result === 'AKTIF' ? '#facc15' : '#94a3b8';
-          const hExEntry = (h.exness_entry !== undefined ? h.exness_entry : (h.entry !== undefined ? h.entry : h.entry_low)) || 0;
-          const hExSL = (h.exness_sl !== undefined ? h.exness_sl : (h.sl !== undefined ? h.sl : h.sl_low)) || 0;
-          const hExTP = (h.exness_tp !== undefined ? h.exness_tp : (h.tp !== undefined ? h.tp : h.tp_low)) || 0;
-          const hSlPips = h.exness_sl_pips || h.sl_pips || slPipsTxt; const hTpPips = h.exness_tp_pips || h.tp_pips || tpPipsTxt;
-          return '<tr><td style="font-weight:900;color:#facc15">' + (h.setup_id || '-') + '</td><td>' + dt.toLocaleDateString('id-ID') + '<br><small style="color:#94a3b8">' + dt.toLocaleTimeString('id-ID') + '</small></td><td style="font-weight:900;color:' + (h.signal.indexOf('BUY') !== -1 ? '#00e676' : '#ff5252') + '">' + h.signal + '</td><td>' + fmtHarga(hExEntry) + '<br><small style="color:#94a3b8">' + (h.size ? h.size.toFixed(2) + ' XAUT • ' : '') + (h.sources || '') + ' • XAUT ' + fmtZona(h.entry_low || h.entry || 0, h.entry_high || h.entry_low || h.entry || 0) + '</small></td><td>SL ' + fmtHarga(hExSL) + ' (-' + hSlPips + ' pips)<br>TP ' + fmtHarga(hExTP) + ' (+' + hTpPips + ' pips)</td><td style="font-weight:900;color:' + resultColor + '">' + hasilBersih + (h.duration_menit ? '<br><small style="color:#94a3b8">' + h.duration_menit + 'm</small>' : '') + '</td><td><input class="hist-note" value="' + getNote(h.id).replace(/"/g, '&quot;') + '" placeholder="Tulis jurnal..." oninput="saveNote(\'' + h.id + '\', this.value)" /></td></tr>';
-        }).join('');
-        const closed = hist.filter(function(h){ return h.closed_at; }); const win = hist.filter(function(h){ return (h.result || '').indexOf('WIN') !== -1; }).length; const wr = d.winrate_data || { winrate: closed.length ? Math.floor(win / closed.length * 100) : 0 };
-        safeSet('winrateVal', closed.length ? win + ' WIN / ' + closed.length + ' closed = ' + wr.winrate + '% winrate (' + sltpTxt + ')' : '-');
+        histBody.innerHTML = hist.map(function(h){ const dt = new Date(h.created_at); const hasilBersih = cleanHasil(h.result); const isWin = hasilBersih.indexOf('WIN') !== -1; const isLose = hasilBersih.indexOf('LOSE') !== -1; const resultColor = isWin ? '#00e676' : isLose ? '#ff5252' : h.result === 'AKTIF' ? '#facc15' : '#94a3b8'; const hExEntry = (h.exness_entry !== undefined ? h.exness_entry : (h.entry !== undefined ? h.entry : h.entry_low)) || 0; const hExSL = (h.exness_sl !== undefined ? h.exness_sl : (h.sl !== undefined ? h.sl : h.sl_low)) || 0; const hExTP = (h.exness_tp !== undefined ? h.exness_tp : (h.tp !== undefined ? h.tp : h.tp_low)) || 0; const hSlPips = h.exness_sl_pips || h.sl_pips || slPipsTxt; const hTpPips = h.exness_tp_pips || h.tp_pips || tpPipsTxt; return '<tr><td style="font-weight:900;color:#facc15">' + (h.setup_id || '-') + '</td><td>' + dt.toLocaleDateString('id-ID') + '<br><small style="color:#94a3b8">' + dt.toLocaleTimeString('id-ID') + '</small></td><td style="font-weight:900;color:' + (h.signal.indexOf('BUY') !== -1 ? '#00e676' : '#ff5252') + '">' + h.signal + '</td><td>' + fmtHarga(hExEntry) + '<br><small style="color:#94a3b8">' + (h.size ? h.size.toFixed(2) + ' XAUT • ' : '') + (h.sources || '') + ' • XAUT ' + fmtZona(h.entry_low || h.entry || 0, h.entry_high || h.entry_low || h.entry || 0) + '</small></td><td>SL ' + fmtHarga(hExSL) + ' (-' + hSlPips + ' pips)<br>TP ' + fmtHarga(hExTP) + ' (+' + hTpPips + ' pips)</td><td style="font-weight:900;color:' + resultColor + '">' + hasilBersih + (h.duration_menit ? '<br><small style="color:#94a3b8">' + h.duration_menit + 'm</small>' : '') + '</td><td><input class="hist-note" value="' + getNote(h.id).replace(/"/g, '&quot;') + '" placeholder="Tulis jurnal..." oninput="saveNote(\'' + h.id + '\', this.value)" /></td></tr>'; }).join('');
+        const closed = hist.filter(function(h){ return h.closed_at; }); const win = hist.filter(function(h){ return (h.result || '').indexOf('WIN') !== -1; }).length; const wr = d.winrate_data || { winrate: closed.length ? Math.floor(win / closed.length * 100) : 0 }; safeSet('winrateVal', closed.length ? win + ' WIN / ' + closed.length + ' closed = ' + wr.winrate + '% winrate (' + sltpTxt + ')' : '-');
       } else { histBody.innerHTML = '<tr><td colspan="7" class="empty">Belum ada riwayat...</td></tr>'; }
     }
   }catch(e){ const st = document.getElementById('status'); if(st) st.innerText = ''; console.log('load gagal', e); }
 }
-async function bukaRiwayatSesi(){
-  document.getElementById('popupRiwayat').style.display = 'block';
-  document.getElementById('riwayatSesiIsi').innerHTML = 'Loading...';
-  try{
-    const r = await fetch(BASE_URL + '/api/history', { cache: 'no-store' });
-    const j = JSON.parse(await r.text());
-    const hist = j.history || [];
-    document.getElementById('riwayatSesiInfo').innerText = 'Sesi: ' + (j.sesi_mulai || '-') + ' • Total: ' + (j.total || hist.length) + ' sinyal • Uptime: ' + (j.uptime_menit || 0) + ' menit • Winrate: ' + (j.winrate_data ? j.winrate_data.winrate + '%' : '-');
-    if(!hist.length){ document.getElementById('riwayatSesiIsi').innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8">Belum ada sinyal di sesi ini.</div>'; return; }
-    document.getElementById('riwayatSesiIsi').innerHTML = hist.map(function(h){
-      const dt = new Date(h.created_at); const hasilBersih = cleanHasil(h.result);
-      const c = hasilBersih.indexOf('WIN') !== -1 ? '#00e676' : hasilBersih.indexOf('LOSE') !== -1 ? '#ff5252' : '#facc15';
-      const hExEntry = (h.exness_entry !== undefined ? h.exness_entry : h.entry) || 0;
-      const hExSL = (h.exness_sl !== undefined ? h.exness_sl : h.sl) || 0;
-      const hExTP = (h.exness_tp !== undefined ? h.exness_tp : h.tp) || 0;
-      return '<div class="riw-item"><b style="color:' + (h.signal && h.signal.indexOf('BUY') !== -1 ? '#00e676' : '#ff5252') + '">' + h.signal + '</b> - <b style="color:' + c + '">' + hasilBersih + '</b> <span style="float:right;color:#94a3b8;font-size:12px">' + dt.toLocaleDateString('id-ID') + ' ' + dt.toLocaleTimeString('id-ID') + '</span><br><small style="color:#cbd5e1">Setup ' + (h.setup_id || '-') + ' | Entry Exness ' + fmtHarga(hExEntry) + ' | SL ' + fmtHarga(hExSL) + ' | TP ' + fmtHarga(hExTP) + '</small></div>';
-    }).join('');
-  }catch(e){ document.getElementById('riwayatSesiIsi').innerHTML = 'Gagal load riwayat: ' + e.message; }
-}
+async function bukaRiwayatSesi(){ document.getElementById('popupRiwayat').style.display = 'block'; document.getElementById('riwayatSesiIsi').innerHTML = 'Loading...'; try{ const r = await fetch(BASE_URL + '/api/history', { cache: 'no-store' }); const j = JSON.parse(await r.text()); const hist = j.history || []; document.getElementById('riwayatSesiInfo').innerText = 'Sesi: ' + (j.sesi_mulai || '-') + ' • Total: ' + (j.total || hist.length) + ' sinyal • Uptime: ' + (j.uptime_menit || 0) + ' menit • Winrate: ' + (j.winrate_data ? j.winrate_data.winrate + '%' : '-'); if(!hist.length){ document.getElementById('riwayatSesiIsi').innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8">Belum ada sinyal di sesi ini.</div>'; return; } document.getElementById('riwayatSesiIsi').innerHTML = hist.map(function(h){ const dt = new Date(h.created_at); const hasilBersih = cleanHasil(h.result); const c = hasilBersih.indexOf('WIN') !== -1 ? '#00e676' : hasilBersih.indexOf('LOSE') !== -1 ? '#ff5252' : '#facc15'; const hExEntry = (h.exness_entry !== undefined ? h.exness_entry : h.entry) || 0; const hExSL = (h.exness_sl !== undefined ? h.exness_sl : h.sl) || 0; const hExTP = (h.exness_tp !== undefined ? h.exness_tp : h.tp) || 0; return '<div class="riw-item"><b style="color:' + (h.signal && h.signal.indexOf('BUY') !== -1 ? '#00e676' : '#ff5252') + '">' + h.signal + '</b> - <b style="color:' + c + '">' + hasilBersih + '</b> <span style="float:right;color:#94a3b8;font-size:12px">' + dt.toLocaleDateString('id-ID') + ' ' + dt.toLocaleTimeString('id-ID') + '</span><br><small style="color:#cbd5e1">Setup ' + (h.setup_id || '-') + ' | Entry Exness ' + fmtHarga(hExEntry) + ' | SL ' + fmtHarga(hExSL) + ' | TP ' + fmtHarga(hExTP) + '</small></div>'; }).join(''); }catch(e){ document.getElementById('riwayatSesiIsi').innerHTML = 'Gagal load riwayat: ' + e.message; } }
 function tutupRiwayatSesi(){ document.getElementById('popupRiwayat').style.display = 'none'; }
 document.addEventListener('click', function(e){ if(e.target && e.target.id === 'popupRiwayat') tutupRiwayatSesi(); });
 async function unlock(){ try{ const r = await fetch(BASE_URL + '/api/unlock'); const d = JSON.parse(await r.text()); alert(d.msg || 'Unlocked'); load(); }catch(e){ alert('Gagal unlock: ' + e.message); } }
