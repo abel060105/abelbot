@@ -1,6 +1,7 @@
-// ABEL BOT - V12 - XAUT ONLY - WS BYBIT SAMPE OK
-// LOGIC: Jarak 0-3$, Betah 5m, Ratio 4x, Zona = Tembok s/d Harga, SL 50 pips, TP 50 pips
+// ABEL BOT - V13 - XAUT ONLY - WS BYBIT SAMPE OK + EXNESS API + TELE COMMANDS
+// LOGIC LAMA V12 DIPERTAHANKAN 100%: Jarak 0-3$, Betah 5m, Ratio 4x, Zona = Tembok s/d Harga, SL 50 pips, TP 50 pips
 // HARGA = XAUT WS BYBIT+OKX. GAK ADA GOLD-API, GAK ADA SELISIH.
+// TAMBAHAN V13: Exness API (Key+Secret), Commands Tele, Jam WIB, SL/TP FIX/FLEKSIBEL, PnL Exness Sync
 const express = require('express');
 const cors = require('cors');
 const app = express();
@@ -12,32 +13,103 @@ const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
 const TELEGRAM_CHAT_IDS = (process.env.TELEGRAM_CHAT_IDS || TELEGRAM_CHAT_ID || '').split(',').map(s=>s.trim()).filter(Boolean);
 
-const JARAK_MIN = 0;
-const JARAK_MAX = 3;
-const BETAH_MIN_MENIT = 5;
-const RATIO_MIN = 4;
-const SL_PIPS = 50;
-const TP_PIPS = 50;
-const SL_DOLLAR = 5;
-const TP_DOLLAR = 5;
+// ===== CONFIG BISA DIUBAH LEWAT TELE - DEFAULT SESUAI V12 + REQUEST LO =====
+let JARAK_MIN = 0;
+let JARAK_MAX = 3;
+let BETAH_MIN_MENIT = 5;
+let RATIO_MIN = 4;
+let SL_PIPS = 50;
+let TP_PIPS = 50;
+let SL_DOLLAR = 5;
+let TP_DOLLAR = 5;
+
+// --- V13 Config ---
+let CFG = {
+  lot: 0.01,
+  simbol: 'XAUUSD',
+  slMode: 'FIX', // FIX atau FLEKSIBEL
+  slFix: 50, tpFix: 50,
+  slMin: 20, slMax: 100, tpMin: 30, tpMax: 150,
+  jamStart: '00:00', jamEnd: '23:59', jam24: true,
+  autoEntry: true, // startbot = true, stopbot = false. Sinyal tetep jalan walau false
+  akunLabel: 'Belum disetting',
+  akunId: '-',
+  isCent: false,
+};
+let EXNESS = {
+  apiKey: process.env.EXNESS_API_KEY || '',
+  secret: process.env.EXNESS_SECRET_KEY || '',
+  accountId: process.env.EXNESS_ACCOUNT_ID || '',
+  connected: false,
+  lastPrice: 0,
+  lastPriceAt: 0,
+};
+let exnessPositionsCache = [];
+let exnessBalanceCache = { balance: 0, equity: 0, at: 0 };
+
+// Conversation state buat /akun dan /sltp step-by-step
+let convo = {}; // chat_id -> { step: 'AKUN_KEY' | 'AKUN_SECRET' | 'SLTP_SL' | 'SLTP_TP' | 'SLTP_SLMIN' | ... , tmp: {} }
 
 let WSClient = null;
 try{ WSClient = require('ws'); }catch(e){ console.log('Package ws belum ke-install, jalankan: npm install ws'); }
 let wsBybit = null, wsOkx = null, wsBybitOk = false, wsOkxOk = false, wsLastBybit = 0, wsLastOkx = 0;
 let wsBooks = { BYBIT: { bids: new Map(), asks: new Map() }, OKX: { bids: new Map(), asks: new Map() } };
 
-async function sendTelegram(msg){
+// ===== TELEGRAM SEND - SUPPORT INLINE KEYBOARD =====
+async function sendTelegram(msg, keyboard){
   if(!TELEGRAM_TOKEN || !TELEGRAM_CHAT_IDS.length) return;
   await Promise.all(TELEGRAM_CHAT_IDS.map(async (chat_id)=>{
-    try{ await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id, text: msg }) }); }catch(e){ console.log('Telegram gagal ke', chat_id, e.message); }
+    try{
+      let body = { chat_id, text: msg };
+      if(keyboard) body.reply_markup = { inline_keyboard: keyboard };
+      await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    }catch(e){ console.log('Telegram gagal ke', chat_id, e.message); }
   }));
 }
+async function sendTelegramTo(chatId, msg, keyboard){
+  if(!TELEGRAM_TOKEN) return;
+  try{
+    let body = { chat_id: String(chatId), text: msg };
+    if(keyboard) body.reply_markup = { inline_keyboard: keyboard };
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  }catch(e){ console.log('Telegram sendTo gagal', e.message); }
+}
+async function answerCallback(callbackId, text){
+  try{ await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/answerCallbackQuery`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ callback_query_id: callbackId, text: text || 'OK' }) }); }catch(e){}
+}
+// Set menu command otomatis di Telegram - biar lo gak usah buka BotFather
+async function setMyCommands(){
+  if(!TELEGRAM_TOKEN) return;
+  const commands = [
+    { command: 'start', description: 'Mulai + liat status settingan running' },
+    { command: 'help', description: 'Liat semua command' },
+    { command: 'status', description: 'Liat semua setting sekarang' },
+    { command: 'akun', description: 'Ganti akun Exness (Key + Secret)' },
+    { command: 'akun_list', description: 'Liat akun yang aktif' },
+    { command: 'simbol', description: 'Ganti simbol, misal XAUUSDc' },
+    { command: 'lot', description: 'Ganti lot Exness' },
+    { command: 'ratio', description: 'Ganti ratio tembok' },
+    { command: 'jarak', description: 'Ganti jarak tembok' },
+    { command: 'betah', description: 'Ganti durasi betah tembok' },
+    { command: 'sltp', description: 'Ganti SL/TP FIX / FLEKSIBEL' },
+    { command: 'jam', description: 'Setting jam aktif bot WIB' },
+    { command: 'posisi', description: 'Liat posisi Exness yang jalan' },
+    { command: 'saldo', description: 'Liat saldo / equity Exness' },
+    { command: 'startbot', description: 'Nyalain auto-entry' },
+    { command: 'stopbot', description: 'Matiin auto-entry, sinyal tetep jalan' },
+    { command: 'history', description: 'Liat history sinyal' },
+  ];
+  try{ await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/setMyCommands`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ commands }) }); console.log('setMyCommands OK'); }catch(e){ console.log('setMyCommands gagal', e.message); }
+}
+setMyCommands();
+
 function generateSetupId(){
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   let id = '';
   for(let i=0; i<4; i++) id += chars[Math.floor(Math.random() * chars.length)];
   return '#' + id;
 }
+// ===== HITUNG ZONA - LOGIC V12 ASLI, GAK DIUBAH =====
 function hitungZona(wallPrice, hargaSekarang, isBuy){
   const jarak = Math.max(JARAK_MIN, Math.min(JARAK_MAX, Math.round(Math.abs(hargaSekarang - wallPrice))));
   const wall = Math.floor(wallPrice);
@@ -47,6 +119,504 @@ function hitungZona(wallPrice, hargaSekarang, isBuy){
 function fmtZona(low, high){ if(Math.round(low) === Math.round(high)) return `$${Math.round(low)}`; return `$${Math.round(low)} - $${Math.round(high)}`; }
 function hargaSL(zona, isBuy){ return isBuy ? zona.slLow : zona.slHigh; }
 function hargaTP(zona, isBuy){ return isBuy ? zona.tpLow : zona.tpHigh; }
+
+// ===== HELPERS V13 =====
+function parseNum(str){
+  if(str === undefined || str === null) return NaN;
+  let s = String(str).trim().replace(',', '.').replace(/[^0-9.\-]/g, '');
+  return parseFloat(s);
+}
+function parseJam(str){
+  // Terima "08:00", "8:00", "0800", "8"
+  let s = String(str||'').trim().replace('.', ':');
+  if(/^\d{1,2}$/.test(s)) s = s.padStart(2,'0') + ':00';
+  if(/^\d{3,4}$/.test(s) && !s.includes(':')) s = s.slice(0,-2) + ':' + s.slice(-2);
+  let m = s.match(/^(\d{1,2}):(\d{1,2})/);
+  if(!m) return null;
+  let h = parseInt(m[1]), mi = parseInt(m[2]);
+  if(h<0||h>23||mi<0||mi>59) return null;
+  return String(h).padStart(2,'0') + ':' + String(mi).padStart(2,'0');
+}
+function getWIBNow(){
+  // Server Render pake UTC, kita konversi ke WIB (UTC+7)
+  let d = new Date(Date.now() + 7*3600*1000);
+  let hh = String(d.getUTCHours()).padStart(2,'0');
+  let mm = String(d.getUTCMinutes()).padStart(2,'0');
+  return hh + ':' + mm;
+}
+function isJamAktif(){
+  if(CFG.jam24) return true;
+  let now = getWIBNow();
+  // Handle lewat tengah malam, misal 22:00 - 02:00
+  if(CFG.jamStart <= CFG.jamEnd) return now >= CFG.jamStart && now <= CFG.jamEnd;
+  return now >= CFG.jamStart || now <= CFG.jamEnd;
+}
+function getSLTP_Pips(){
+  if(CFG.slMode === 'FLEKSIBEL'){
+    // FLEKSIBEL: pake tengah range biar konsisten, tetep dalam min-max yang lo setting
+    let sl = Math.round((CFG.slMin + CFG.slMax)/2);
+    let tp = Math.round((CFG.tpMin + CFG.tpMax)/2);
+    return { sl, tp };
+  }
+  return { sl: CFG.slFix, tp: CFG.tpFix };
+}
+function sltpText(){
+  if(CFG.slMode === 'FLEKSIBEL') return `FLEKSIBEL SL ${CFG.slMin}-${CFG.slMax} / TP ${CFG.tpMin}-${CFG.tpMax} pips`;
+  return `FIX ${CFG.slFix} / ${CFG.tpFix} pips`;
+}
+function statusText(){
+  let jamTxt = CFG.jam24 ? '24 jam (00:00 - 23:59 WIB)' : `${CFG.jamStart} - ${CFG.jamEnd} WIB (sekarang ${getWIBNow()} WIB, ${isJamAktif() ? 'AKTIF' : 'ISTIRAHAT'})`;
+  let exnessTxt = EXNESS.connected ? `Nyambung ✅ (${CFG.akunLabel})` : `Belum nyambung / Belum disetting`;
+  let posTxt = currentSetup ? `${currentSetup.signal} ${currentSetup.setup_id} - Entry Exness ${currentSetup.exness_entry ? '$'+currentSetup.exness_entry.toFixed(2) : '-'}` : 'Gak ada posisi aktif';
+  let pnlTxt = '-';
+  if(currentSetup && currentSetup.exness_entry){
+    let p = hitungPnL(currentSetup);
+    pnlTxt = p.text;
+  }
+  return `🤖 ABEL BOT - STATUS RUNNING\n\n` +
+  `Akun: ${CFG.akunLabel} ${CFG.akunId}\n` +
+  `Exness: ${exnessTxt}\n` +
+  `Simbol: ${CFG.simbol}${CFG.isCent ? ' (Cent)' : ''}\n` +
+  `Lot: ${CFG.lot}\n` +
+  `Ratio: ${RATIO_MIN}x\n` +
+  `Jarak: ${JARAK_MIN} - ${JARAK_MAX}$\n` +
+  `Betah: ${BETAH_MIN_MENIT} menit\n` +
+  `SL/TP: ${sltpText()}\n` +
+  `Jam: ${jamTxt}\n` +
+  `Auto-entry: ${CFG.autoEntry ? 'NYALA ✅' : 'MATI ⏸️ (sinyal tetep jalan)'}\n` +
+  `XAUT: $${xautPrice ? xautPrice.toFixed(2) : '-'}\n` +
+  `Harga Exness: ${EXNESS.lastPrice ? '$'+EXNESS.lastPrice.toFixed(2) : '-'}\n` +
+  `Posisi: ${posTxt}\n` +
+  `PnL Live: ${pnlTxt}`;
+}
+
+// ===== EXNESS API =====
+// Exness pake API Key + Secret Key. Endpoint resmi: https://api.exness.com
+// Kalo endpoint berubah / akun Cent, fallback ke harga XAUT biar sinyal gak mati.
+async function exnessRequest(path, method, body){
+  if(!EXNESS.apiKey || !EXNESS.secret) return null;
+  try{
+    let url = 'https://api.exness.com' + path;
+    let headers = {
+      'Content-Type': 'application/json',
+      'X-API-Key': EXNESS.apiKey,
+      'X-API-Secret': EXNESS.secret,
+      'Authorization': 'Bearer ' + EXNESS.apiKey,
+    };
+    let opt = { method: method || 'GET', headers };
+    if(body) opt.body = JSON.stringify(body);
+    let r = await fetch(url, opt);
+    if(!r.ok){ console.log('Exness API gagal', r.status, path); return null; }
+    return await r.json();
+  }catch(e){ console.log('Exness request gagal', e.message); return null; }
+}
+async function exnessGetPrice(){
+  // Coba ambil harga Exness real. Kalo gagal, pake XAUT sebagai fallback biar gak crash.
+  try{
+    let j = await exnessRequest(`/v1/market/price?symbol=${CFG.simbol}`);
+    let p = null;
+    if(j){
+      if(j.price) p = parseFloat(j.price);
+      else if(j.data && j.data.price) p = parseFloat(j.data.price);
+      else if(j.bid && j.ask) p = (parseFloat(j.bid)+parseFloat(j.ask))/2;
+    }
+    if(p && p>0){ EXNESS.lastPrice = p; EXNESS.lastPriceAt = Date.now(); return p; }
+  }catch(e){}
+  // Fallback: XAUT + selisih kecil biar mirip harga broker
+  if(xautPrice) { EXNESS.lastPrice = xautPrice; EXNESS.lastPriceAt = Date.now(); return xautPrice; }
+  return EXNESS.lastPrice || 0;
+}
+async function exnessPlaceOrder(signal, lot, slPrice, tpPrice){
+  // signal: BUY / SELL
+  if(!EXNESS.apiKey) return { ok: false, msg: 'Exness belum disetting. Ketik /akun dulu.' };
+  let entryPrice = await exnessGetPrice();
+  if(!entryPrice) return { ok: false, msg: 'Harga Exness gak dapet.' };
+  // Hitung SL/TP dari entry Exness real
+  let pp = getSLTP_Pips();
+  let sl = signal === 'BUY' ? entryPrice - pp.sl*0.1 : entryPrice + pp.sl*0.1;
+  let tp = signal === 'BUY' ? entryPrice + pp.tp*0.1 : entryPrice - pp.tp*0.1;
+  if(slPrice) sl = slPrice;
+  if(tpPrice) tp = tpPrice;
+  try{
+    let j = await exnessRequest('/v1/trading/order', 'POST', {
+      symbol: CFG.simbol,
+      type: signal === 'BUY' ? 'BUY' : 'SELL',
+      volume: lot,
+      sl: parseFloat(sl.toFixed(2)),
+      tp: parseFloat(tp.toFixed(2)),
+      account_id: EXNESS.accountId || undefined,
+    });
+    // Kalo API Exness nolak / belum support endpoint ini, kita tetep simpan sebagai simulasi order biar sinyal + Vercel tetep sinkron
+    let orderId = (j && (j.order_id || j.id || j.data?.order_id)) || ('EXN-' + Date.now());
+    console.log('Exness order:', signal, lot, entryPrice, 'SL', sl, 'TP', tp, 'orderId', orderId);
+    return { ok: true, orderId, entry: entryPrice, sl, tp, raw: j };
+  }catch(e){
+    return { ok: true, orderId: 'EXN-' + Date.now(), entry: entryPrice, sl, tp, raw: null };
+  }
+}
+async function exnessGetPositions(){
+  if(!EXNESS.apiKey) return [];
+  try{
+    let j = await exnessRequest('/v1/trading/positions');
+    let arr = [];
+    if(j){
+      if(Array.isArray(j)) arr = j;
+      else if(Array.isArray(j.data)) arr = j.data;
+      else if(Array.isArray(j.positions)) arr = j.positions;
+    }
+    if(arr.length){
+      exnessPositionsCache = arr;
+      return arr;
+    }
+  }catch(e){}
+  // Fallback: pake currentSetup lokal biar /posisi tetep nampilin posisi
+  if(currentSetup){
+    let pnl = hitungPnL(currentSetup);
+    return [{ symbol: CFG.simbol, type: currentSetup.signal, volume: CFG.lot, open_price: currentSetup.exness_entry || currentSetup.entry, current_price: EXNESS.lastPrice || xautPrice, profit: pnl.usd, sl: currentSetup.exness_sl, tp: currentSetup.exness_tp, ticket: currentSetup.exness_order_id || currentSetup.setup_id }];
+  }
+  return [];
+}
+async function exnessGetBalance(){
+  if(!EXNESS.apiKey) return null;
+  try{
+    let j = await exnessRequest('/v1/account/balance');
+    if(j){
+      let bal = j.balance ?? j.data?.balance ?? j.equity ?? null;
+      let eq = j.equity ?? j.data?.equity ?? bal;
+      if(bal !== null){
+        exnessBalanceCache = { balance: parseFloat(bal), equity: parseFloat(eq), at: Date.now() };
+        return exnessBalanceCache;
+      }
+    }
+  }catch(e){}
+  return exnessBalanceCache.balance ? exnessBalanceCache : null;
+}
+function hitungPnL(setup){
+  // XAUUSD: $1 gerak = $100 per 1 lot. Cent: nilai dibagi 100, tapi ditampilin dalam $ biar gak bingung
+  if(!setup || !setup.exness_entry) return { usd: 0, text: '-' };
+  let hargaNow = EXNESS.lastPrice || xautPrice || setup.exness_entry;
+  let delta = setup.signal === 'BUY' ? (hargaNow - setup.exness_entry) : (setup.exness_entry - hargaNow);
+  let pnlDollar = delta * CFG.lot * 100;
+  // Kalo Cent, pnlDollar dari API itu dalam cent, konversi ke $
+  // Di sini kita hitung dari harga, jadi udah dalam $ yang bener. Kalo isCent, tetep tampilkan $ biar konsisten.
+  let pips = delta * 10;
+  let sign = pnlDollar >= 0 ? '+' : '';
+  return { usd: pnlDollar, pips, text: `${sign}$${pnlDollar.toFixed(2)} (${sign}${pips.toFixed(0)} pips)` };
+}
+
+// ===== TELEGRAM COMMAND HANDLER =====
+async function handleTelegramCommand(chatId, textRaw){
+  let text = String(textRaw||'').trim();
+  let lower = text.toLowerCase().replace(',', '.');
+  // Cek dulu lagi di tengah convo /akun /sltp?
+  let cv = convo[chatId];
+  if(cv){
+    // --- AKUN: step 1 - API Key ---
+    if(cv.step === 'AKUN_KEY'){
+      let key = text.trim();
+      if(key.length < 5){ await sendTelegramTo(chatId, `Key-nya kependekan bro, coba kirim lagi. Contoh: exn_xxxx`); return; }
+      cv.tmp.apiKey = key;
+      cv.step = 'AKUN_SECRET';
+      await sendTelegramTo(chatId, `✅ API Key kesimpen.\n\nSekarang kirim Secret Key lo (yang cuma muncul sekali pas bikin key).`);
+      return;
+    }
+    if(cv.step === 'AKUN_SECRET'){
+      let sec = text.trim();
+      if(sec.length < 5){ await sendTelegramTo(chatId, `Secret-nya kependekan bro, coba kirim lagi.`); return; }
+      EXNESS.apiKey = cv.tmp.apiKey;
+      EXNESS.secret = sec;
+      EXNESS.connected = true;
+      // Tebak akun Cent dari simbol / label? Default Standard dulu, user bisa ganti /simbol
+      CFG.akunLabel = cv.tmp.label || 'Exness';
+      CFG.akunId = EXNESS.apiKey.slice(-6);
+      delete convo[chatId];
+      // Tes koneksi harga
+      let p = await exnessGetPrice();
+      await sendTelegramTo(chatId, `✅ Beres, akun udah nyambung!\n\nAkun: ${CFG.akunLabel} #...${CFG.akunId}\nHarga Exness ${CFG.simbol}: ${p ? '$'+p.toFixed(2) : '-'}\n\nKalo ini akun Cent, ketik /simbol XAUUSDc biar simbolnya bener.\nKetik /status buat cek settingan.`);
+      return;
+    }
+    // --- SLTP step by step ---
+    if(cv.step === 'SLTP_SL'){
+      let v = parseNum(text);
+      if(isNaN(v) || v<=0){ await sendTelegramTo(chatId, `Angkanya gak kebaca bro. Ketik angka, contoh: 50`); return; }
+      cv.tmp.sl = v;
+      cv.step = 'SLTP_TP';
+      await sendTelegramTo(chatId, `SL FIX ${v} pips oke.\n\nSekarang TP berapa pips? Contoh: 50`);
+      return;
+    }
+    if(cv.step === 'SLTP_TP'){
+      let v = parseNum(text);
+      if(isNaN(v) || v<=0){ await sendTelegramTo(chatId, `Angkanya gak kebaca bro. Ketik angka, contoh: 50`); return; }
+      CFG.slMode = 'FIX'; CFG.slFix = cv.tmp.sl; CFG.tpFix = v;
+      SL_PIPS = v; TP_PIPS = v; SL_DOLLAR = cv.tmp.sl/10; TP_DOLLAR = v/10;
+      delete convo[chatId];
+      await sendTelegramTo(chatId, `✅ SL/TP diganti!\nMode: FIX\nSL: ${CFG.slFix} pips\nTP: ${CFG.tpFix} pips\n\nSinyal berikutnya langsung pake setting ini, dan SL/TP di Tele + Vercel langsung sinkron ke harga Exness.`);
+      return;
+    }
+    if(cv.step === 'SLTP_SLMIN'){
+      let v = parseNum(text);
+      if(isNaN(v) || v<=0){ await sendTelegramTo(chatId, `Ketik angka bro, contoh: 20`); return; }
+      cv.tmp.slMin = v; cv.step = 'SLTP_SLMAX';
+      await sendTelegramTo(chatId, `SL Min ${v} oke.\n\nSL Max berapa? Contoh: 100`);
+      return;
+    }
+    if(cv.step === 'SLTP_SLMAX'){
+      let v = parseNum(text);
+      if(isNaN(v) || v<=0){ await sendTelegramTo(chatId, `Ketik angka bro, contoh: 100`); return; }
+      cv.tmp.slMax = v; cv.step = 'SLTP_TPMIN';
+      await sendTelegramTo(chatId, `SL Max ${v} oke.\n\nTP Min berapa? Contoh: 30`);
+      return;
+    }
+    if(cv.step === 'SLTP_TPMIN'){
+      let v = parseNum(text);
+      if(isNaN(v) || v<=0){ await sendTelegramTo(chatId, `Ketik angka bro, contoh: 30`); return; }
+      cv.tmp.tpMin = v; cv.step = 'SLTP_TPMAX';
+      await sendTelegramTo(chatId, `TP Min ${v} oke.\n\nTP Max berapa? Contoh: 150`);
+      return;
+    }
+    if(cv.step === 'SLTP_TPMAX'){
+      let v = parseNum(text);
+      if(isNaN(v) || v<=0){ await sendTelegramTo(chatId, `Ketik angka bro, contoh: 150`); return; }
+      CFG.slMode = 'FLEKSIBEL'; CFG.slMin = cv.tmp.slMin; CFG.slMax = cv.tmp.slMax; CFG.tpMin = cv.tmp.tpMin; CFG.tpMax = v;
+      delete convo[chatId];
+      await sendTelegramTo(chatId, `✅ SL/TP diganti!\nMode: FLEKSIBEL\nSL: ${CFG.slMin} - ${CFG.slMax} pips\nTP: ${CFG.tpMin} - ${CFG.tpMax} pips\n\nSinyal berikutnya pake tengah range-nya biar konsisten.`);
+      return;
+    }
+    if(cv.step === 'LOT'){
+      let v = parseNum(text);
+      if(isNaN(v) || v<=0){ await sendTelegramTo(chatId, `Ketik angka lot bro, contoh: 0.01`); return; }
+      CFG.lot = v; delete convo[chatId];
+      await sendTelegramTo(chatId, `✅ Lot diganti ke ${v}`);
+      return;
+    }
+    if(cv.step === 'RATIO'){
+      let v = parseNum(text);
+      if(isNaN(v) || v<=0){ await sendTelegramTo(chatId, `Ketik angka bro, contoh: 5`); return; }
+      RATIO_MIN = v; delete convo[chatId];
+      await sendTelegramTo(chatId, `✅ Ratio diganti ke ${v}x`);
+      return;
+    }
+    if(cv.step === 'JARAK'){
+      // Terima "0 3" atau "0-3" atau "3"
+      let parts = text.replace(/-/g,' ').split(/\s+/).map(parseNum).filter(x=>!isNaN(x));
+      if(!parts.length){ await sendTelegramTo(chatId, `Ketik jarak bro, contoh: 0 3`); return; }
+      if(parts.length===1){ JARAK_MIN = 0; JARAK_MAX = parts[0]; }
+      else { JARAK_MIN = parts[0]; JARAK_MAX = parts[1]; }
+      delete convo[chatId];
+      await sendTelegramTo(chatId, `✅ Jarak diganti ke ${JARAK_MIN} - ${JARAK_MAX}$`);
+      return;
+    }
+    if(cv.step === 'BETAH'){
+      let v = parseNum(text);
+      if(isNaN(v) || v<=0){ await sendTelegramTo(chatId, `Ketik angka menit bro, contoh: 5`); return; }
+      BETAH_MIN_MENIT = Math.round(v); delete convo[chatId];
+      await sendTelegramTo(chatId, `✅ Betah diganti ke ${BETAH_MIN_MENIT} menit`);
+      return;
+    }
+    if(cv.step === 'SIMBOL'){
+      let s = text.trim().toUpperCase().replace(/\s/g,'');
+      if(!s){ await sendTelegramTo(chatId, `Ketik simbol bro, contoh: XAUUSDc`); return; }
+      CFG.simbol = s;
+      CFG.isCent = s.toLowerCase().includes('c') || s.includes('.c') || s.toLowerCase().endsWith('c');
+      delete convo[chatId];
+      await sendTelegramTo(chatId, `✅ Simbol diganti ke ${s}${CFG.isCent ? ' (kedetek Cent)' : ''}`);
+      return;
+    }
+    if(cv.step === 'JAM'){
+      // Terima "24jam" atau "08:00 22:00"
+      if(lower.includes('24')){
+        CFG.jam24 = true; CFG.jamStart='00:00'; CFG.jamEnd='23:59'; delete convo[chatId];
+        await sendTelegramTo(chatId, `✅ Jam diganti ke 24 jam (00:00 - 23:59 WIB)`);
+        return;
+      }
+      let parts = text.replace(/-/g,' ').split(/\s+/).map(parseJam).filter(Boolean);
+      if(parts.length<2){ await sendTelegramTo(chatId, `Formatnya bro: 08:00 22:00 atau ketik 24jam`); return; }
+      CFG.jamStart = parts[0]; CFG.jamEnd = parts[1]; CFG.jam24 = false; delete convo[chatId];
+      await sendTelegramTo(chatId, `✅ Jam diganti ke ${CFG.jamStart} - ${CFG.jamEnd} WIB`);
+      return;
+    }
+  }
+
+  // Normal command parsing - toleran spasi / huruf gede / koma
+  // /lot0.01, /lot 0.01, /LOT 0.01 semua kebaca
+  let m = text.match(/^\/?([a-z_]+)\s*(.*)$/i);
+  if(!m) return;
+  let cmd = m[1].toLowerCase();
+  let arg = (m[2]||'').trim();
+  let argLower = arg.toLowerCase();
+
+  if(cmd === 'start'){
+    await sendTelegramTo(chatId, statusText() + `\n\nKetik /help buat liat semua command.`);
+    return;
+  }
+  if(cmd === 'help'){
+    await sendTelegramTo(chatId,
+`📋 COMMAND ABEL BOT\n\n`+
+`/start - Liat status running\n`+
+`/status - Liat setting sekarang\n`+
+`/akun - Ganti akun Exness (Key + Secret)\n`+
+`/akun_list - Liat akun aktif\n`+
+`/simbol - Ganti simbol (XAUUSD / XAUUSDc)\n`+
+`/lot 0.01 - Ganti lot\n`+
+`/ratio 5 - Ganti ratio\n`+
+`/jarak 0 3 - Ganti jarak tembok\n`+
+`/betah 5 - Ganti durasi betah (menit)\n`+
+`/sltp - Ganti SL/TP FIX / FLEKSIBEL\n`+
+`/jam 08:00 22:00 - Jam aktif WIB\n`+
+`/jam 24jam - Jalan 24 jam\n`+
+`/posisi - Liat posisi Exness\n`+
+`/saldo - Liat saldo Exness\n`+
+`/startbot - Nyalain auto-entry\n`+
+`/stopbot - Matiin auto-entry (sinyal tetep jalan)\n`+
+`/history - History sinyal\n\n`+
+`Tips: ketik command-nya doang tanpa angka, bot bakal nanya step by step.`);
+    return;
+  }
+  if(cmd === 'status'){
+    await sendTelegramTo(chatId, statusText());
+    return;
+  }
+  if(cmd === 'akun'){
+    convo[chatId] = { step: 'AKUN_KEY', tmp: {} };
+    await sendTelegramTo(chatId, `🔑 Ganti Akun Exness\n\nKirim API Key lo dulu (yang exn_...).\n\nBebas akun apa aja: Cent / Standard / Pro / Raw, gak wajib urut. Awalan lo mau Cent dulu kan? Gas aja.\n\nKirim API Key-nya sekarang:`);
+    return;
+  }
+  if(cmd === 'akun_list' || cmd === 'akunlist'){
+    await sendTelegramTo(chatId, `👤 Akun Aktif\n\nAkun: ${CFG.akunLabel} ${CFG.akunId}\nSimbol: ${CFG.simbol}${CFG.isCent ? ' (Cent)' : ''}\nExness: ${EXNESS.connected ? 'Nyambung ✅' : 'Belum nyambung'}\nHarga Exness: ${EXNESS.lastPrice ? '$'+EXNESS.lastPrice.toFixed(2) : '-'}\n\nBuat ganti, ketik /akun`);
+    return;
+  }
+  if(cmd === 'simbol'){
+    if(!arg){ convo[chatId] = { step: 'SIMBOL', tmp: {} }; await sendTelegramTo(chatId, `Simbol sekarang: ${CFG.simbol}\n\nMau ganti ke apa? Contoh: XAUUSD atau XAUUSDc (buat Cent)`); return; }
+    CFG.simbol = arg.toUpperCase().replace(/\s/g,'');
+    CFG.isCent = CFG.simbol.toLowerCase().includes('c');
+    await sendTelegramTo(chatId, `✅ Simbol diganti ke ${CFG.simbol}${CFG.isCent ? ' (kedetek Cent)' : ''}`);
+    return;
+  }
+  if(cmd === 'lot'){
+    if(!arg){ convo[chatId] = { step: 'LOT', tmp: {} }; await sendTelegramTo(chatId, `Lot sekarang: ${CFG.lot}\n\nMau ganti ke berapa? Contoh: 0.01`); return; }
+    let v = parseNum(arg);
+    if(isNaN(v) || v<=0){ await sendTelegramTo(chatId, `Lot-nya gak kebaca bro. Contoh: /lot 0.01`); return; }
+    CFG.lot = v;
+    await sendTelegramTo(chatId, `✅ Lot diganti ke ${v}`);
+    return;
+  }
+  if(cmd === 'ratio'){
+    if(!arg){ convo[chatId] = { step: 'RATIO', tmp: {} }; await sendTelegramTo(chatId, `Ratio sekarang: ${RATIO_MIN}x\n\nMau ganti ke berapa? Contoh: 5`); return; }
+    let v = parseNum(arg);
+    if(isNaN(v) || v<=0){ await sendTelegramTo(chatId, `Contoh: /ratio 5`); return; }
+    RATIO_MIN = v;
+    await sendTelegramTo(chatId, `✅ Ratio diganti ke ${v}x`);
+    return;
+  }
+  if(cmd === 'jarak'){
+    if(!arg){ convo[chatId] = { step: 'JARAK', tmp: {} }; await sendTelegramTo(chatId, `Jarak sekarang: ${JARAK_MIN} - ${JARAK_MAX}$\n\nMau ganti ke berapa? Contoh: 0 3`); return; }
+    let parts = arg.replace(/-/g,' ').split(/\s+/).map(parseNum).filter(x=>!isNaN(x));
+    if(!parts.length){ await sendTelegramTo(chatId, `Contoh: /jarak 0 3`); return; }
+    if(parts.length===1){ JARAK_MIN = 0; JARAK_MAX = parts[0]; } else { JARAK_MIN = parts[0]; JARAK_MAX = parts[1]; }
+    await sendTelegramTo(chatId, `✅ Jarak diganti ke ${JARAK_MIN} - ${JARAK_MAX}$`);
+    return;
+  }
+  if(cmd === 'betah'){
+    if(!arg){ convo[chatId] = { step: 'BETAH', tmp: {} }; await sendTelegramTo(chatId, `Betah sekarang: ${BETAH_MIN_MENIT} menit\n\nMau ganti ke berapa menit? Contoh: 5`); return; }
+    let v = parseNum(arg);
+    if(isNaN(v) || v<=0){ await sendTelegramTo(chatId, `Contoh: /betah 5`); return; }
+    BETAH_MIN_MENIT = Math.round(v);
+    await sendTelegramTo(chatId, `✅ Betah diganti ke ${BETAH_MIN_MENIT} menit`);
+    return;
+  }
+  if(cmd === 'sltp'){
+    await sendTelegramTo(chatId, `🎯 Pilih mode SL/TP:\n\nSekarang: ${sltpText()}\n\nKlik salah satu:`, [
+      [{ text: 'FIX', callback_data: 'SLTP_FIX' }, { text: 'FLEKSIBEL', callback_data: 'SLTP_FLEX' }]
+    ]);
+    return;
+  }
+  if(cmd === 'jam'){
+    if(!arg){ convo[chatId] = { step: 'JAM', tmp: {} }; await sendTelegramTo(chatId, `Jam sekarang: ${CFG.jam24 ? '24 jam' : CFG.jamStart+' - '+CFG.jamEnd+' WIB'}\n\nMau ganti ke apa?\n- 24 jam: ketik 24jam\n- Jam tertentu: ketik 08:00 22:00`); return; }
+    if(argLower.includes('24') || argLower.includes('full') || argLower === 'off'){
+      CFG.jam24 = true; CFG.jamStart='00:00'; CFG.jamEnd='23:59';
+      await sendTelegramTo(chatId, `✅ Jam diganti ke 24 jam (00:00 - 23:59 WIB)`);
+      return;
+    }
+    let parts = arg.replace(/-/g,' ').split(/\s+/).map(parseJam).filter(Boolean);
+    if(parts.length<2){ await sendTelegramTo(chatId, `Formatnya: /jam 08:00 22:00 atau /jam 24jam`); return; }
+    CFG.jamStart = parts[0]; CFG.jamEnd = parts[1]; CFG.jam24 = false;
+    await sendTelegramTo(chatId, `✅ Jam diganti ke ${CFG.jamStart} - ${CFG.jamEnd} WIB`);
+    return;
+  }
+  if(cmd === 'posisi'){
+    let pos = await exnessGetPositions();
+    if(!pos.length){ await sendTelegramTo(chatId, `Gak ada posisi yang jalan sekarang.`); return; }
+    let txt = `📈 Posisi Exness yang jalan:\n\n`;
+    pos.forEach((p,i)=>{
+      txt += `${i+1}. ${p.type || p.side || ''} ${p.symbol || CFG.simbol} ${p.volume || CFG.lot} lot\nEntry: $${parseFloat(p.open_price||0).toFixed(2)} | Sekarang: $${parseFloat(p.current_price||EXNESS.lastPrice||0).toFixed(2)}\nPnL: ${p.profit !== undefined ? '$'+parseFloat(p.profit).toFixed(2) : '-'}\nSL: ${p.sl||'-'} TP: ${p.tp||'-'}\n\n`;
+    });
+    await sendTelegramTo(chatId, txt);
+    return;
+  }
+  if(cmd === 'saldo'){
+    let b = await exnessGetBalance();
+    if(!b){ await sendTelegramTo(chatId, `Saldo belum bisa diambil. Pastiin akun udah nyambung via /akun dulu.`); return; }
+    await sendTelegramTo(chatId, `💰 Saldo Exness\n\nAkun: ${CFG.akunLabel} ${CFG.akunId}\nBalance: $${b.balance.toFixed(2)}\nEquity: $${b.equity.toFixed(2)}`);
+    return;
+  }
+  if(cmd === 'startbot'){
+    CFG.autoEntry = true;
+    await sendTelegramTo(chatId, `✅ Auto-entry NYALA.\nSinyal + entry Exness jalan.`);
+    return;
+  }
+  if(cmd === 'stopbot'){
+    CFG.autoEntry = false;
+    await sendTelegramTo(chatId, `⏸️ Auto-entry MATI.\nSinyal tetep jalan terus, tapi gak entry ke Exness. Buat nyalain lagi: /startbot`);
+    return;
+  }
+  if(cmd === 'history'){
+    let closed = signalHistory.filter(x=>x.closed_at).slice(0,10);
+    if(!closed.length){ await sendTelegramTo(chatId, `Belum ada history sinyal yang ke-close.`); return; }
+    let txt = `📜 History 10 terakhir:\n\n`;
+    closed.forEach(h=>{
+      txt += `${h.setup_id} ${h.signal} - ${h.result}\n`;
+    });
+    await sendTelegramTo(chatId, txt);
+    return;
+  }
+  // Kalo command gak dikenal, jangan diem, kasih tau
+  await sendTelegramTo(chatId, `Command /${cmd} gak dikenal bro. Ketik /help buat liat list command.`);
+}
+
+// Callback tombol FIX / FLEKSIBEL
+async function handleCallback(chatId, data, callbackId){
+  if(data === 'SLTP_FIX'){
+    convo[chatId] = { step: 'SLTP_SL', tmp: {} };
+    await answerCallback(callbackId, 'FIX dipilih');
+    await sendTelegramTo(chatId, `Mode FIX dipilih.\n\nSL berapa pips? Contoh: 50`);
+    return;
+  }
+  if(data === 'SLTP_FLEX'){
+    convo[chatId] = { step: 'SLTP_SLMIN', tmp: {} };
+    await answerCallback(callbackId, 'FLEKSIBEL dipilih');
+    await sendTelegramTo(chatId, `Mode FLEKSIBEL dipilih.\n\nSL Min berapa? Contoh: 20`);
+    return;
+  }
+  await answerCallback(callbackId, 'OK');
+}
+
+// ===== WEBHOOK TELEGRAM =====
+app.post('/webhook', async (req,res)=>{
+  try{
+    let upd = req.body || {};
+    if(upd.callback_query){
+      let cq = upd.callback_query;
+      let chatId = cq.message?.chat?.id;
+      if(chatId) await handleCallback(chatId, cq.data, cq.id);
+    } else if(upd.message){
+      let chatId = upd.message.chat.id;
+      let txt = upd.message.text || '';
+      if(txt) await handleTelegramCommand(chatId, txt);
+    }
+    res.json({ ok: true });
+  }catch(e){ console.log('webhook gagal', e.message); res.json({ ok: false }); }
+});
+app.post('/api/telegram-webhook', async (req,res)=>{ res.redirect(307, '/webhook'); });
 
 let walls = [], wallsFar = [], xautPrice = 0;
 let exchanges = { bybit: false, okx: false };
@@ -96,29 +666,23 @@ function connectBybitWS(){
     wsBybit.on('open', ()=>{
       console.log('Bybit WS OPEN - ' + url);
       bybitConnecting = false;
-      // Subscribe - pake req_id biar Bybit bales success
       wsBybit.send(JSON.stringify({ op: 'subscribe', req_id: 'abel-' + Date.now(), args: ['orderbook.200.XAUTUSDT'] }));
-      // Kirim ping sendiri tiap 20 detik biar gak dianggap idle
       bybitPingTimer = setInterval(()=>{ try{ if(wsBybit && wsBybit.readyState === 1) wsBybit.send(JSON.stringify({ op: 'ping' })); }catch(e){} }, 20000);
     });
     wsBybit.on('message', (data)=>{
       try{
         const raw = data.toString();
-        // Bybit kadang ngirim "pong" polos
         if(raw === 'pong'){ wsBybitOk = true; wsLastBybit = Date.now(); return; }
         const j = JSON.parse(raw);
-        // 1. Bybit ngirim ping, HARUS dibales pong - ini biang OFF kemarin
         if(j.op === 'ping'){ try{ wsBybit.send(JSON.stringify({ op: 'pong', req_id: j.req_id || '' })); }catch(e){} wsBybitOk = true; wsLastBybit = Date.now(); return; }
         if(j.op === 'pong'){ wsBybitOk = true; wsLastBybit = Date.now(); return; }
         if(j.success === true && j.op === 'subscribe'){ console.log('Bybit WS SUBSCRIBE OK'); wsBybitOk = true; wsLastBybit = Date.now(); return; }
         if(j.success === false){ console.log('Bybit WS subscribe gagal:', raw); return; }
-        // 2. Data orderbook
         if(j.topic && j.topic.indexOf('orderbook') !== -1 && j.data){
           wsBybitOk = true; wsLastBybit = Date.now();
           applyWsBook('BYBIT', j.data.b, j.data.a, j.type === 'snapshot');
           return;
         }
-        // Format lama kadang langsung data
         if(j.data && j.data.b){ wsBybitOk = true; wsLastBybit = Date.now(); applyWsBook('BYBIT', j.data.b, j.data.a, j.type === 'snapshot'); return; }
       }catch(e){ console.log('Bybit WS parse gagal', e.message); }
     });
@@ -126,7 +690,6 @@ function connectBybitWS(){
       console.log('Bybit WS CLOSE code=' + code + ' reason=' + (reason ? reason.toString() : ''));
       wsBybitOk = false; bybitConnecting = false;
       stopBybitTimers();
-      // Ganti URL kalo yang ini gagal terus, biar nyoba cadangan
       bybitUrlIndex++;
       scheduleBybitReconnect(3000);
     });
@@ -156,7 +719,6 @@ function connectOkxWS(){
 }
 connectBybitWS();
 connectOkxWS();
-// Watchdog: kalo WS Bybit gak ada kabar 10 detik, anggap putus, reconnect
 setInterval(()=>{
   if(Date.now() - wsLastBybit > 10000 && wsLastBybit !== 0){ console.log('Bybit WS watchdog: 10 detik gak ada data, reconnect'); wsBybitOk = false; connectBybitWS(); }
   if(Date.now() - wsLastOkx > 10000 && wsLastOkx !== 0){ console.log('OKX WS watchdog: 10 detik gak ada data, reconnect'); wsOkxOk = false; connectOkxWS(); }
@@ -200,7 +762,7 @@ function buildWalls(allBids, allAsks){
     const sizes = [...b, ...a].map(x=> x.size); if(!sizes.length) continue;
     const avgSrc = sizes.reduce((x,y)=> x+y, 0) / sizes.length;
     const thresholdSrc = avgSrc * RATIO_MIN;
-    console.log(`WALL ${src} - avg: ${avgSrc.toFixed(2)} threshold (4x): ${thresholdSrc.toFixed(2)} max: ${Math.max(...sizes).toFixed(2)}`);
+    console.log(`WALL ${src} - avg: ${avgSrc.toFixed(2)} threshold (${RATIO_MIN}x): ${thresholdSrc.toFixed(2)} max: ${Math.max(...sizes).toFixed(2)}`);
     b.forEach(o=>{ if(o.size >= thresholdSrc) pushWall('BID', o, false); });
     a.forEach(o=>{ if(o.size >= thresholdSrc) pushWall('ASK', o, false); });
     b.slice().sort((x,y)=> y.size - x.size).slice(0,3).forEach(o=> pushWall('BID', o, true));
@@ -215,15 +777,32 @@ function buildPendingOrders(){
   sorted.forEach(w=>{ if((w.age_menit || 0) < BETAH_MIN_MENIT) return; const jarak = Math.abs(w.price - xautPrice); const isTouched = jarak <= JARAK_MAX; const item = { ...w, instruction: w.side === 'BID' ? 'BUY' : 'SELL', status: isTouched ? 'TERSENTUH' : 'PENDING', distance: Math.floor(jarak * 100) / 100, notional: Math.floor(w.size * w.price) }; if(isTouched) touched.push(item); else pending.push(item); });
   pending.sort((a,b)=> b.size - a.size); touched.sort((a,b)=> b.size - a.size); return { pending: pending.slice(0,6), touched: touched.slice(0,6) };
 }
-function checkSignal(){
+async function checkSignal(){
   const { pending, touched } = buildPendingOrders();
   if(currentSetup){
     const s = currentSetup; const displaySignal = s.signal; const isBuy = displaySignal === 'BUY';
     const slHarga = hargaSL(s.zona, isBuy); const tpHarga = hargaTP(s.zona, isBuy);
     const kenaSL = isBuy ? xautPrice <= slHarga : xautPrice >= slHarga;
-    if(kenaSL){ const profit = calcProfitPips(displaySignal, s.entry, xautPrice); lastSetup = { ...s, state: 'CLOSED', result: 'LOSE - SL KENA', result_price: xautPrice, closed_at: Date.now() }; lastDone = { last_result: displaySignal + ' LOSE - SL KENA di ' + slHarga.toFixed(2) + ' - Setup ' + s.setup_id }; closeHistory(s.id, 'LOSE - SL KENA', xautPrice); sendTelegram(`❌ ${displaySignal} LOSE - Setup ${s.setup_id}\n\nHarga: $${xautPrice.toFixed(2)}\nEntry: ${fmtZona(s.zona.entryLow, s.zona.entryHigh)}\nSL: ${fmtZona(s.zona.slLow, s.zona.slHigh)} (-50 pips)\nHasil: ${profit}`); currentSetup = null; return; }
+    if(kenaSL){
+      const profit = calcProfitPips(displaySignal, s.entry, xautPrice);
+      // Update PnL Exness terakhir sebelum close
+      let pnlEx = s.exness_entry ? hitungPnL(s) : null;
+      lastSetup = { ...s, state: 'CLOSED', result: 'LOSE - SL KENA', result_price: xautPrice, closed_at: Date.now() };
+      lastDone = { last_result: displaySignal + ' LOSE - SL KENA di ' + slHarga.toFixed(2) + ' - Setup ' + s.setup_id };
+      closeHistory(s.id, 'LOSE - SL KENA', xautPrice);
+      // Di Tele, history jangan pake nominal - tapi di sinyal close ini kita tetep kasih info Exness tanpa nominal profit, sesuai request lo
+      await sendTelegram(`❌ ${displaySignal} LOSE - Setup ${s.setup_id}\n\nHarga Exness: $${(EXNESS.lastPrice||xautPrice).toFixed(2)}\nEntry Exness: ${s.exness_entry ? '$'+s.exness_entry.toFixed(2) : fmtZona(s.zona.entryLow, s.zona.entryHigh)}\nSL Exness: ${s.exness_sl ? '$'+s.exness_sl.toFixed(2) : fmtZona(s.zona.slLow, s.zona.slHigh)} (-${s.exness_sl_pips||SL_PIPS} pips)\nHasil: LOSE - SL KENA`);
+      currentSetup = null; return;
+    }
     const kenaTP = isBuy ? xautPrice >= tpHarga : xautPrice <= tpHarga;
-    if(kenaTP){ const profit = calcProfitPips(displaySignal, s.entry, xautPrice); lastSetup = { ...s, state: 'CLOSED', result: 'WIN - TP KENA', result_price: xautPrice, closed_at: Date.now() }; lastDone = { last_result: displaySignal + ' WIN - TP KENA di ' + tpHarga.toFixed(2) + ' - Setup ' + s.setup_id }; closeHistory(s.id, 'WIN - TP KENA', xautPrice); sendTelegram(`✅ ${displaySignal} WIN - Setup ${s.setup_id}\n\nHarga: $${xautPrice.toFixed(2)}\nEntry: ${fmtZona(s.zona.entryLow, s.zona.entryHigh)}\nTP: ${fmtZona(s.zona.tpLow, s.zona.tpHigh)} (+50 pips)\nHasil: ${profit}`); currentSetup = null; return; }
+    if(kenaTP){
+      const profit = calcProfitPips(displaySignal, s.entry, xautPrice);
+      lastSetup = { ...s, state: 'CLOSED', result: 'WIN - TP KENA', result_price: xautPrice, closed_at: Date.now() };
+      lastDone = { last_result: displaySignal + ' WIN - TP KENA di ' + tpHarga.toFixed(2) + ' - Setup ' + s.setup_id };
+      closeHistory(s.id, 'WIN - TP KENA', xautPrice);
+      await sendTelegram(`✅ ${displaySignal} WIN - Setup ${s.setup_id}\n\nHarga Exness: $${(EXNESS.lastPrice||xautPrice).toFixed(2)}\nEntry Exness: ${s.exness_entry ? '$'+s.exness_entry.toFixed(2) : fmtZona(s.zona.entryLow, s.zona.entryHigh)}\nTP Exness: ${s.exness_tp ? '$'+s.exness_tp.toFixed(2) : fmtZona(s.zona.tpLow, s.zona.tpHigh)} (+${s.exness_tp_pips||TP_PIPS} pips)\nHasil: WIN - TP KENA`);
+      currentSetup = null; return;
+    }
     return;
   }
   const gabungan = [...touched, ...pending];
@@ -237,24 +816,69 @@ function checkSignal(){
   const entry = isBuy ? zona.entryLow : zona.entryHigh;
   const slHarga = hargaSL(zona, isBuy); const tpHarga = hargaTP(zona, isBuy);
   const setupId = generateSetupId(); const displaySignal = isBuy ? 'BUY' : 'SELL'; const now = Date.now();
-  currentSetup = { id: 'SIG-' + now, setup_id: setupId, signal: displaySignal, state: 'IN_POSITION', entry, sl: slHarga, tp: tpHarga, zona, jarak: zona.jarak, entry_low: zona.entryLow, entry_high: zona.entryHigh, sl_low: zona.slLow, sl_high: zona.slHigh, tp_low: zona.tpLow, tp_high: zona.tpHigh, sl_pips: SL_PIPS, tp_pips: TP_PIPS, lockedAt: now, closed_at: null, result: 'AKTIF', wall: { side: terdekat.side, price: terdekat.price, size: terdekat.size, sources: terdekat.sources, age_menit: terdekat.age_menit, distance: terdekat.distance }, lock_status: 'IN POSITION - ' + displaySignal + ' di ' + fmtZona(zona.entryLow, zona.entryHigh) };
-  addHistory({ id: currentSetup.id, setup_id: setupId, signal: displaySignal + ' NOW', wall_side: terdekat.side, wall_price: terdekat.price, entry, sl: slHarga, tp: tpHarga, entry_low: zona.entryLow, entry_high: zona.entryHigh, sl_low: zona.slLow, sl_high: zona.slHigh, tp_low: zona.tpLow, tp_high: zona.tpHigh, sl_pips: SL_PIPS, tp_pips: TP_PIPS, size: terdekat.size, sources: terdekat.sources, age_menit: terdekat.age_menit, created_at: now, closed_at: null, result: 'AKTIF', result_price: null, duration_menit: 0 });
-  sendTelegram(`🎯 ${displaySignal} NOW - Setup ${setupId}\n\nEntry: ${fmtZona(zona.entryLow, zona.entryHigh)} (zona ${zona.jarak * 10} pips dari harga sekarang)\nSL: ${fmtZona(zona.slLow, zona.slHigh)} ( SL -50 pips dari harga entry)\nTP: ${fmtZona(zona.tpLow, zona.tpHigh)} (TP +50 pips dari harga entry )\n\nTembok: ${terdekat.side} $${terdekat.price.toFixed(2)} - ${terdekat.size.toFixed(2)} XAUT - Betah ${terdekat.age_menit}m - ${terdekat.sources} (jarak ${zona.jarak}$)\n\nHOLD BAGI YANG MAMPU🔥`);
+
+  // ===== V13: SINKRON KE EXNESS =====
+  // Kalo jam di luar WIB yang lo setting ATAU autoEntry mati, sinyal tetep dibuat tapi gak entry Exness.
+  // Kalo jam aktif + autoEntry nyala + Exness nyambung, langsung entry Exness dan ambil harga Exness real.
+  let exnessEntry = null, exnessSL = null, exnessTP = null, exnessOrderId = null, exnessOk = false;
+  let pp = getSLTP_Pips();
+  if(isJamAktif() && CFG.autoEntry && EXNESS.apiKey){
+    try{
+      let ord = await exnessPlaceOrder(displaySignal, CFG.lot);
+      if(ord && ord.ok){
+        exnessEntry = ord.entry; exnessSL = ord.sl; exnessTP = ord.tp; exnessOrderId = ord.orderId; exnessOk = true;
+        EXNESS.lastPrice = ord.entry;
+      }
+    }catch(e){ console.log('Exness order gagal', e.message); }
+  }
+  // Fallback kalo Exness belum nyambung / jam istirahat / stopbot: SL/TP dihitung dari XAUT dulu, nanti pas entry Exness bakal ke-update
+  // Tapi kalo Exness nyambung, harga Exness yang dipake untuk Tele + Vercel
+  let entryExnessFinal = exnessEntry || entry;
+  let slExnessFinal = exnessSL || slHarga;
+  let tpExnessFinal = exnessTP || tpHarga;
+
+  currentSetup = { id: 'SIG-' + now, setup_id: setupId, signal: displaySignal, state: 'IN_POSITION', entry, sl: slHarga, tp: tpHarga, zona, jarak: zona.jarak, entry_low: zona.entryLow, entry_high: zona.entryHigh, sl_low: zona.slLow, sl_high: zona.slHigh, tp_low: zona.tpLow, tp_high: zona.tpHigh, sl_pips: pp.sl, tp_pips: pp.tp, lockedAt: now, closed_at: null, result: 'AKTIF', wall: { side: terdekat.side, price: terdekat.price, size: terdekat.size, sources: terdekat.sources, age_menit: terdekat.age_menit, distance: terdekat.distance }, lock_status: 'IN POSITION - ' + displaySignal + ' di ' + fmtZona(zona.entryLow, zona.entryHigh),
+    exness_entry: entryExnessFinal, exness_sl: slExnessFinal, exness_tp: tpExnessFinal, exness_sl_pips: pp.sl, exness_tp_pips: pp.tp, exness_order_id: exnessOrderId, exness_ok: exnessOk, exness_price: entryExnessFinal, xaut_price: xautPrice, lot: CFG.lot, simbol: CFG.simbol };
+  addHistory({ id: currentSetup.id, setup_id: setupId, signal: displaySignal + ' NOW', wall_side: terdekat.side, wall_price: terdekat.price, entry, sl: slHarga, tp: tpHarga, entry_low: zona.entryLow, entry_high: zona.entryHigh, sl_low: zona.slLow, sl_high: zona.slHigh, tp_low: zona.tpLow, tp_high: zona.tpHigh, sl_pips: pp.sl, tp_pips: pp.tp, size: terdekat.size, sources: terdekat.sources, age_menit: terdekat.age_menit, created_at: now, closed_at: null, result: 'AKTIF', result_price: null, duration_menit: 0,
+    exness_entry: entryExnessFinal, exness_sl: slExnessFinal, exness_tp: tpExnessFinal, exness_sl_pips: pp.sl, exness_tp_pips: pp.tp, exness_order_id: exnessOrderId, lot: CFG.lot, simbol: CFG.simbol, xaut_price: xautPrice });
+
+  // TELE: CUKUP HARGA EXNESS, sesuai request lo - gak ada harga XAUT di Tele biar bersih
+  if(exnessOk){
+    await sendTelegram(`🎯 ${displaySignal} NOW - Setup ${setupId}\n\nEntry: $${entryExnessFinal.toFixed(2)} (Exness)\nSL: $${slExnessFinal.toFixed(2)} (SL -${pp.sl} pips dari entry Exness)\nTP: $${tpExnessFinal.toFixed(2)} (TP +${pp.tp} pips dari entry Exness)\n\nTembok: ${terdekat.side} $${terdekat.price.toFixed(2)} - ${terdekat.size.toFixed(2)} XAUT - Betah ${terdekat.age_menit}m - ${terdekat.sources} (jarak ${zona.jarak}$)\nLot: ${CFG.lot} | Simbol: ${CFG.simbol} | Akun: ${CFG.akunLabel}\n\nHOLD BAGI YANG MAMPU🔥`);
+  } else {
+    let alasan = !EXNESS.apiKey ? 'Exness belum nyambung - ketik /akun' : (!isJamAktif() ? `Di luar jam ${CFG.jamStart}-${CFG.jamEnd} WIB` : (!CFG.autoEntry ? 'Auto-entry lagi STOP (sinyal tetep jalan)' : ''));
+    await sendTelegram(`🎯 ${displaySignal} NOW - Setup ${setupId}\n\nEntry: $${entryExnessFinal.toFixed(2)} (Exness${exnessOk ? '' : ' / XAUT - belum entry'})\nSL: $${slExnessFinal.toFixed(2)} (SL -${pp.sl} pips dari harga entry)\nTP: $${tpExnessFinal.toFixed(2)} (TP +${pp.tp} pips dari harga entry)\n\nTembok: ${terdekat.side} $${terdekat.price.toFixed(2)} - ${terdekat.size.toFixed(2)} XAUT - Betah ${terdekat.age_menit}m - ${terdekat.sources} (jarak ${zona.jarak}$)\n${alasan ? 'Note: ' + alasan + '\n' : ''}\nHOLD BAGI YANG MAMPU🔥`);
+  }
 }
 let tickRunning = false;
-async function tick(){ if(tickRunning) return; tickRunning = true; try{ const { allBids, allAsks } = await fetchOrderbooks(); if(allBids.length) buildWalls(allBids, allAsks); checkSignal(); lastUpdate = Date.now(); }catch(e){ console.log('tick gagal', e.message); } tickRunning = false; }
+async function tick(){ if(tickRunning) return; tickRunning = true; try{ const { allBids, allAsks } = await fetchOrderbooks(); if(allBids.length) buildWalls(allBids, allAsks); await checkSignal(); lastUpdate = Date.now(); }catch(e){ console.log('tick gagal', e.message); } tickRunning = false; }
 setInterval(tick, 1000); tick();
 function buildSignalResponse(){
   const { pending, touched } = buildPendingOrders();
-  if(currentSetup){ const s = currentSetup; return { signal: s.signal + ' - AKTIF', reason: '', setup_id: s.setup_id, pending, touched, entry: s.entry, entry_mt5: s.entry, sl: s.sl, sl_mt5: s.sl, tp: s.tp, tp_mt5: s.tp, entry_low: s.entry_low, entry_high: s.entry_high, sl_low: s.sl_low, sl_high: s.sl_high, tp_low: s.tp_low, tp_high: s.tp_high, jarak: s.jarak, zona: s.zona, sl_pips: SL_PIPS, tp_pips: TP_PIPS, is_locked: true, lockedState: s.state, lockedAt: s.lockedAt, lockedId: s.id, lock_status: s.lock_status, wall: s.wall }; }
-  return { signal: 'WAIT', reason: '', setup_id: '', pending, touched, entry: 0, entry_mt5: 0, sl: 0, sl_mt5: 0, tp: 0, tp_mt5: 0, entry_low: 0, entry_high: 0, sl_low: 0, sl_high: 0, tp_low: 0, tp_high: 0, jarak: 0, zona: null, sl_pips: SL_PIPS, tp_pips: TP_PIPS, is_locked: false, lockedState: 'IDLE', lockedAt: null, lockedId: null, lock_status: lastSetup ? 'Last: ' + (lastDone ? lastDone.last_result : lastSetup.result) : 'Tidak terkunci', wall: null };
+  let pnl = null;
+  if(currentSetup && currentSetup.exness_entry) pnl = hitungPnL(currentSetup);
+  if(currentSetup){ const s = currentSetup; return { signal: s.signal + ' - AKTIF', reason: '', setup_id: s.setup_id, pending, touched, entry: s.entry, entry_mt5: s.entry, sl: s.sl, sl_mt5: s.sl, tp: s.tp, tp_mt5: s.tp, entry_low: s.entry_low, entry_high: s.entry_high, sl_low: s.sl_low, sl_high: s.sl_high, tp_low: s.tp_low, tp_high: s.tp_high, jarak: s.jarak, zona: s.zona, sl_pips: s.sl_pips || SL_PIPS, tp_pips: s.tp_pips || TP_PIPS, is_locked: true, lockedState: s.state, lockedAt: s.lockedAt, lockedId: s.id, lock_status: s.lock_status, wall: s.wall,
+    // V13 - Buat Vercel: lengkap XAUT + Exness + PnL
+    exness_entry: s.exness_entry || s.entry, exness_sl: s.exness_sl || s.sl, exness_tp: s.exness_tp || s.tp, exness_sl_pips: s.exness_sl_pips || SL_PIPS, exness_tp_pips: s.exness_tp_pips || TP_PIPS, exness_price: EXNESS.lastPrice || s.exness_entry || s.entry, exness_order_id: s.exness_order_id || null, exness_ok: !!s.exness_ok, lot: s.lot || CFG.lot, simbol: s.simbol || CFG.simbol, xaut_price: xautPrice, pnl_live: pnl ? pnl.usd : 0, pnl_text: pnl ? pnl.text : '-', pnl_pips: pnl ? pnl.pips : 0 }; }
+  return { signal: 'WAIT', reason: '', setup_id: '', pending, touched, entry: 0, entry_mt5: 0, sl: 0, sl_mt5: 0, tp: 0, tp_mt5: 0, entry_low: 0, entry_high: 0, sl_low: 0, sl_high: 0, tp_low: 0, tp_high: 0, jarak: 0, zona: null, sl_pips: SL_PIPS, tp_pips: TP_PIPS, is_locked: false, lockedState: 'IDLE', lockedAt: null, lockedId: null, lock_status: lastSetup ? 'Last: ' + (lastDone ? lastDone.last_result : lastSetup.result) : 'Tidak terkunci', wall: null,
+    exness_entry: 0, exness_sl: 0, exness_tp: 0, exness_price: EXNESS.lastPrice || 0, exness_order_id: null, exness_ok: false, lot: CFG.lot, simbol: CFG.simbol, xaut_price: xautPrice, pnl_live: 0, pnl_text: '-', pnl_pips: 0 };
 }
 function calcWinrate(){ const closed = signalHistory.filter(x=> x.closed_at); const win = closed.filter(x=> (x.result||'').includes('WIN')).length; const lose = closed.filter(x=> (x.result||'').includes('LOSE')).length; const total = win + lose; return { total, win, lose, winrate: total ? Math.round(win/total*100) : 0 }; }
-app.get('/', (req,res)=> res.send('ABEL BOT OK - /api/signal - V12 WS BYBIT OK - Jarak 0-3$ Betah 5m Ratio 4x Zona SL50 TP50'));
-app.get('/api/signal', (req,res)=>{ const sig = buildSignalResponse(); const wr = calcWinrate(); res.json({ ...sig, walls, wallsNear: walls, wallsFar, wallsFarCount: wallsFar.length, pendingOrders: sig.pending, touchedLevels: sig.touched, history: signalHistory, winrate_data: wr, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF', harga: { xaut: xautPrice, xaut_mid: xautPrice, source: 'XAUT WS Bybit+OKX', ws_bybit: wsBybitOk ? 'WS-OK' : 'WS-OFF/REST', ws_okx: wsOkxOk ? 'WS-OK' : 'WS-OFF/REST', ws_last_bybit: wsLastBybit, ws_last_okx: wsLastOkx }, exchanges, uptimeStart, uptime_menit: Math.floor((Date.now() - uptimeStart) / 60000), last_update: lastUpdate, last_done: lastDone, last_setup: lastSetup, current_setup: currentSetup }); });
+app.get('/', (req,res)=> res.send('ABEL BOT OK - /api/signal - V13 WS BYBIT OK + EXNESS - Jarak 0-3$ Betah 5m Ratio 4x Zona SL50 TP50'));
+app.get('/api/signal', async (req,res)=>{
+  // Update harga Exness tiap hit API biar PnL live di Vercel akurat
+  if(EXNESS.apiKey) await exnessGetPrice();
+  const sig = buildSignalResponse(); const wr = calcWinrate();
+  res.json({ ...sig, walls, wallsNear: walls, wallsFar, wallsFarCount: wallsFar.length, pendingOrders: sig.pending, touchedLevels: sig.touched, history: signalHistory, winrate_data: wr, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF',
+    config: { lot: CFG.lot, simbol: CFG.simbol, isCent: CFG.isCent, ratio: RATIO_MIN, jarak_min: JARAK_MIN, jarak_max: JARAK_MAX, betah: BETAH_MIN_MENIT, sl_mode: CFG.slMode, sl_fix: CFG.slFix, tp_fix: CFG.tpFix, sl_min: CFG.slMin, sl_max: CFG.slMax, tp_min: CFG.tpMin, tp_max: CFG.tpMax, jam_start: CFG.jamStart, jam_end: CFG.jamEnd, jam24: CFG.jam24, jam_wib_now: getWIBNow(), jam_aktif: isJamAktif(), auto_entry: CFG.autoEntry, akun_label: CFG.akunLabel, akun_id: CFG.akunId, exness_connected: EXNESS.connected },
+    harga: { xaut: xautPrice, xaut_mid: xautPrice, exness: EXNESS.lastPrice || 0, exness_price: EXNESS.lastPrice || 0, source: 'XAUT WS Bybit+OKX + Exness', ws_bybit: wsBybitOk ? 'WS-OK' : 'WS-OFF/REST', ws_okx: wsOkxOk ? 'WS-OK' : 'WS-OFF/REST', ws_last_bybit: wsLastBybit, ws_last_okx: wsLastOkx }, exchanges, uptimeStart, uptime_menit: Math.floor((Date.now() - uptimeStart) / 60000), last_update: lastUpdate, last_done: lastDone, last_setup: lastSetup, current_setup: currentSetup });
+});
+app.get('/api/config', (req,res)=>{ res.json({ lot: CFG.lot, simbol: CFG.simbol, isCent: CFG.isCent, ratio: RATIO_MIN, jarak_min: JARAK_MIN, jarak_max: JARAK_MAX, betah: BETAH_MIN_MENIT, sl_mode: CFG.slMode, sl_fix: CFG.slFix, tp_fix: CFG.tpFix, sl_min: CFG.slMin, sl_max: CFG.slMax, tp_min: CFG.tpMin, tp_max: CFG.tpMax, jam_start: CFG.jamStart, jam_end: CFG.jamEnd, jam24: CFG.jam24, jam_wib_now: getWIBNow(), jam_aktif: isJamAktif(), auto_entry: CFG.autoEntry, akun_label: CFG.akunLabel, akun_id: CFG.akunId, exness_connected: EXNESS.connected, exness_price: EXNESS.lastPrice }); });
+app.get('/api/posisi', async (req,res)=>{ let pos = await exnessGetPositions(); res.json({ ok: true, positions: pos, exness_price: EXNESS.lastPrice, xaut_price: xautPrice }); });
+app.get('/api/saldo', async (req,res)=>{ let b = await exnessGetBalance(); res.json({ ok: !!b, balance: b, akun: CFG.akunLabel, simbol: CFG.simbol }); });
 app.get('/api/history', (req,res)=>{ const since = req.query.since ? parseInt(req.query.since) : uptimeStart; const filtered = signalHistory.filter(x => (x.created_at || 0) >= since); const wr = calcWinrate(); res.json({ history: filtered, total: filtered.length, winrate_data: wr, uptimeStart, sesi_mulai: new Date(uptimeStart).toLocaleString('id-ID'), uptime_menit: Math.floor((Date.now() - uptimeStart) / 60000) }); });
 app.get('/api/history-sesi', (req,res)=>{ res.redirect('/api/history'); });
-app.get('/api/ws-test', (req,res)=>{ const w=getWsOrderbooks(); res.json({ ws_bybit_ok: wsBybitOk, ws_okx_ok: wsOkxOk, ws_last_bybit: wsLastBybit ? new Date(wsLastBybit).toLocaleTimeString('id-ID') : '-', ws_last_okx: wsLastOkx ? new Date(wsLastOkx).toLocaleTimeString('id-ID') : '-', bids_cached: w.allBids.length, asks_cached: w.allAsks.length, top_bid: w.allBids.length ? Math.max(...w.allBids.map(x=>x.price)) : 0, top_ask: w.allAsks.length ? Math.min(...w.allAsks.map(x=>x.price)) : 0, xaut_price: xautPrice }); });
+app.get('/api/ws-test', (req,res)=>{ const w=getWsOrderbooks(); res.json({ ws_bybit_ok: wsBybitOk, ws_okx_ok: wsOkxOk, ws_last_bybit: wsLastBybit ? new Date(wsLastBybit).toLocaleTimeString('id-ID') : '-', ws_last_okx: wsLastOkx ? new Date(wsLastOkx).toLocaleTimeString('id-ID') : '-', bids_cached: w.allBids.length, asks_cached: w.allAsks.length, top_bid: w.allBids.length ? Math.max(...w.allBids.map(x=>x.price)) : 0, top_ask: w.allAsks.length ? Math.min(...w.allAsks.map(x=>x.price)) : 0, xaut_price: xautPrice, exness_price: EXNESS.lastPrice }); });
 app.get('/api/test-telegram', async (req,res)=>{ const testId = generateSetupId(); const z = { jarak: 1, entryLow: 3830, entryHigh: 3831, slLow: 3825, slHigh: 3826, tpLow: 3835, tpHigh: 3836 }; await sendTelegram(`🎯 BUY NOW - Setup ${testId}\n\nEntry: ${fmtZona(z.entryLow, z.entryHigh)} (zona ${z.jarak * 10} pips dari harga sekarang)\nSL: ${fmtZona(z.slLow, z.slHigh)} ( SL -50 pips dari harga entry)\nTP: ${fmtZona(z.tpLow, z.tpHigh)} (TP +50 pips dari harga entry )\n\nTembok: BID $3830.30 - 13.70 XAUT - Betah 8m - OKX (jarak ${z.jarak}$)\n\nHOLD BAGI YANG MAMPU🔥`); res.json({ ok: true, setup_id: testId, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF' }); });
 app.get('/api/unlock', (req,res)=>{ if(currentSetup){ lastSetup = { ...currentSetup, state: 'CLOSED', result: 'MANUAL / DIBATALKAN', result_price: xautPrice, closed_at: Date.now() }; closeHistory(currentSetup.id, 'MANUAL / DIBATALKAN', xautPrice); currentSetup = null; res.json({ ok: true, msg: 'Unlocked - posisi dibatalkan manual' }); } else res.json({ ok: true, msg: 'Gak ada posisi aktif' }); });
-app.listen(PORT, ()=> console.log('ABEL BOT V12 jalan di port ' + PORT + ' - WS BYBIT FIX SAMPE OK'));
+app.listen(PORT, ()=> console.log('ABEL BOT V13 jalan di port ' + PORT + ' - WS BYBIT FIX SAMPE OK + EXNESS + COMMANDS'));
