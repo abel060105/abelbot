@@ -1,13 +1,19 @@
-// ABEL BOT - V13.1 - XAUT ONLY - WS BYBIT SAMPE OK + EXNESS API + TELE COMMANDS LENGKAP
+// ABEL BOT - V13.1 FIX - XAUT ONLY - WS BYBIT SAMPE OK + EXNESS API + TELE COMMANDS LENGKAP
 // BASE: js_command.txt V13 lo - LOGIC V12 DIPERTAHANKAN 100%: Jarak 0-3$, Betah 5m, Ratio 4x, Zona = Tembok s/d Harga, SL 50 pips, TP 50 pips
 // HARGA = XAUT WS BYBIT+OKX. GAK ADA GOLD-API, GAK ADA SELISIH.
-// TAMBAHAN V13.1: Polling Tele (biar gak perlu set webhook), setMyCommands lengkap, /apikey single-key, /cekexness, /hapuskey, /auto, /unlock, /test
+// FIX V13.1: Hapus require('cors') - ganti CORS manual biar gak error Cannot find module 'cors' di Render
 // Render Env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, PORT. Exness key lewat Tele, BUKAN lewat Render Env.
 const express = require('express');
-const cors = require('cors');
 const app = express();
-app.use(cors());
 app.use(express.json());
+// CORS manual - gak butuh install package cors
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
 const PORT = process.env.PORT || 10000;
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
@@ -289,7 +295,6 @@ async function exnessGetBalance(){
         return exnessBalanceCache;
       }
     }
-    // Fallback snapshot
     let j2 = await exnessRequest('/v1/trading/accounts/' + (EXNESS.accountId || CFG.akunId) + '/snapshot');
     if(j2){
       let d = j2.data || j2 || {};
@@ -452,7 +457,6 @@ async function handleTelegramCommand(chatId, textRaw){
     }
   }
 
-  // Normal command parsing - toleran spasi / huruf gede / koma
   let m = text.match(/^\/?([a-z_]+)\s*(.*)$/i);
   if(!m) return;
   let cmd = m[1].toLowerCase();
@@ -496,7 +500,6 @@ async function handleTelegramCommand(chatId, textRaw){
     await sendTelegramTo(chatId, statusText());
     return;
   }
-  // ===== BARU V13.1: /apikey single key =====
   if(cmd === 'apikey'){
     if(!arg){ await sendTelegramTo(chatId, `Format: /apikey <key lo>\n\nContoh: /apikey exn_xxxx\n\nKey-nya bakal langsung dites ke api.exness.com. Kalo lo punya Key+Secret, pake /akun aja.`); return; }
     EXNESS.apiKey = arg.trim(); EXNESS.secret = '';
@@ -529,7 +532,6 @@ async function handleTelegramCommand(chatId, textRaw){
     return;
   }
   if(cmd === 'akun'){
-    // Support juga format langsung: /akun 27000017363 CENT 0.01
     if(arg){
       let parts = arg.split(/\s+/);
       if(/^\d+$/.test(parts[0])){
@@ -718,8 +720,7 @@ async function telegramPolling(){
             } else if(upd.message){
               let chatId = upd.message.chat.id;
               let txt = upd.message.text || '';
-              // Hapus pesan /apikey biar key gak nempel di chat
-              if(txt.trim().toLowerCase().startsWith('/apikey ') || txt.trim().toLowerCase().startsWith('/apikey')){
+              if(txt.trim().toLowerCase().startsWith('/apikey ')){
                 try{ await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, message_id: upd.message.message_id }) }); }catch(e){}
               }
               if(txt) await handleTelegramCommand(chatId, txt);
@@ -728,9 +729,7 @@ async function telegramPolling(){
         }
       }
     }catch(e){
-      // Kalo 409 conflict (webhook masih aktif), tunggu bentar, jangan spam
-      if(String(e.message||'').includes('409') || String(e.message||'').includes('conflict')){ await new Promise(r=>setTimeout(r, 5000)); }
-      else { await new Promise(r=>setTimeout(r, 2000)); }
+      await new Promise(r=>setTimeout(r, 2000));
     }
     await new Promise(r=>setTimeout(r, 500));
   }
@@ -903,8 +902,6 @@ async function checkSignal(){
     const slHarga = hargaSL(s.zona, isBuy); const tpHarga = hargaTP(s.zona, isBuy);
     const kenaSL = isBuy ? xautPrice <= slHarga : xautPrice >= slHarga;
     if(kenaSL){
-      const profit = calcProfitPips(displaySignal, s.entry, xautPrice);
-      let pnlEx = s.exness_entry ? hitungPnL(s) : null;
       lastSetup = { ...s, state: 'CLOSED', result: 'LOSE - SL KENA', result_price: xautPrice, closed_at: Date.now() };
       lastDone = { last_result: displaySignal + ' LOSE - SL KENA di ' + slHarga.toFixed(2) + ' - Setup ' + s.setup_id };
       closeHistory(s.id, 'LOSE - SL KENA', xautPrice);
@@ -913,7 +910,6 @@ async function checkSignal(){
     }
     const kenaTP = isBuy ? xautPrice >= tpHarga : xautPrice <= tpHarga;
     if(kenaTP){
-      const profit = calcProfitPips(displaySignal, s.entry, xautPrice);
       lastSetup = { ...s, state: 'CLOSED', result: 'WIN - TP KENA', result_price: xautPrice, closed_at: Date.now() };
       lastDone = { last_result: displaySignal + ' WIN - TP KENA di ' + tpHarga.toFixed(2) + ' - Setup ' + s.setup_id };
       closeHistory(s.id, 'WIN - TP KENA', xautPrice);
@@ -974,7 +970,7 @@ function buildSignalResponse(){
     exness_entry: 0, exness_sl: 0, exness_tp: 0, exness_price: EXNESS.lastPrice || 0, exness_order_id: null, exness_ok: false, lot: CFG.lot, simbol: CFG.simbol, xaut_price: xautPrice, pnl_live: 0, pnl_text: '-', pnl_pips: 0 };
 }
 function calcWinrate(){ const closed = signalHistory.filter(x=> x.closed_at); const win = closed.filter(x=> (x.result||'').includes('WIN')).length; const lose = closed.filter(x=> (x.result||'').includes('LOSE')).length; const total = win + lose; return { total, win, lose, winrate: total ? Math.round(win/total*100) : 0 }; }
-app.get('/', (req,res)=> res.send('ABEL BOT OK - /api/signal - V13.1 WS BYBIT OK + EXNESS - Jarak 0-3$ Betah 5m Ratio 4x Zona SL50 TP50'));
+app.get('/', (req,res)=> res.send('ABEL BOT OK - /api/signal - V13.1 FIX WS BYBIT OK + EXNESS - Jarak 0-3$ Betah 5m Ratio 4x Zona SL50 TP50'));
 app.get('/api/signal', async (req,res)=>{
   if(EXNESS.apiKey) await exnessGetPrice();
   const sig = buildSignalResponse(); const wr = calcWinrate();
@@ -990,4 +986,4 @@ app.get('/api/history-sesi', (req,res)=>{ res.redirect('/api/history'); });
 app.get('/api/ws-test', (req,res)=>{ const w=getWsOrderbooks(); res.json({ ws_bybit_ok: wsBybitOk, ws_okx_ok: wsOkxOk, ws_last_bybit: wsLastBybit ? new Date(wsLastBybit).toLocaleTimeString('id-ID') : '-', ws_last_okx: wsLastOkx ? new Date(wsLastOkx).toLocaleTimeString('id-ID') : '-', bids_cached: w.allBids.length, asks_cached: w.allAsks.length, top_bid: w.allBids.length ? Math.max(...w.allBids.map(x=>x.price)) : 0, top_ask: w.allAsks.length ? Math.min(...w.allAsks.map(x=>x.price)) : 0, xaut_price: xautPrice, exness_price: EXNESS.lastPrice }); });
 app.get('/api/test-telegram', async (req,res)=>{ const testId = generateSetupId(); const z = { jarak: 1, entryLow: 3830, entryHigh: 3831, slLow: 3825, slHigh: 3826, tpLow: 3835, tpHigh: 3836 }; await sendTelegram(`🎯 BUY NOW - Setup ${testId}\n\nEntry: ${fmtZona(z.entryLow, z.entryHigh)} (zona ${z.jarak * 10} pips dari harga sekarang)\nSL: ${fmtZona(z.slLow, z.slHigh)} ( SL -50 pips dari harga entry)\nTP: ${fmtZona(z.tpLow, z.tpHigh)} (TP +50 pips dari harga entry )\n\nTembok: BID $3830.30 - 13.70 XAUT - Betah 8m - OKX (jarak ${z.jarak}$)\n\nHOLD BAGI YANG MAMPU🔥`); res.json({ ok: true, setup_id: testId, telegram: TELEGRAM_TOKEN ? 'ON' : 'OFF' }); });
 app.get('/api/unlock', (req,res)=>{ if(currentSetup){ lastSetup = { ...currentSetup, state: 'CLOSED', result: 'MANUAL / DIBATALKAN', result_price: xautPrice, closed_at: Date.now() }; closeHistory(currentSetup.id, 'MANUAL / DIBATALKAN', xautPrice); currentSetup = null; res.json({ ok: true, msg: 'Unlocked - posisi dibatalkan manual' }); } else res.json({ ok: true, msg: 'Gak ada posisi aktif' }); });
-app.listen(PORT, ()=> console.log('ABEL BOT V13.1 jalan di port ' + PORT + ' - WS BYBIT FIX SAMPE OK + EXNESS + COMMANDS LENGKAP'));
+app.listen(PORT, ()=> console.log('ABEL BOT V13.1 FIX jalan di port ' + PORT + ' - WS BYBIT FIX SAMPE OK + EXNESS + COMMANDS LENGKAP'));
