@@ -1,8 +1,8 @@
-// ABEL FX - SERVER.JS V16.1 FULL TELEGRAM EXNESS API - FIX node-fetch
+// ABEL FX - SERVER.JS V16.2 FULL TELEGRAM EXNESS API + CORS FIX
 // Semua setting Exness lewat Telegram, tanpa Render Env untuk Exness.
 // Render Env yang dibutuhin cuma: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, PORT
 // Exness API Host: https://api.exness.com
-// FIX: node-fetch dihapus, pake fetch bawaan Node 20
+// FIX V16.2: Tambah CORS biar Vercel bisa baca Render. node-fetch dihapus, pake fetch bawaan Node 20
 
 const express = require('express');
 const WebSocket = require('ws');
@@ -14,6 +14,15 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
 
 app.use(express.json());
+
+// ============ CORS FIX - BIAR VERCEL BISA BACA RENDER ============
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
 
 // ============ STATE ============
 let state = {
@@ -594,7 +603,7 @@ app.get('/api/test-telegram', async (req, res) => {
 app.get('/api/ws-test', (req, res) => {
   res.json({ ws_bybit_ok: state.exchanges.bybit, ws_okx_ok: state.exchanges.okx, xaut_price: state.harga.xaut, exness_price: state.harga.exness });
 });
-app.get('/', (req, res) => res.send('ABEL FX V16.1 - Full Telegram Exness API - OK'));
+app.get('/', (req, res) => res.send('ABEL FX V16.2 - Full Telegram Exness API + CORS - OK'));
 
 app.listen(PORT, () => console.log('ABEL jalan di port ' + PORT));
 
