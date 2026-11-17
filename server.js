@@ -1,10 +1,10 @@
-// ABEL FX - SERVER.JS V16 FULL TELEGRAM EXNESS API
+// ABEL FX - SERVER.JS V16.1 FULL TELEGRAM EXNESS API - FIX node-fetch
 // Semua setting Exness lewat Telegram, tanpa Render Env untuk Exness.
 // Render Env yang dibutuhin cuma: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, PORT
 // Exness API Host: https://api.exness.com
+// FIX: node-fetch dihapus, pake fetch bawaan Node 20
 
 const express = require('express');
-const fetch = require('node-fetch');
 const WebSocket = require('ws');
 const TelegramBot = require('node-telegram-bot-api');
 
@@ -45,14 +45,14 @@ let cfg = {
   jarak_min: 0, jarak_max: 3, betah: 5, ratio: 5,
   sl_mode: 'FIX', sl_fix: 50, tp_fix: 50, sl_min: 30, sl_max: 80, tp_min: 30, tp_max: 80,
   lot: 0.01, simbol: 'XAUUSD', isCent: true,
-  akun_id: '', akun_label: '', // contoh: 27000017363
-  exness_api_key: '', // diisi lewat /apikey, TIDAK dari Render Env
+  akun_id: '', akun_label: '',
+  exness_api_key: '',
   jam_start: '00:00', jam_end: '23:59', jam24: true, jam_wib_now: '',
   auto_entry: true,
   exness_connected: false,
 };
 
-let pendingWalls = {}; // price -> { firstSeen, size, side, sources }
+let pendingWalls = {};
 
 // ============ HELPERS ============
 function fmt(n, d = 2) { return (n || 0).toFixed(d); }
@@ -89,9 +89,6 @@ async function sendTele(text) {
 }
 
 // ============ EXNESS API - FULL TELE ============
-// Docs: https://api.exness.com / https://exness-api.com
-// Semua panggilan pake key yang dari /apikey, bukan dari Render Env.
-
 async function exnessRequest(path, method = 'GET', body = null) {
   if (!cfg.exness_api_key) throw new Error('Belum ada API Key. Kirim /apikey <key> dulu di Tele.');
   if (!cfg.akun_id) throw new Error('Belum ada Akun ID. Kirim /akun <id> CENT 0.01 dulu.');
@@ -114,20 +111,16 @@ async function exnessRequest(path, method = 'GET', body = null) {
 }
 
 async function exnessGetSnapshot() {
-  // Coba endpoint snapshot resmi, kalo beda versi fallback ke accounts
   try {
     const j = await exnessRequest('/v1/trading/accounts/' + cfg.akun_id + '/snapshot');
     return j;
   } catch (e) {
-    // Fallback: coba /v1/accounts/{id}
     const j2 = await exnessRequest('/v1/accounts/' + cfg.akun_id);
     return j2;
   }
 }
 
 function parseExnessSnapshot(j) {
-  // Normalisasi berbagai bentuk response Exness API biar gak gampang jebol
-  // Return { balance, equity, price, positions: [], currency }
   let out = { balance: 0, equity: 0, price: 0, positions: [], currency: '' };
   try {
     const d = j.data || j.account || j || {};
@@ -135,7 +128,6 @@ function parseExnessSnapshot(j) {
     out.balance = acc.balance ?? acc.Balance ?? d.balance ?? 0;
     out.equity = acc.equity ?? acc.Equity ?? d.equity ?? out.balance;
     out.currency = acc.currency || d.currency || '';
-    // Harga XAUUSD dari snapshot kalo ada
     if (d.ticks) {
       const t = d.ticks.find(x => (x.symbol || x.instrument || '').toString().toUpperCase().includes('XAU'));
       if (t) out.price = t.bid || t.ask || t.last || t.price || 0;
@@ -145,10 +137,8 @@ function parseExnessSnapshot(j) {
       if (q) out.price = q.bid || q.ask || q.last || 0;
     }
     if (d.price) out.price = d.price;
-    // Posisi
     let pos = d.positions || d.open_positions || acc.positions || [];
     if (Array.isArray(pos)) out.positions = pos;
-    // Kalo snapshot gak bawa harga, pake harga XAUT sebagai fallback sementara, tapi tandain beda
     if (!out.price && state.harga.xaut) out.price = state.harga.xaut;
   } catch (e) { console.log('Parse snapshot gagal', e.message); }
   return out;
@@ -163,7 +153,7 @@ async function exnessCekKoneksi() {
     state.exness_balance = p.balance;
     state.exness_equity = p.equity;
     state.exness_last_check = new Date().toISOString();
-    if (p.price) { state.harga.exness = p.price; cfg.exness_last_price = p.price; }
+    if (p.price) { state.harga.exness = p.price; }
     state.exness_last_error = '';
     return p;
   } catch (e) {
@@ -175,18 +165,15 @@ async function exnessCekKoneksi() {
 }
 
 async function exnessOpenPosition(side, entryPrice, slPrice, tpPrice) {
-  // side: BUY / SELL
-  // POST /v1/trading/accounts/{id}/positions
   const body = {
     symbol: cfg.simbol,
-    side: side.toLowerCase(), // buy / sell
+    side: side.toLowerCase(),
     volume: parseFloat(cfg.lot),
     type: 'market',
     stop_loss: slPrice ? parseFloat(slPrice.toFixed(2)) : undefined,
     take_profit: tpPrice ? parseFloat(tpPrice.toFixed(2)) : undefined,
     comment: 'ABEL ' + state.setup_id,
   };
-  // Hapus undefined
   Object.keys(body).forEach(k => body[k] === undefined && delete body[k]);
   const j = await exnessRequest('/v1/trading/accounts/' + cfg.akun_id + '/positions', 'POST', body);
   return j;
@@ -197,23 +184,13 @@ async function exnessClosePosition(positionId) {
   return j;
 }
 
-async function exnessGetPositions() {
-  try {
-    const snap = await exnessGetSnapshot();
-    const p = parseExnessSnapshot(snap);
-    return p.positions;
-  } catch (e) { return []; }
-}
-
-// Harga Exness real - dipanggil tiap load / tiap sinyal
 async function refreshExnessPrice() {
   if (!cfg.exness_api_key || !cfg.akun_id) return;
-  try { await exnessCekKoneksi(); } catch (e) { /* biarin, jangan matiin bot */ }
+  try { await exnessCekKoneksi(); } catch (e) {}
 }
 
 // ============ WS BYBIT + OKX - XAUT TEMBOK ============
 function startWS() {
-  // Bybit
   try {
     const wsB = new WebSocket('wss://stream.bybit.com/v5/public/spot');
     wsB.on('open', () => {
@@ -238,7 +215,6 @@ function startWS() {
     wsB.on('error', () => { state.exchanges.bybit = false; });
   } catch (e) {}
 
-  // OKX
   try {
     const wsO = new WebSocket('wss://ws.okx.com:8443/ws/v5/public');
     wsO.on('open', () => {
@@ -275,7 +251,6 @@ function handleOrderbook(bids, asks, src) {
   const all = [];
   bids.forEach(b => all.push({ price: parseFloat(b[0]), size: parseFloat(b[1]), side: 'BID', sources: src }));
   asks.forEach(a => all.push({ price: parseFloat(a[0]), size: parseFloat(a[1]), side: 'ASK', sources: src }));
-  // Gabungin by price (bulatin)
   const map = {};
   all.forEach(w => {
     const k = Math.round(w.price) + '_' + w.side;
@@ -287,13 +262,11 @@ function handleOrderbook(bids, asks, src) {
     if (!pendingWalls[key]) pendingWalls[key] = { ...w, firstSeen: now };
     else { pendingWalls[key].size = w.size; pendingWalls[key].sources = w.sources; pendingWalls[key].lastSeen = now; }
   });
-  // Rebuild walls
   const price = state.harga.xaut || 0;
   const list = Object.values(pendingWalls).map(w => {
     const age = Math.floor((now - w.firstSeen) / 60000);
     return { ...w, age_menit: age, distance: price ? Math.abs(price - w.price) : 999 };
   }).filter(w => w.age_menit >= 0);
-  // Tembok = size gede. Ratio 5x = size tembok minimal 5x rata-rata
   const avg = list.length ? list.reduce((a, b) => a + b.size, 0) / list.length : 0;
   const threshold = Math.max(avg * (cfg.ratio || 5), 1);
   const walls = list.filter(w => w.size >= threshold);
@@ -301,11 +274,8 @@ function handleOrderbook(bids, asks, src) {
   state.wallsNear = walls.filter(w => w.distance <= 15);
   state.wallsFar = walls.filter(w => w.distance > 15);
   state.wallsFarCount = state.wallsFar.length;
-
-  // Pending = yang betah >= cfg.betah menit
   const pending = walls.filter(w => w.age_menit >= (cfg.betah || 5));
   state.pendingOrders = pending.map(w => ({ ...w, status: 'PENDING' }));
-  // Touched = harga nyentuh tembok
   state.touchedLevels = walls.filter(w => price && Math.abs(price - w.price) <= 1).map(w => ({ ...w, status: 'TERSENTUH' }));
 }
 
@@ -315,9 +285,8 @@ function hitungZona(wallPrice, hargaSekarang, isBuy) {
   const wall = Math.floor(wallPrice);
   let slPips = cfg.sl_mode === 'FLEKSIBEL' ? cfg.sl_min : cfg.sl_fix;
   let tpPips = cfg.sl_mode === 'FLEKSIBEL' ? cfg.tp_min : cfg.tp_fix;
-  // Kalo FLEKSIBEL, ambil tengah range biar gampang, nanti di Exness pake SL/TP yang sama
   if (cfg.sl_mode === 'FLEKSIBEL') { slPips = Math.round((cfg.sl_min + cfg.sl_max) / 2); tpPips = Math.round((cfg.tp_min + cfg.tp_max) / 2); }
-  const slJarakHarga = slPips / 10; // 50 pips = 5$
+  const slJarakHarga = slPips / 10;
   const tpJarakHarga = tpPips / 10;
   if (isBuy) {
     const entryLow = wall, entryHigh = wall + jarak;
@@ -340,7 +309,6 @@ async function cekSinyal() {
   state.uptime_menit = Math.floor((Date.now() - state.uptimeStart) / 60000);
   cfg.jam_wib_now = nowWIB();
 
-  // Kalo lagi lock, cek PnL live dari harga Exness asli kalo ada, kalo engga pake XAUT
   if (state.is_locked && state.setup_id) {
     const hargaLive = state.harga.exness || price;
     const entryLive = state.exness_entry || state.entry;
@@ -348,14 +316,10 @@ async function cekSinyal() {
       const diffHarga = state.signal.includes('BUY') ? (hargaLive - entryLive) : (entryLive - hargaLive);
       const pips = diffHarga * 10;
       state.pnl_pips = pips;
-      // Nominal: 0.01 lot XAU = 1$ per 1$ gerak kalo standard, kalo CENT beda. Kita pake rumus simpel: pips * lot * 1 (CENT) biar gak ngarang kurs
-      // Biar jujur: PnL nominal dihitung dari API Exness kalo ada, kalo engga dari rumus ini dan ditandain simulasi di Tele
-      // Untuk CENT 0.01: 1 pips = 0.1 nominal (sesuai yang lo liat +0.27 dll)
-      const perPips = cfg.isCent ? (cfg.lot * 10) : (cfg.lot * 10);
+      const perPips = cfg.lot * 10;
       const nominal = Math.round(pips * perPips * 10) / 10;
       state.pnl_nominal = nominal;
       state.pnl_text = (nominal >= 0 ? '+' : '') + nominal.toLocaleString('en-US').replace(/,/g, '.');
-      // Cek TP/SL kena (pake harga Exness kalo ada)
       const slHarga = state.exness_sl || state.sl;
       const tpHarga = state.exness_tp || state.tp;
       let kena = '';
@@ -371,7 +335,6 @@ async function cekSinyal() {
         if (histItem) { histItem.result = kena === 'WIN' ? 'WIN - TP KENA' : 'LOSE - SL KENA'; histItem.closed_at = new Date().toISOString(); histItem.result_price = hargaLive; histItem.duration_menit = Math.floor((Date.now() - state.lockedAt) / 60000); }
         state.last_done = { last_result: kena, setup_id: state.setup_id };
         state.last_setup = histItem;
-        // Tutup posisi beneran di Exness kalo ada position_id
         if (state.exness_position_id) {
           try { await exnessClosePosition(state.exness_position_id); } catch (e) { console.log('Tutup Exness gagal', e.message); }
         }
@@ -390,13 +353,11 @@ async function cekSinyal() {
 
   if (!jamAktif()) { state.signal = 'WAIT'; return; }
 
-  // Cari tembok yang betah + jarak 0-3$
   const candidates = (state.pendingOrders || []).filter(w => w.age_menit >= cfg.betah && w.distance >= cfg.jarak_min && w.distance <= cfg.jarak_max);
   if (!candidates.length) { state.signal = 'WAIT'; return; }
-  // Ambil yang paling gede size-nya
   candidates.sort((a, b) => b.size - a.size);
   const wall = candidates[0];
-  const isBuy = wall.side === 'BID'; // BID tembok = support = BUY, ASK = resistance = SELL
+  const isBuy = wall.side === 'BID';
   const zona = hitungZona(wall.price, price, isBuy);
   const sig = isBuy ? 'BUY' : 'SELL';
   const setupId = genSetupId();
@@ -412,13 +373,10 @@ async function cekSinyal() {
   state.is_locked = true; state.lockedAt = Date.now(); state.lockedId = setupId + '_' + Date.now();
   state.exness_sl_pips = zona.slPips; state.exness_tp_pips = zona.tpPips;
 
-  // Harga Exness asli buat entry - kalo API nyambung, pake itu, kalo engga pake XAUT + selisih terakhir
   let exPrice = state.harga.exness || price;
-  // Coba refresh harga Exness beneran sebelum entry
   if (cfg.exness_api_key && cfg.akun_id) {
     try { const p = await exnessCekKoneksi(); if (p.price) exPrice = p.price; } catch (e) {}
   }
-  // Selisih Exness - XAUT buat konversi zona ke Exness
   const selisih = exPrice - price;
   state.exness_entry = state.entry + selisih;
   state.exness_sl = state.sl + selisih;
@@ -436,7 +394,6 @@ async function cekSinyal() {
   state.history.unshift(histItem);
   if (state.history.length > 100) state.history.pop();
 
-  // ============ AUTO ENTRY KE EXNESS API (BENERAN) ============
   let exStatus = '';
   if (cfg.auto_entry) {
     if (!cfg.exness_api_key || !cfg.akun_id) {
@@ -444,7 +401,6 @@ async function cekSinyal() {
     } else {
       try {
         const j = await exnessOpenPosition(sig, state.exness_entry, state.exness_sl, state.exness_tp);
-        // Ambil position_id dari berbagai bentuk response
         const d = j.data || j || {};
         const pos = d.position || d.order || d || {};
         state.exness_position_id = pos.id || pos.position_id || d.position_id || null;
@@ -477,7 +433,6 @@ if (bot) {
   bot.onText(/\/apikey (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     const key = (match[1] || '').trim();
-    // Hapus pesan yang isinya key, biar gak nempel di chat
     try { await bot.deleteMessage(chatId, msg.message_id); } catch (e) {}
     if (!key || key.length < 10) { bot.sendMessage(chatId, 'Key-nya kependekan. Copy full dari Exness > Manajemen API.'); return; }
     cfg.exness_api_key = key;
@@ -508,7 +463,7 @@ if (bot) {
     cfg.akun_id = id;
     cfg.akun_label = 'Exness ' + id;
     cfg.isCent = jenis.includes('CENT');
-    cfg.simbol = cfg.isCent ? 'XAUUSD' : 'XAUUSD'; // Exness API pake XAUUSD, suffix ditangani server
+    cfg.simbol = 'XAUUSD';
     if (!isNaN(lot) && lot > 0) cfg.lot = lot;
     bot.sendMessage(chatId, '✅ Akun diganti:\nID: ' + id + '\nJenis: ' + jenis + '\nLot: ' + cfg.lot + '\n\nKirim /cekexness buat tes koneksi beneran.');
     if (cfg.exness_api_key) {
@@ -582,16 +537,13 @@ if (bot) {
     bot.sendMessage(msg.chat.id, '✅ Lock dibatalin manual. Bot siap cari sinyal baru.');
   });
   bot.onText(/\/test/, async (msg) => {
-    bot.sendMessage(msg.chat.id, '⏳ Tes kirim sinyal dummy...');
-    const price = state.harga.xaut || state.harga.exness || 3836;
-    const exPrice = state.harga.exness || price;
-    bot.sendMessage(msg.chat.id, '📩 <b>TEST TELEGRAM</b>\nXAUT: $' + fmt(price) + '\nExness: $' + fmt(exPrice) + '\nAkun: ' + (cfg.akun_id || '-') + ' | Key: ' + maskKey(cfg.exness_api_key) + '\nKalo lo baca ini, Tele bot jalan.', { parse_mode: 'HTML' });
+    bot.sendMessage(msg.chat.id, '📩 <b>TEST TELEGRAM</b>\nXAUT: $' + fmt(state.harga.xaut) + '\nExness: $' + fmt(state.harga.exness) + '\nAkun: ' + (cfg.akun_id || '-') + ' | Key: ' + maskKey(cfg.exness_api_key) + '\nKalo lo baca ini, Tele bot jalan.', { parse_mode: 'HTML' });
   });
   bot.onText(/\/help|\/start/, (msg) => {
     bot.sendMessage(msg.chat.id,
       '🤖 <b>ABEL FX - COMMAND</b>\n\n' +
       '<b>Exness (Full Tele):</b>\n' +
-      '/apikey &lt;key&gt; - pasang key Exness\n' +
+      '/apikey <key> - pasang key Exness\n' +
       '/akun 27000017363 CENT 0.01 - ganti akun\n' +
       '/cekexness - cek saldo + harga asli + posisi beneran\n' +
       '/hapuskey - hapus key\n' +
@@ -642,16 +594,14 @@ app.get('/api/test-telegram', async (req, res) => {
 app.get('/api/ws-test', (req, res) => {
   res.json({ ws_bybit_ok: state.exchanges.bybit, ws_okx_ok: state.exchanges.okx, xaut_price: state.harga.xaut, exness_price: state.harga.exness });
 });
-app.get('/', (req, res) => res.send('ABEL FX V16 - Full Telegram Exness API - OK'));
+app.get('/', (req, res) => res.send('ABEL FX V16.1 - Full Telegram Exness API - OK'));
 
 app.listen(PORT, () => console.log('ABEL jalan di port ' + PORT));
 
-// ============ LOOP ============
 startWS();
 setInterval(() => { cekSinyal(); }, 1000);
-setInterval(() => { refreshExnessPrice(); }, 10000); // refresh harga Exness asli tiap 10 detik kalo key udah kepasang
+setInterval(() => { refreshExnessPrice(); }, 10000);
 setInterval(() => {
-  // Bersihin tembok yang udah gak update > 10 menit
   const now = Date.now();
   Object.keys(pendingWalls).forEach(k => { if (now - (pendingWalls[k].lastSeen || pendingWalls[k].firstSeen) > 10 * 60000) delete pendingWalls[k]; });
 }, 60000);
