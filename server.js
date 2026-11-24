@@ -1,4 +1,4 @@
-// ABEL BOT - V13.4 - TANPA API EXNESS TOTAL - Jarak 0-1$, Size 5x, Betah 5m
+// ABEL BOT - V13.4 - Jarak 0-1$, Size 5x, Betah 5m
 // LOGIC DIKUNCI: Zona = Tembok s/d Harga, SL 50 pips, TP 50 pips
 // HARGA SINYAL = XAUT WS BYBIT+OKX. HARGA MT5 = DARI RDP VIA POST /api/mt5/price (BELUM JALAN)
 // Render Env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, PORT.
