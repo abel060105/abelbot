@@ -1,7 +1,8 @@
-// ABEL BOT - FINAL + PANDUAN KETIK
+// ABEL BOT - FINAL + PANDUAN KETIK + JAM WIB
 // /status /help /sinyalpakai /settingbybit /settingokx
 // Semua setting ketik manual, angka ditampilin persis ketikan lo
 // /status TANPA harga XAUT
+// JAM: SEMUA WIB (Asia/Jakarta) - dipaksa, gak ngikut jam server Render (UTC)
 // Panduan: titik = koma desimal. 3.000 = 3, 3000 = 3000. 50.000 = 50, 50000 = 50000
 const express = require('express');
 const app = express();
@@ -66,8 +67,9 @@ function generateSetupId(){
   for(let i=0;i<4;i++) id+=chars[Math.floor(Math.random()*chars.length)];
   return '#'+id;
 }
-function fmtWIB(ts){ return new Date(ts).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
-function fmtDateID(ts){ return new Date(ts).toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'}) + ' ' + fmtWIB(ts) + ' WIB'; }
+// JAM WIB - DIPAKSA Asia/Jakarta, biar gak ngikut jam server Render (UTC)
+function fmtWIB(ts){ return new Date(ts).toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}); }
+function fmtDateID(ts){ return new Date(ts).toLocaleDateString('id-ID',{timeZone:'Asia/Jakarta',day:'2-digit',month:'long',year:'numeric'}) + ' ' + fmtWIB(ts) + ' WIB'; }
 function sinyalPakaiText(){ return `Bybit ${SIGNAL_BYBIT_ON?'ON ✅':'OFF ❌'} | OKX ${SIGNAL_OKX_ON?'ON ✅':'OFF ❌'}`; }
 
 async function sendTelegramToId(chatId, msg){
@@ -263,7 +265,7 @@ async function handleTelegramCommand(chatId, textRaw){
 
   if(!isCommand) return;
   if(cmd==='start' || cmd==='status'){ await sendTelegramTo(chatId,statusText()); return; }
-  if(cmd==='help'){ await sendTelegramTo(chatId,`Command:\n/status\n/help\n/sinyalpakai -> ketik 1/2/3\n/settingbybit -> ketik angka\n/settingokx -> ketik Delta Agg\n\n${PANDUAN_KETIK}`); return; }
+  if(cmd==='help'){ await sendTelegramTo(chatId,`Command:\n/status\n/help\n/sinyalpakai -> ketik 1/2/3\n/settingbybit -> ketik angka\n/settingokx -> ketik Delta Agg\n\n${PANDUAN_KETIK}\nJam: WIB (Asia/Jakarta)`); return; }
   if(cmd==='sinyalpakai' || cmd==='sinyal'){
     convo[chatId]={step:'SINYALPAKAI'};
     await sendTelegramTo(chatId,`Sinyal: ${sinyalPakaiText()}\nKetik: 1=Bybit 2=OKX 3=Dua-duanya`);
@@ -483,7 +485,7 @@ async function fetchFarWalls(){
 fetchFarWalls();
 setInterval(fetchFarWalls, 60000);
 
-app.get('/', (req,res)=> res.send('ABEL BOT OK - /api/signal - Bybit '+TRADE_MIN_RAW+' OKX '+TRADE_MIN_OKX_RAW+' Agg '+OKX_AGG_SEC_RAW+'s'));
+app.get('/', (req,res)=> res.send('ABEL BOT OK - /api/signal - Bybit '+TRADE_MIN_RAW+' OKX '+TRADE_MIN_OKX_RAW+' Agg '+OKX_AGG_SEC_RAW+'s - WIB'));
 app.get('/api/signal', (req,res)=>{
   res.set('Cache-Control','no-store');
   res.json({
@@ -497,10 +499,10 @@ app.get('/api/signal', (req,res)=>{
     history_sinyal: signalHistory,
     wallsFar,
     okx_agg: { buy: okxAgg.buy, sell: okxAgg.sell, delta: okxAgg.buy-okxAgg.sell, count: okxAgg.count, window_sec: OKX_AGG_SEC, threshold: TRADE_MIN_OKX },
-    config: { trade_min: TRADE_MIN, trade_min_raw: TRADE_MIN_RAW, trade_min_okx: TRADE_MIN_OKX, trade_min_okx_raw: TRADE_MIN_OKX_RAW, okx_agg_sec: OKX_AGG_SEC, okx_agg_sec_raw: OKX_AGG_SEC_RAW, sl_pips: SL_PIPS, tp_pips: TP_PIPS, lot: CFG.lot, simbol: CFG.simbol, isCent: CFG.isCent, mt5_connected: MT5.connected, mt5_price: MT5.lastPrice||0, market: 'FUTURES PERP', total_signals_ever: totalSignalsEver, recap_every: RECAP_EVERY, signal_bybit_on: SIGNAL_BYBIT_ON, signal_okx_on: SIGNAL_OKX_ON, channel_id: TELEGRAM_CHANNEL_ID ? 'SET' : '' },
+    config: { trade_min: TRADE_MIN, trade_min_raw: TRADE_MIN_RAW, trade_min_okx: TRADE_MIN_OKX, trade_min_okx_raw: TRADE_MIN_OKX_RAW, okx_agg_sec: OKX_AGG_SEC, okx_agg_sec_raw: OKX_AGG_SEC_RAW, sl_pips: SL_PIPS, tp_pips: TP_PIPS, lot: CFG.lot, simbol: CFG.simbol, isCent: CFG.isCent, mt5_connected: MT5.connected, mt5_price: MT5.lastPrice||0, market: 'FUTURES PERP', total_signals_ever: totalSignalsEver, recap_every: RECAP_EVERY, signal_bybit_on: SIGNAL_BYBIT_ON, signal_okx_on: SIGNAL_OKX_ON, channel_id: TELEGRAM_CHANNEL_ID ? 'SET' : '', timezone: 'Asia/Jakarta WIB' },
     harga: { xaut: xautPrice, mt5: MT5.lastPrice||0, source: 'Recent Trade FUTURES Bybit PERP + OKX XAU SWAP Delta' },
     exchanges: { bybit_trade: wsTradeBybitOk?'WS-OK':'WS-OFF', okx_trade: wsTradeOkxOk?'WS-OK':'WS-OFF' },
-    uptimeStart, uptime_menit: Math.floor((Date.now()-uptimeStart)/60000), last_update: lastUpdate,
+    uptimeStart, uptime_menit: Math.floor((Date.now()-uptimeStart)/60000), last_update: lastUpdate, last_update_wib: lastUpdate ? fmtWIB(lastUpdate)+' WIB' : '-',
   });
 });
 app.get('/api/config', (req,res)=>{ res.json({ trade_min: TRADE_MIN, trade_min_raw: TRADE_MIN_RAW, trade_min_okx: TRADE_MIN_OKX, trade_min_okx_raw: TRADE_MIN_OKX_RAW, okx_agg_sec: OKX_AGG_SEC, okx_agg_sec_raw: OKX_AGG_SEC_RAW, sl_pips: SL_PIPS, tp_pips: TP_PIPS, lot: CFG.lot, simbol: CFG.simbol, signal_bybit_on: SIGNAL_BYBIT_ON, signal_okx_on: SIGNAL_OKX_ON }); });
@@ -513,7 +515,7 @@ app.post('/api/mt5/price', (req,res)=>{
     res.json({ok:true, mt5_price: MT5.lastPrice, connected: MT5.connected});
   }catch(e){ res.json({ok:false,error:e.message}); }
 });
-app.get('/api/mt5/price', (req,res)=>{ res.json({ok:true, connected: MT5.connected, price: MT5.lastPrice, bid: MT5.lastBid, ask: MT5.lastAsk, balance: MT5.balance, equity: MT5.equity, positions: MT5.positions, last_seen: MT5.lastSeen}); });
+app.get('/api/mt5/price', (req,res)=>{ res.json({ok:true, connected: MT5.connected, price: MT5.lastPrice, bid: MT5.lastBid, ask: MT5.lastAsk, balance: MT5.balance, equity: MT5.equity, positions: MT5.positions, last_seen: MT5.lastSeen, last_seen_wib: MT5.lastSeen ? fmtWIB(MT5.lastSeen)+' WIB' : '-'}); });
 app.get('/api/history', (req,res)=>{ res.json({ history: signalHistory, total: signalHistory.length, total_ever: totalSignalsEver, uptimeStart }); });
 app.get('/api/test-telegram', async (req,res)=>{
   let sid=generateSetupId();
@@ -528,4 +530,4 @@ app.get('/api/test-rekap', async (req,res)=>{
   await sendTelegramDocToChannel(pdfBuf, 'ABEL-TEST-REKAP.pdf', `📄 TEST REKAP PDF - ${batch.length} sinyal - ke Channel`);
   res.json({ok:true, count: batch.length, to_channel: !!TELEGRAM_CHANNEL_ID});
 });
-app.listen(PORT, ()=> console.log('ABEL BOT jalan di port '+PORT+' - Bybit '+TRADE_MIN_RAW+' OKX '+TRADE_MIN_OKX_RAW+' Agg '+OKX_AGG_SEC_RAW+'s'));
+app.listen(PORT, ()=> console.log('ABEL BOT jalan di port '+PORT+' - Bybit '+TRADE_MIN_RAW+' OKX '+TRADE_MIN_OKX_RAW+' Agg '+OKX_AGG_SEC_RAW+'s - WIB'));
