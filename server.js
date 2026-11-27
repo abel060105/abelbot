@@ -1,6 +1,20 @@
-// ABEL BOT - FUTURES PERP - DELTA 50000 + AGG COMMAND
-// BYBIT: per-trade Size 3.000 | OKX: Delta 5s >= 50000.000 - NO COOLDOWN
-// COMMAND: /sizebybit (all-in-one) /sizeokx /agg /status /help - SEMUA BISA DI-KLIK DI TELE
+// ABEL BOT - FUTURES PERP - FINAL 5 COMMAND
+// COMMAND MENU (cuma ini yang muncul di Tele):
+// /status /help /sinyalpakai /settingbybit /settingokx
+// /settingbybit = cuma Bybit
+// /settingokx = Delta OKX + Agregasi di dalemnya
+// Contoh: /settingokx 50000 5  -> Delta 50000, Agg 5s
+//         /settingokx 50000    -> Delta 50000, Agg tetep
+// BUG FIX: kalo lagi nunggu angka terus ketik /command lain, langsung pindah ke command baru, gak ke-kunci.
+// TELE SINYAL BERSIH (Pribadi + Channel sinkron):
+// 🎯 BUY NOW - Setup #HSZQ
+// ENTRY: $3634.31 (NOW)
+// SL: $3629.31 (-50 PIPS)
+// TP: $3639.31 (+50 PIPS)
+// SESUAIKAN RISK MASING MASING💰
+// HOLD BAGI YANG MAMPU🔥
+// REKAP PDF: auto per 100 sinyal, HANYA ke Channel
+// ENV: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID / TELEGRAM_CHAT_IDS, TELEGRAM_CHANNEL_ID=-100xxxx
 const express = require('express');
 const app = express();
 app.use(express.json());
@@ -16,13 +30,18 @@ const PORT = process.env.PORT || 10000;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
 const TELEGRAM_CHAT_IDS = (process.env.TELEGRAM_CHAT_IDS || TELEGRAM_CHAT_ID || '').split(',').map(s=>s.trim()).filter(Boolean);
+const TELEGRAM_CHANNEL_ID = (process.env.TELEGRAM_CHANNEL_ID || '').trim();
 
-let TRADE_MIN = 3; // Size Bybit - per-trade
-let TRADE_MIN_OKX = 50000; // Delta OKX - NAIK JADI 50000.000 BIAR GAK NOISE
-let OKX_AGG_SEC = 5; // Agregasi OKX - default 5 detik, bisa diubah via /agg
+let TRADE_MIN = 3;
+let TRADE_MIN_OKX = 50000;
+let OKX_AGG_SEC = 5;
 let SL_PIPS = 50;
 let TP_PIPS = 50;
 let CFG = { lot: 0.01, simbol: 'XAUUSD', isCent: false };
+let RECAP_EVERY = 100;
+
+let SIGNAL_BYBIT_ON = true;
+let SIGNAL_OKX_ON = true;
 
 let MT5 = { connected: false, lastPrice: 0, lastBid: 0, lastAsk: 0, balance: 0, equity: 0, positions: 0, lastSeen: 0, lastError: '' };
 let convo = {};
@@ -39,6 +58,8 @@ let uptimeStart = Date.now(), lastUpdate = null;
 let wsTradeBybitOk = false, wsTradeOkxOk = false, wsLastTradeBybit = 0, wsLastTradeOkx = 0;
 let okxAgg = { buy: 0, sell: 0, count: 0, lastPrice: 0, start: Date.now(), vwapSum: 0, vwapVol: 0 };
 let okxAggTimer = null;
+let totalSignalsEver = 0;
+let lastRecapAt = 0;
 
 function parseNum(str){
   if(str===undefined||str===null) return NaN;
@@ -52,104 +73,271 @@ function generateSetupId(){
 }
 function fmtWIB(ts){ return new Date(ts).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
 function fmtSize(v){ return v.toFixed(3); }
+function fmtDateID(ts){ return new Date(ts).toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'}) + ' ' + fmtWIB(ts) + ' WIB'; }
+function sinyalPakaiText(){ return `Bybit: ${SIGNAL_BYBIT_ON?'ON ✅':'OFF ❌'} | OKX: ${SIGNAL_OKX_ON?'ON ✅':'OFF ❌'}`; }
 
+async function sendTelegramToId(chatId, msg){
+  if(!TELEGRAM_TOKEN || !chatId) return;
+  try{ await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:String(chatId),text:msg})}); }catch(e){ console.log('Tele gagal ke', chatId, e.message); }
+}
 async function sendTelegram(msg){
-  if(!TELEGRAM_TOKEN || !TELEGRAM_CHAT_IDS.length) return;
-  await Promise.all(TELEGRAM_CHAT_IDS.map(async (chat_id)=>{
-    try{ await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id,text:msg})}); }catch(e){ console.log('Tele gagal',e.message); }
-  }));
+  if(!TELEGRAM_TOKEN) return;
+  let targets = [...TELEGRAM_CHAT_IDS];
+  if(TELEGRAM_CHANNEL_ID && !targets.includes(TELEGRAM_CHANNEL_ID)) targets.push(TELEGRAM_CHANNEL_ID);
+  await Promise.all(targets.map(id => sendTelegramToId(id, msg)));
 }
 async function sendTelegramTo(chatId, msg){
   if(!TELEGRAM_TOKEN) return;
   try{ await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:String(chatId),text:msg})}); }catch(e){ console.log('Tele sendTo gagal',e.message); }
 }
+async function sendTelegramDocToChannel(pdfBuf, fileName, caption){
+  if(!TELEGRAM_TOKEN) return;
+  let targets = TELEGRAM_CHANNEL_ID ? [TELEGRAM_CHANNEL_ID] : [...TELEGRAM_CHAT_IDS];
+  for(let chat_id of targets){
+    try{
+      let form = new FormData();
+      form.append('chat_id', String(chat_id));
+      form.append('caption', caption);
+      form.append('document', new Blob([pdfBuf], {type:'application/pdf'}), fileName);
+      await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument`, {method:'POST', body: form});
+      console.log('Rekap PDF terkirim ke', chat_id, TELEGRAM_CHANNEL_ID ? '(CHANNEL)' : '(PRIBADI fallback)');
+    }catch(e){ console.log('Rekap PDF gagal', e.message); }
+  }
+}
+
+function escapePdfText(s){
+  return String(s)
+    .replace(/🎯/g, '>>').replace(/✅/g, '[OK]').replace(/💰/g, '').replace(/🔥/g, '')
+    .replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)')
+    .replace(/[^\x20-\x7E]/g,'');
+}
+function createRecapPdf(signals, title){
+  let lines = [];
+  lines.push('ABEL BOT - REKAP LAPORAN 100 SINYAL');
+  lines.push(title);
+  lines.push('');
+  signals.forEach((h) => {
+    let usd = (h.size * h.price).toLocaleString('en-US',{maximumFractionDigits:0});
+    let aggLine = h.agg ? h.agg : 'Delta - : Buy - Sell - (1 trade)';
+    lines.push('🎯 ' + h.signal + ' NOW - Setup ' + h.setup_id);
+    lines.push('');
+    lines.push('Trade: ' + h.signal + ' ' + fmtSize(h.size) + ' XAUT @ $' + h.price.toFixed(2) + ' - ' + h.source);
+    lines.push('Nilai: $' + usd);
+    lines.push('Jam: ' + (h.time_str||fmtWIB(h.time)) + ' WIB');
+    lines.push('Filter: >= ' + fmtSize(h.trade_min_used||TRADE_MIN) + ' XAUT - LOLOS ✅');
+    lines.push('Agregasi: ' + aggLine);
+    lines.push('');
+    lines.push('Entry: $' + h.price.toFixed(2));
+    lines.push('SL: $' + h.sl.toFixed(2) + ' (-' + (h.sl_pips||SL_PIPS) + ' pips)');
+    lines.push('TP: $' + h.tp.toFixed(2) + ' (+' + (h.tp_pips||TP_PIPS) + ' pips)');
+    lines.push('');
+    lines.push('');
+  });
+  let perPage = 45;
+  let pages = [];
+  for(let i=0;i<lines.length;i+=perPage) pages.push(lines.slice(i,i+perPage));
+  if(!pages.length) pages=[[]];
+  let objects = [];
+  let contentStreams = pages.map(pageLines => {
+    let ops = ['BT /F1 10 Tf 13 TL'];
+    let y = 780;
+    ops.push('50 ' + y + ' Td');
+    pageLines.forEach((ln, li) => {
+      if(li>0) ops.push('T*');
+      ops.push('(' + escapePdfText(ln) + ') Tj');
+    });
+    ops.push('ET');
+    return ops.join('\n');
+  });
+  let pageObjIds = [];
+  let nextId = 4;
+  pages.forEach(() => { pageObjIds.push({pageId: nextId, contentId: nextId+1}); nextId+=2; });
+  let kids = pageObjIds.map(p=>p.pageId+' 0 R').join(' ');
+  objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+  objects[2] = '<< /Type /Pages /Kids ['+kids+'] /Count '+pages.length+' >>';
+  objects[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>';
+  contentStreams.forEach((stream, i) => {
+    let ids = pageObjIds[i];
+    objects[ids.pageId] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents '+ids.contentId+' 0 R >>';
+    objects[ids.contentId] = '<< /Length ' + Buffer.byteLength(stream) + ' >>\nstream\n' + stream + '\nendstream';
+  });
+  let pdf = '%PDF-1.4\n';
+  let offsets = [0];
+  for(let id=1; id<objects.length; id++){
+    if(!objects[id]) continue;
+    offsets[id] = Buffer.byteLength(pdf);
+    pdf += id + ' 0 obj\n' + objects[id] + '\nendobj\n';
+  }
+  let xrefPos = Buffer.byteLength(pdf);
+  let maxId = objects.length-1;
+  pdf += 'xref\n0 ' + (maxId+1) + '\n0000000000 65535 f \n';
+  for(let id=1; id<=maxId; id++){
+    let off = offsets[id]||0;
+    pdf += String(off).padStart(10,'0') + ' 00000 n \n';
+  }
+  pdf += 'trailer\n<< /Size ' + (maxId+1) + ' /Root 1 0 R >>\nstartxref\n' + xrefPos + '\n%%EOF';
+  return Buffer.from(pdf, 'latin1');
+}
+async function sendRecapPdf(){
+  let batch = signalHistory.slice(0, RECAP_EVERY).reverse();
+  if(batch.length < RECAP_EVERY) return;
+  let from = batch[0]; let to = batch[batch.length-1];
+  let title = 'Periode: ' + fmtDateID(from.time) + ' s/d ' + fmtDateID(to.time) + ' - Total Ever: ' + totalSignalsEver;
+  let pdfBuf = createRecapPdf(batch, title);
+  let fileName = 'ABEL-REKAP-' + totalSignalsEver + '-SINYAL.pdf';
+  let caption = `📄 REKAP LAPORAN 100 SINYAL - ABEL BOT\n\nPeriode: ${fmtDateID(from.time)} s/d ${fmtDateID(to.time)}\nTotal Sinyal: ${totalSignalsEver}\n\nDetail lengkap per sinyal: Trade, Nilai, Jam, Filter, Agregasi Delta, Entry, SL, TP.\n\nSESUAIKAN RISK MASING MASING💰\nHOLD BAGI YANG MAMPU🔥`;
+  await sendTelegramDocToChannel(pdfBuf, fileName, caption);
+}
+
 async function setMyCommands(){
   if(!TELEGRAM_TOKEN) return;
   const commands=[
-    {command:'sizebybit',description:'Setting utama - /sizebybit 3 50000 5'},
-    {command:'sizeokx',description:'Delta OKX - /sizeokx 50000'},
-    {command:'agg',description:'Agregasi OKX detik - /agg 5'},
     {command:'status',description:'Status'},
     {command:'help',description:'Help'},
+    {command:'sinyalpakai',description:'ON/OFF sinyal Bybit & OKX'},
+    {command:'settingbybit',description:'Setting Bybit - /settingbybit 3'},
+    {command:'settingokx',description:'Setting OKX Delta + Agg - /settingokx 50000 5'},
   ];
   try{ await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/setMyCommands`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({commands})}); }catch(e){}
 }
 setMyCommands();
 
 function statusText(){
-  return `🤖 ABEL BOT\n\nSize Bybit: ${fmtSize(TRADE_MIN)} XAUT\nSize OKX Delta: ${fmtSize(TRADE_MIN_OKX)} XAU\nAgregasi OKX: ${OKX_AGG_SEC}s\nSinyal Aktif: ${activeSignal ? activeSignal.signal+' '+fmtSize(activeSignal.size)+' XAUT @ $'+activeSignal.price.toFixed(2)+' - '+activeSignal.source : 'WAIT - Belum ada trade gede'}\nXAUT: $${xautPrice?xautPrice.toFixed(2):'-'}\nMT5: ${MT5.connected?'Nyambung ✅':'Belum nyambung - RDP belum jalan'}\nTotal Sinyal Lolos: ${signalHistory.length}\n\nLayering: ON - Tanpa batas, tanpa cooldown\nBuy + Sell berlawanan tetep di-entry semua.\n\nCommand:\n/sizebybit - Setting utama\n/sizeokx - Ganti Delta OKX\n/agg - Ganti Agregasi OKX\n/status - Status\n/help - Help`;
+  let nextRecap = RECAP_EVERY - (totalSignalsEver % RECAP_EVERY);
+  if(totalSignalsEver>0 && totalSignalsEver % RECAP_EVERY===0) nextRecap = RECAP_EVERY;
+  return `🤖 ABEL BOT\n\nSize Bybit: ${fmtSize(TRADE_MIN)} XAUT\nSize OKX Delta: ${fmtSize(TRADE_MIN_OKX)} XAU\nAgregasi OKX: ${OKX_AGG_SEC}s\nSinyal Pakai: ${sinyalPakaiText()}\nSinyal Aktif: ${activeSignal ? activeSignal.signal+' '+fmtSize(activeSignal.size)+' XAUT @ $'+activeSignal.price.toFixed(2)+' - '+activeSignal.source : 'WAIT - Belum ada trade gede'}\nXAUT: $${xautPrice?xautPrice.toFixed(2):'-'}\nMT5: ${MT5.connected?'Nyambung ✅':'Belum nyambung - RDP belum jalan'}\nTotal Sinyal Lolos: ${signalHistory.length}\nTotal Sinyal Ever: ${totalSignalsEver}\nRekap PDF berikutnya: ${nextRecap} sinyal lagi (per ${RECAP_EVERY}) -> ke Channel\nChannel: ${TELEGRAM_CHANNEL_ID ? TELEGRAM_CHANNEL_ID+' ✅' : 'Belum di-set - cek TELEGRAM_CHANNEL_ID di Render'}\n\nLayering: ON - Tanpa batas, tanpa cooldown\nBuy + Sell berlawanan tetep di-entry semua.\n\nCommand:\n/status\n/help\n/sinyalpakai\n/settingbybit\n/settingokx`;
+}
+
+function parseSinyalPakai(text){
+  let t = String(text||'').toLowerCase();
+  let hasBybit = t.includes('bybit');
+  let hasOkx = t.includes('okx');
+  let hasBoth = t.includes('dua') || t.includes('both') || t.includes('semua') || t.includes('all') || (hasBybit && hasOkx);
+  if(t.trim()==='1') return {bybit:true, okx:false};
+  if(t.trim()==='2') return {bybit:false, okx:true};
+  if(t.trim()==='3' || t.trim()==='12' || t.trim()==='21') return {bybit:true, okx:true};
+  if(hasBoth) return {bybit:true, okx:true};
+  if(hasBybit && !hasOkx) return {bybit:true, okx:false};
+  if(hasOkx && !hasBybit) return {bybit:false, okx:true};
+  return null;
 }
 
 async function handleTelegramCommand(chatId, textRaw){
   let text=String(textRaw||'').trim();
-  let cv=convo[chatId];
-  if(cv && cv.step==='SIZEBYBIT'){
-    // Bisa input 1 angka (cuma Bybit) atau 3 angka (Bybit Delta Agg) - contoh: 3 50000 5
-    let parts=text.split(/[\s,]+/).map(parseNum).filter(v=>!isNaN(v));
-    if(!parts.length){ await sendTelegramTo(chatId,`Ketik angka bro, contoh:\n/sizebybit 3\natau\n/sizebybit 3 50000 5`); return; }
-    TRADE_MIN=parts[0];
-    if(parts[1]!=null) TRADE_MIN_OKX=parts[1];
-    if(parts[2]!=null) { OKX_AGG_SEC=Math.max(1,Math.min(60,Math.round(parts[2]))); restartOkxAggTimer(); }
-    delete convo[chatId];
-    await sendTelegramTo(chatId,`✅ Setting di-update:\nSize Bybit: ${fmtSize(TRADE_MIN)} XAUT\nSize OKX Delta: ${fmtSize(TRADE_MIN_OKX)} XAU\nAgregasi OKX: ${OKX_AGG_SEC}s`);
-    return;
+  if(!text) return;
+  let isCommand = text.startsWith('/');
+  let m = text.match(/^\/?([a-z_]+)\s*(.*)$/i);
+  let cmd = m ? m[1].toLowerCase() : '';
+  let arg = m ? (m[2]||'').trim() : '';
+
+  // ===== FIX KUNCI: kalo ketik /command baru, batalin mode nunggu angka yang lama =====
+  // Kecuali kalo command-nya SAMA dengan yang lagi ditunggu, biar /settingbybit 3 tetep jalan
+  let cv = convo[chatId];
+  if(cv && isCommand){
+    let waitingCmd = cv.step; // SETTINGBYBIT / SETTINGOKX / SINYALPAKAI
+    let newCmdMap = { settingbybit:'SETTINGBYBIT', settingokx:'SETTINGOKX', sinyalpakai:'SINYALPAKAI', sinyal:'SINYALPAKAI' };
+    let newStep = newCmdMap[cmd];
+    // Kalo command baru beda sama yang ditunggu -> batalin yang lama, lanjut ke command baru di bawah
+    // Kalo command baru sama tapi ada arg (misal /settingbybit 3) -> batalin juga, biar diproses sebagai command langsung
+    // Kalo command baru sama tapi TANPA arg -> biarin, jangan batalin, biar tetep nunggu
+    if(!newStep || newStep !== waitingCmd || (newStep === waitingCmd && arg)){
+      delete convo[chatId];
+      cv = null;
+    }
   }
-  if(cv && cv.step==='SIZEOKX'){
-    let v=parseNum(text);
-    if(isNaN(v)||v<=0){ await sendTelegramTo(chatId,`Ketik angka bro, contoh: 50000`); return; }
-    TRADE_MIN_OKX=v; delete convo[chatId];
-    await sendTelegramTo(chatId,`✅ Size OKX Delta diganti ke ${fmtSize(v)} XAU\nAgregasi tetep ${OKX_AGG_SEC}s.\n\nCommand:\n/sizebybit\n/sizeokx\n/agg\n/status`);
-    return;
-  }
-  if(cv && cv.step==='AGG'){
-    let v=parseNum(text);
-    if(isNaN(v)||v<1||v>60){ await sendTelegramTo(chatId,`Ketik 1-60 bro, contoh: 5`); return; }
-    OKX_AGG_SEC=Math.round(v); restartOkxAggTimer(); delete convo[chatId];
-    await sendTelegramTo(chatId,`✅ Agregasi OKX diganti ke ${OKX_AGG_SEC}s\nDelta tetep ${fmtSize(TRADE_MIN_OKX)} XAU.\n\nCommand:\n/sizebybit\n/sizeokx\n/agg\n/status`);
-    return;
-  }
-  let m=text.match(/^\/?([a-z_]+)\s*(.*)$/i); if(!m) return;
-  let cmd=m[1].toLowerCase(); let arg=(m[2]||'').trim();
-  if(cmd==='start'){ await sendTelegramTo(chatId,statusText()); return; }
-  if(cmd==='help'){ await sendTelegramTo(chatId,`📋 ABEL BOT\n\n/sizebybit - Setting utama\nContoh:\n/sizebybit 3 - Ganti Bybit doang\n/sizebybit 3 50000 5 - Ganti Bybit + Delta OKX + Agg sekaligus\n\n/sizeokx - Ganti Delta OKX\nContoh: /sizeokx 50000\n\n/agg - Ganti Agregasi OKX (detik)\nContoh: /agg 5 atau /agg 10\n\n/status - Status\n/help - Help\n\nBybit = per-trade, 3.000 langsung sinyal\nOKX = agregasi ${OKX_AGG_SEC}s, Delta Buy-Sell >= ${fmtSize(TRADE_MIN_OKX)} baru sinyal\nTanpa cooldown, tanpa batas, layering boleh.\n\nCommand:\n/sizebybit\n/sizeokx\n/agg\n/status\n/help`); return; }
-  if(cmd==='status'){ await sendTelegramTo(chatId,statusText()); return; }
-  if(cmd==='sizebybit'){
-    if(!arg){
-      convo[chatId]={step:'SIZEBYBIT'};
-      await sendTelegramTo(chatId,`⚙️ Setting Sekarang:\nSize Bybit: ${fmtSize(TRADE_MIN)} XAUT\nSize OKX Delta: ${fmtSize(TRADE_MIN_OKX)} XAU\nAgregasi OKX: ${OKX_AGG_SEC}s\n\nMau ganti? Ketik salah satu:\n3 - Cuma Bybit\n3 50000 5 - Bybit + Delta + Agg sekaligus\n\nAtau pake command langsung:\n/sizebybit 3 50000 5\n/sizeokx 50000\n/agg 5`);
+
+  // ===== MODE TUNGGU ANGKA (cuma jalan kalo teks BUKAN command) =====
+  if(cv && !isCommand){
+    if(cv.step==='SINYALPAKAI'){
+      let p = parseSinyalPakai(text);
+      if(!p){ await sendTelegramTo(chatId,`Ketik salah satu bro:\n1 / bybit - Bybit aja\n2 / okx - OKX aja\n3 / bybit okx - Dua-duanya\n\nAtau batalin pake command lain, misal /status`); return; }
+      SIGNAL_BYBIT_ON = p.bybit; SIGNAL_OKX_ON = p.okx; delete convo[chatId];
+      await sendTelegramTo(chatId,`✅ Sinyal Pakai di-update:\n${sinyalPakaiText()}\n\nCommand:\n/status\n/help\n/sinyalpakai\n/settingbybit\n/settingokx`);
       return;
     }
-    let parts=arg.split(/[\s,]+/).map(parseNum).filter(v=>!isNaN(v));
-    if(!parts.length){ await sendTelegramTo(chatId,`Contoh:\n/sizebybit 3\n/sizebybit 3 50000 5`); return; }
-    TRADE_MIN=parts[0];
-    if(parts[1]!=null) TRADE_MIN_OKX=parts[1];
-    if(parts[2]!=null) { OKX_AGG_SEC=Math.max(1,Math.min(60,Math.round(parts[2]))); restartOkxAggTimer(); }
-    await sendTelegramTo(chatId,`✅ Setting di-update:\nSize Bybit: ${fmtSize(TRADE_MIN)} XAUT\nSize OKX Delta: ${fmtSize(TRADE_MIN_OKX)} XAU\nAgregasi OKX: ${OKX_AGG_SEC}s\n\nCommand:\n/sizebybit\n/sizeokx\n/agg\n/status`);
+    if(cv.step==='SETTINGBYBIT'){
+      let v = parseNum(text);
+      if(isNaN(v)||v<=0){ await sendTelegramTo(chatId,`Ketik angka bro, contoh: 3\n\nAtau batalin pake command lain, misal /status`); return; }
+      TRADE_MIN = v; delete convo[chatId];
+      await sendTelegramTo(chatId,`✅ Setting Bybit di-update:\nSize Bybit: ${fmtSize(TRADE_MIN)} XAUT\nOKX gak berubah: Delta ${fmtSize(TRADE_MIN_OKX)} XAU, Agg ${OKX_AGG_SEC}s`);
+      return;
+    }
+    if(cv.step==='SETTINGOKX'){
+      let parts = text.split(/[\s,]+/).map(parseNum).filter(v=>!isNaN(v));
+      if(!parts.length){ await sendTelegramTo(chatId,`Ketik angka bro, contoh:\n50000 - Delta doang\n50000 5 - Delta + Agg sekaligus\n\nAtau batalin pake command lain, misal /status`); return; }
+      TRADE_MIN_OKX = parts[0];
+      if(parts[1]!=null){ OKX_AGG_SEC = Math.max(1,Math.min(60,Math.round(parts[1]))); restartOkxAggTimer(); }
+      delete convo[chatId];
+      await sendTelegramTo(chatId,`✅ Setting OKX di-update:\nDelta OKX: ${fmtSize(TRADE_MIN_OKX)} XAU\nAgregasi OKX: ${OKX_AGG_SEC}s\nBybit gak berubah: ${fmtSize(TRADE_MIN)} XAUT`);
+      return;
+    }
+  }
+
+  if(!isCommand) return;
+  if(cmd==='start' || cmd==='status'){ await sendTelegramTo(chatId,statusText()); return; }
+  if(cmd==='help'){ await sendTelegramTo(chatId,`📋 ABEL BOT\n\n/status - Status\n/help - Help\n\n/sinyalpakai - ON/OFF sinyal\nContoh:\n/sinyalpakai bybit - Bybit aja\n/sinyalpakai okx - OKX aja\n/sinyalpakai bybit okx - Dua-duanya\n\n/settingbybit - Setting Bybit doang\nContoh: /settingbybit 3\n\n/settingokx - Setting OKX Delta + Agregasi (jadi satu)\nContoh:\n/settingokx 50000 - Delta doang, Agg tetep\n/settingokx 50000 5 - Delta 50000 + Agg 5 detik\n\n/rekap - Kirim rekap PDF ke Channel (command tersembunyi)\n\nSinyal auto ke Pribadi + Channel.\nRekap PDF auto ke Channel tiap 100 sinyal.\n\nCommand:\n/status\n/help\n/sinyalpakai\n/settingbybit\n/settingokx`); return; }
+  if(cmd==='sinyalpakai' || cmd==='sinyal'){
+    if(!arg){
+      convo[chatId]={step:'SINYALPAKAI'};
+      await sendTelegramTo(chatId,`⚙️ Sinyal Pakai Sekarang:\n${sinyalPakaiText()}\n\nMau pake yang mana?\nKetik:\n1 / bybit - Bybit aja\n2 / okx - OKX aja\n3 / bybit okx - Dua-duanya\n\nAtau langsung:\n/sinyalpakai bybit\n/sinyalpakai okx\n/sinyalpakai bybit okx`);
+      return;
+    }
+    let p = parseSinyalPakai(arg);
+    if(!p){ await sendTelegramTo(chatId,`Contoh:\n/sinyalpakai bybit\n/sinyalpakai okx\n/sinyalpakai bybit okx`); return; }
+    SIGNAL_BYBIT_ON = p.bybit; SIGNAL_OKX_ON = p.okx;
+    await sendTelegramTo(chatId,`✅ Sinyal Pakai di-update:\n${sinyalPakaiText()}\n\nCommand:\n/sinyalpakai\n/status`);
     return;
   }
-  if(cmd==='sizeokx'){
-    if(!arg){ convo[chatId]={step:'SIZEOKX'}; await sendTelegramTo(chatId,`Size OKX Delta sekarang: ${fmtSize(TRADE_MIN_OKX)} XAU (Agregasi ${OKX_AGG_SEC}s)\n\nMau ganti ke berapa? Contoh: 50000\n\nAtau langsung: /sizeokx 50000`); return; }
-    let v=parseNum(arg); if(isNaN(v)||v<=0){ await sendTelegramTo(chatId,`Contoh: /sizeokx 50000`); return; }
-    TRADE_MIN_OKX=v;
-    await sendTelegramTo(chatId,`✅ Size OKX Delta diganti ke ${fmtSize(v)} XAU\nAgregasi tetep ${OKX_AGG_SEC}s.\n\nCommand:\n/sizebybit\n/sizeokx\n/agg\n/status`);
+  if(cmd==='settingbybit' || cmd==='sizebybit'){
+    if(!arg){
+      convo[chatId]={step:'SETTINGBYBIT'};
+      await sendTelegramTo(chatId,`⚙️ Setting Bybit Sekarang: ${fmtSize(TRADE_MIN)} XAUT\nOKX gak ikut berubah.\n\nMau ganti ke berapa? Ketik angka, contoh: 3\n\nAtau langsung: /settingbybit 3\n\nKalo mau batalin, ketik command lain aja, misal /status`);
+      return;
+    }
+    let v = parseNum(arg);
+    if(isNaN(v)||v<=0){ await sendTelegramTo(chatId,`Contoh: /settingbybit 3`); return; }
+    TRADE_MIN = v;
+    await sendTelegramTo(chatId,`✅ Setting Bybit di-update:\nSize Bybit: ${fmtSize(TRADE_MIN)} XAUT\nOKX gak berubah: Delta ${fmtSize(TRADE_MIN_OKX)} XAU, Agg ${OKX_AGG_SEC}s\n\nCommand:\n/settingbybit\n/settingokx\n/status`);
+    return;
+  }
+  if(cmd==='settingokx' || cmd==='sizeokx'){
+    if(!arg){
+      convo[chatId]={step:'SETTINGOKX'};
+      await sendTelegramTo(chatId,`⚙️ Setting OKX Sekarang:\nDelta: ${fmtSize(TRADE_MIN_OKX)} XAU\nAgregasi: ${OKX_AGG_SEC}s\nBybit gak ikut berubah.\n\nMau ganti? Ketik salah satu:\n50000 - Delta doang, Agg tetep\n50000 5 - Delta + Agg sekaligus\n\nAtau langsung:\n/settingokx 50000 5\n\nKalo mau batalin, ketik command lain aja, misal /status`);
+      return;
+    }
+    let parts = arg.split(/[\s,]+/).map(parseNum).filter(v=>!isNaN(v));
+    if(!parts.length){ await sendTelegramTo(chatId,`Contoh:\n/settingokx 50000\n/settingokx 50000 5`); return; }
+    TRADE_MIN_OKX = parts[0];
+    if(parts[1]!=null){ OKX_AGG_SEC = Math.max(1,Math.min(60,Math.round(parts[1]))); restartOkxAggTimer(); }
+    await sendTelegramTo(chatId,`✅ Setting OKX di-update:\nDelta OKX: ${fmtSize(TRADE_MIN_OKX)} XAU\nAgregasi OKX: ${OKX_AGG_SEC}s\nBybit gak berubah: ${fmtSize(TRADE_MIN)} XAUT\n\nCommand:\n/settingokx\n/settingbybit\n/status`);
     return;
   }
   if(cmd==='agg' || cmd==='agregasi'){
-    if(!arg){ convo[chatId]={step:'AGG'}; await sendTelegramTo(chatId,`Agregasi OKX sekarang: ${OKX_AGG_SEC}s\nDelta: ${fmtSize(TRADE_MIN_OKX)} XAU\n\nMau ganti ke berapa detik? Contoh: 5 atau 10\n\nAtau langsung: /agg 5`); return; }
-    let v=parseNum(arg); if(isNaN(v)||v<1||v>60){ await sendTelegramTo(chatId,`Contoh: /agg 5 (1-60 detik)`); return; }
-    OKX_AGG_SEC=Math.round(v); restartOkxAggTimer();
-    await sendTelegramTo(chatId,`✅ Agregasi OKX diganti ke ${OKX_AGG_SEC}s\nDelta tetep ${fmtSize(TRADE_MIN_OKX)} XAU.\n\nCommand:\n/sizebybit\n/sizeokx\n/agg\n/status`);
+    await sendTelegramTo(chatId,`Agg sekarang masuk ke /settingokx bro.\n\nContoh:\n/settingokx 50000 5 - Delta 50000 + Agg 5 detik\n/settingokx 50000 - Delta doang`);
     return;
   }
-  if(cmd==='trade'){ await sendTelegramTo(chatId,`Command /trade udah diganti bro.\nPake ini:\n/sizebybit 3 50000 5\n/sizeokx 50000\n/agg 5`); return; }
-  if(cmd==='tradeokx'){ await sendTelegramTo(chatId,`Command /tradeokx udah diganti bro.\nPake ini:\n/sizeokx 50000`); return; }
-  await sendTelegramTo(chatId,`Command /${cmd} gak aktif. Yang aktif:\n/sizebybit\n/sizeokx\n/agg\n/status\n/help`);
+  if(cmd==='rekap'){
+    if(signalHistory.length < 10){ await sendTelegramTo(chatId,`Belum cukup sinyal buat rekap bro, baru ${signalHistory.length} sinyal. Minimal 10.`); return; }
+    await sendTelegramTo(chatId,`📄 Lagi bikin rekap PDF ${Math.min(RECAP_EVERY, signalHistory.length)} sinyal terakhir...\nDikirim ke Channel: ${TELEGRAM_CHANNEL_ID || 'Belum di-set, dikirim ke Pribadi dulu'}`);
+    let batch = signalHistory.slice(0, RECAP_EVERY).reverse();
+    let pdfBuf = createRecapPdf(batch, 'Manual Rekap - ' + fmtDateID(Date.now()) + ' - Total Ever: ' + totalSignalsEver);
+    await sendTelegramDocToChannel(pdfBuf, 'ABEL-REKAP-MANUAL-' + Date.now() + '.pdf', `📄 REKAP MANUAL - ${batch.length} sinyal terakhir\n\nSESUAIKAN RISK MASING MASING💰\nHOLD BAGI YANG MAMPU🔥`);
+    await sendTelegramTo(chatId,`✅ Rekap PDF udah dikirim ke Channel.`);
+    return;
+  }
+  if(cmd==='trade' || cmd==='tradeokx'){
+    await sendTelegramTo(chatId,`Command itu udah diganti bro.\nPake ini:\n/settingbybit 3\n/settingokx 50000 5`);
+    return;
+  }
+  await sendTelegramTo(chatId,`Command /${cmd} gak aktif. Yang aktif:\n/status\n/help\n/sinyalpakai\n/settingbybit\n/settingokx`);
 }
 
 app.post('/webhook', async (req,res)=>{
   try{
     let upd=req.body||{};
     if(upd.message){ let chatId=upd.message.chat.id; let txt=upd.message.text||''; if(txt) await handleTelegramCommand(chatId,txt); }
+    if(upd.channel_post){ let chatId=upd.channel_post.chat.id; let txt=upd.channel_post.text||''; if(txt && txt.startsWith('/')) await handleTelegramCommand(chatId,txt); }
     res.json({ok:true});
   }catch(e){ res.json({ok:false}); }
 });
@@ -164,7 +352,10 @@ async function telegramPolling(){
       let r=await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates?offset=${teleOffset}&timeout=30`);
       let j=await r.json();
       if(j.ok&&j.result&&j.result.length){
-        for(let upd of j.result){ teleOffset=upd.update_id+1; try{ if(upd.message){ let chatId=upd.message.chat.id; let txt=upd.message.text||''; if(txt) await handleTelegramCommand(chatId,txt); } }catch(e){} }
+        for(let upd of j.result){ teleOffset=upd.update_id+1; try{
+          if(upd.message){ let chatId=upd.message.chat.id; let txt=upd.message.text||''; if(txt) await handleTelegramCommand(chatId,txt); }
+          if(upd.channel_post){ let chatId=upd.channel_post.chat.id; let txt=upd.channel_post.text||''; if(txt && txt.startsWith('/')) await handleTelegramCommand(chatId,txt); }
+        }catch(e){} }
       }
     }catch(e){ await new Promise(r=>setTimeout(r,2000)); }
     await new Promise(r=>setTimeout(r,500));
@@ -179,6 +370,8 @@ function pushTrade(list, t){
 }
 
 async function emitSignal(signal, price, size, source, extra){
+  if(source==='BYBIT PERP' && !SIGNAL_BYBIT_ON) return;
+  if(source==='OKX XAU SWAP' && !SIGNAL_OKX_ON) return;
   let setupId = generateSetupId();
   let sl = signal==='BUY' ? price - (SL_PIPS/10) : price + (SL_PIPS/10);
   let tp = signal==='BUY' ? price + (TP_PIPS/10) : price - (TP_PIPS/10);
@@ -187,10 +380,14 @@ async function emitSignal(signal, price, size, source, extra){
   let hist = { ...activeSignal, created_at: now };
   signalHistory.unshift(hist);
   if(signalHistory.length>200) signalHistory=signalHistory.slice(0,200);
+  totalSignalsEver++;
   lastUpdate = Date.now();
-  let usdValue = (size*price).toLocaleString('en-US',{maximumFractionDigits:0});
-  let aggInfo = extra && extra.agg ? `\nAgregasi: ${extra.agg}` : '';
-  await sendTelegram(`🎯 ${signal} NOW - Setup ${setupId} (TRADE GEDE FUTURES)\n\nTrade: ${signal} ${fmtSize(size)} XAUT @ $${price.toFixed(2)} - ${source}\nNilai: $${usdValue}\nJam: ${fmtWIB(now)} WIB\nFilter: >= ${fmtSize(source==='BYBIT PERP'?TRADE_MIN:TRADE_MIN_OKX)} XAUT - LOLOS ✅${aggInfo}\n\nEntry: $${price.toFixed(2)}\nSL: $${sl.toFixed(2)} (-${SL_PIPS} pips)\nTP: $${tp.toFixed(2)} (+${TP_PIPS} pips)\n\nLayering ON - Entry aja, risk kecil.\nHOLD BAGI YANG MAMPU🔥\n\nCommand:\n/sizebybit\n/sizeokx\n/agg\n/status`);
+  await sendTelegram(`🎯 ${signal} NOW - Setup ${setupId}\n\nENTRY: $${price.toFixed(2)} (NOW)\nSL: $${sl.toFixed(2)} (-${SL_PIPS} PIPS)\nTP: $${tp.toFixed(2)} (+${TP_PIPS} PIPS)\n\nSESUAIKAN RISK MASING MASING💰\nHOLD BAGI YANG MAMPU🔥`);
+  if(totalSignalsEver % RECAP_EVERY === 0 && totalSignalsEver !== lastRecapAt){
+    lastRecapAt = totalSignalsEver;
+    await sendTelegram(`📄 Udah ${totalSignalsEver} sinyal, lagi bikin rekap PDF 100 sinyal terakhir... dikirim ke Channel.`);
+    await sendRecapPdf();
+  }
 }
 
 async function handleTradeBybit(price, size, side, tradeId, ts){
@@ -346,13 +543,13 @@ app.get('/api/signal', (req,res)=>{
     history_sinyal: signalHistory,
     wallsFar,
     okx_agg: { buy: okxAgg.buy, sell: okxAgg.sell, delta: okxAgg.buy-okxAgg.sell, count: okxAgg.count, window_sec: OKX_AGG_SEC, threshold: TRADE_MIN_OKX },
-    config: { trade_min: TRADE_MIN, trade_min_okx: TRADE_MIN_OKX, okx_agg_sec: OKX_AGG_SEC, sl_pips: SL_PIPS, tp_pips: TP_PIPS, lot: CFG.lot, simbol: CFG.simbol, isCent: CFG.isCent, mt5_connected: MT5.connected, mt5_price: MT5.lastPrice||0, market: 'FUTURES PERP' },
+    config: { trade_min: TRADE_MIN, trade_min_okx: TRADE_MIN_OKX, okx_agg_sec: OKX_AGG_SEC, sl_pips: SL_PIPS, tp_pips: TP_PIPS, lot: CFG.lot, simbol: CFG.simbol, isCent: CFG.isCent, mt5_connected: MT5.connected, mt5_price: MT5.lastPrice||0, market: 'FUTURES PERP', total_signals_ever: totalSignalsEver, recap_every: RECAP_EVERY, signal_bybit_on: SIGNAL_BYBIT_ON, signal_okx_on: SIGNAL_OKX_ON, channel_id: TELEGRAM_CHANNEL_ID ? 'SET' : '' },
     harga: { xaut: xautPrice, mt5: MT5.lastPrice||0, source: 'Recent Trade FUTURES Bybit PERP + OKX XAU SWAP Delta' },
     exchanges: { bybit_trade: wsTradeBybitOk?'WS-OK':'WS-OFF', okx_trade: wsTradeOkxOk?'WS-OK':'WS-OFF' },
     uptimeStart, uptime_menit: Math.floor((Date.now()-uptimeStart)/60000), last_update: lastUpdate,
   });
 });
-app.get('/api/config', (req,res)=>{ res.json({ trade_min: TRADE_MIN, trade_min_okx: TRADE_MIN_OKX, okx_agg_sec: OKX_AGG_SEC, sl_pips: SL_PIPS, tp_pips: TP_PIPS, lot: CFG.lot, simbol: CFG.simbol }); });
+app.get('/api/config', (req,res)=>{ res.json({ trade_min: TRADE_MIN, trade_min_okx: TRADE_MIN_OKX, okx_agg_sec: OKX_AGG_SEC, sl_pips: SL_PIPS, tp_pips: TP_PIPS, lot: CFG.lot, simbol: CFG.simbol, signal_bybit_on: SIGNAL_BYBIT_ON, signal_okx_on: SIGNAL_OKX_ON }); });
 app.post('/api/mt5/price', (req,res)=>{
   try{
     let b=req.body||{};
@@ -363,6 +560,18 @@ app.post('/api/mt5/price', (req,res)=>{
   }catch(e){ res.json({ok:false,error:e.message}); }
 });
 app.get('/api/mt5/price', (req,res)=>{ res.json({ok:true, connected: MT5.connected, price: MT5.lastPrice, bid: MT5.lastBid, ask: MT5.lastAsk, balance: MT5.balance, equity: MT5.equity, positions: MT5.positions, last_seen: MT5.lastSeen}); });
-app.get('/api/history', (req,res)=>{ res.json({ history: signalHistory, total: signalHistory.length, uptimeStart }); });
-app.get('/api/test-telegram', async (req,res)=>{ let sid=generateSetupId(); await sendTelegram(`🎯 BUY NOW - Setup ${sid} (TRADE GEDE FUTURES)\n\nTrade: BUY 52000.000 XAUT @ $3636.50 - OKX XAU SWAP\nNilai: $189,098,000\nFilter: >= 50000.000 XAUT - LOLOS ✅\nAgregasi: Delta 5s: Buy 62000.000 - Sell 10000.000 = +52000.000 (30 trade)\n\nEntry: $3636.50\nSL: $3631.50 (-50 pips)\nTP: $3641.50 (+50 pips)\n\nLayering ON.\n\nCommand:\n/sizebybit\n/sizeokx\n/agg\n/status`); res.json({ok:true, setup_id:sid}); });
+app.get('/api/history', (req,res)=>{ res.json({ history: signalHistory, total: signalHistory.length, total_ever: totalSignalsEver, uptimeStart }); });
+app.get('/api/test-telegram', async (req,res)=>{
+  let sid=generateSetupId();
+  let price=3634.31; let sl=price-(SL_PIPS/10); let tp=price+(TP_PIPS/10);
+  await sendTelegram(`🎯 BUY NOW - Setup ${sid}\n\nENTRY: $${price.toFixed(2)} (NOW)\nSL: $${sl.toFixed(2)} (-${SL_PIPS} PIPS)\nTP: $${tp.toFixed(2)} (+${TP_PIPS} PIPS)\n\nSESUAIKAN RISK MASING MASING💰\nHOLD BAGI YANG MAMPU🔥`);
+  res.json({ok:true, setup_id:sid});
+});
+app.get('/api/test-rekap', async (req,res)=>{
+  if(signalHistory.length<1){ res.json({ok:false, error:'Belum ada sinyal'}); return; }
+  let batch = signalHistory.slice(0, Math.min(10, signalHistory.length)).reverse();
+  let pdfBuf = createRecapPdf(batch, 'TEST REKAP - ' + fmtDateID(Date.now()));
+  await sendTelegramDocToChannel(pdfBuf, 'ABEL-TEST-REKAP.pdf', `📄 TEST REKAP PDF - ${batch.length} sinyal - ke Channel`);
+  res.json({ok:true, count: batch.length, to_channel: !!TELEGRAM_CHANNEL_ID});
+});
 app.listen(PORT, ()=> console.log('ABEL BOT jalan di port '+PORT+' - FUTURES PERP - Size Bybit '+TRADE_MIN+' Delta OKX '+TRADE_MIN_OKX+' Agg '+OKX_AGG_SEC+'s'));
