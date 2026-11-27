@@ -1,8 +1,7 @@
-// ABEL BOT - FUTURES PERP - RECENT TRADE ONLY
-// BYBIT PERP (linear) + OKX SWAP. TANPA BINANCE - BINANCE BLOCK IP US RENDER
+// ABEL BOT - FUTURES PERP - RECENT TRADE ONLY - FIX OKX XAU
+// BYBIT PERP: XAUTUSDT | OKX SWAP: XAU-USDT-SWAP (BUKAN XAUT!)
+// TANPA BINANCE - BLOCK IP US RENDER
 // SINYAL = TRADE >= TRADE_MIN (default 3 XAUT). TANPA COOLDOWN, TANPA BATAS, LAYERING BOLEH
-// ORDERBOOK 200 LEVEL TIAP 60 DETIK BUAT BID ASK JAUH DOANG
-// Render Env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, PORT
 const express = require('express');
 const app = express();
 app.use(express.json());
@@ -142,9 +141,7 @@ async function handleTrade(source, price, size, side, tradeId, ts){
   let t = { id: tradeId, price, size, side: side==='BUY'?'BUY':'SELL', source, time: ts||Date.now(), time_str: fmtWIB(ts||Date.now()) };
   if(source==='BYBIT PERP') pushTrade(recentTradesBybit, t);
   else pushTrade(recentTradesOkx, t);
-
   if(size < TRADE_MIN) return;
-
   let setupId = generateSetupId();
   let signal = side==='BUY' ? 'BUY' : 'SELL';
   let sl = signal==='BUY' ? price - (SL_PIPS/10) : price + (SL_PIPS/10);
@@ -154,11 +151,9 @@ async function handleTrade(source, price, size, side, tradeId, ts){
   signalHistory.unshift(hist);
   if(signalHistory.length>200) signalHistory=signalHistory.slice(0,200);
   lastUpdate = Date.now();
-
   await sendTelegram(`🎯 ${signal} NOW - Setup ${setupId} (TRADE GEDE FUTURES)\n\nTrade: ${side} ${size.toFixed(2)} XAUT @ $${price.toFixed(2)} - ${source}\nJam: ${t.time_str} WIB\nFilter: >= ${TRADE_MIN} XAUT - LOLOS ✅\n\nEntry: $${price.toFixed(2)}\nSL: $${sl.toFixed(2)} (-${SL_PIPS} pips)\nTP: $${tp.toFixed(2)} (+${TP_PIPS} pips)\n\nLayering ON - Entry aja, risk kecil.\nHOLD BAGI YANG MAMPU🔥`);
 }
 
-// ===== BYBIT FUTURES PERP - LINEAR =====
 let wsBybitTrade=null;
 function connectBybitTrade(){
   if(!WSClient) return;
@@ -183,18 +178,18 @@ function connectBybitTrade(){
     wsBybitTrade.on('error',(e)=>{ console.log('Bybit PERP ERROR',e.message); });
   }catch(e){ setTimeout(connectBybitTrade,3000); }
 }
-// ===== OKX FUTURES - SWAP - PATCH: OK LANGSUNG PAS OPEN, BUKAN NUNGGU TRADE =====
+// ===== OKX - FIX: XAU-USDT-SWAP, BUKAN XAUT-USDT-SWAP =====
 let wsOkxTrade=null;
 function connectOkxTrade(){
   if(!WSClient) return;
   if(wsOkxTrade){ try{ wsOkxTrade.removeAllListeners(); wsOkxTrade.terminate(); }catch(e){} }
-  console.log('Connect OKX SWAP WS');
+  console.log('Connect OKX XAU SWAP WS');
   try{
     wsOkxTrade=new WSClient('wss://ws.okx.com:8443/ws/v5/public');
     wsOkxTrade.on('open',()=>{
-      console.log('OKX SWAP OPEN');
+      console.log('OKX XAU SWAP OPEN');
       wsTradeOkxOk=true;
-      wsOkxTrade.send(JSON.stringify({op:'subscribe',args:[{channel:'trades',instId:'XAUT-USDT-SWAP'}]}));
+      wsOkxTrade.send(JSON.stringify({op:'subscribe',args:[{channel:'trades',instId:'XAU-USDT-SWAP'}]}));
       setInterval(()=>{ try{ if(wsOkxTrade&&wsOkxTrade.readyState===1) wsOkxTrade.send('ping'); }catch(e){} },25000);
     });
     wsOkxTrade.on('message',(data)=>{
@@ -206,19 +201,20 @@ function connectOkxTrade(){
           wsLastTradeOkx=Date.now();
           j.data.forEach(d=>{
             let side = (d.side==='buy') ? 'BUY' : 'SELL';
-            handleTrade('OKX SWAP', parseFloat(d.px), parseFloat(d.sz), side, d.tradeId, parseInt(d.ts));
+            // OKX XAU: 1 kontrak = 1 oz, sama kayak XAUT, jadi size langsung kepake
+            handleTrade('OKX XAU SWAP', parseFloat(d.px), parseFloat(d.sz), side, d.tradeId, parseInt(d.ts));
           });
         }
+        if(j.event==='error') console.log('OKX ERR', txt);
       }catch(e){}
     });
-    wsOkxTrade.on('close',()=>{ console.log('OKX SWAP CLOSE'); wsTradeOkxOk=false; setTimeout(connectOkxTrade,3000); });
-    wsOkxTrade.on('error',(e)=>{ console.log('OKX SWAP ERROR',e.message); });
+    wsOkxTrade.on('close',()=>{ console.log('OKX XAU SWAP CLOSE'); wsTradeOkxOk=false; setTimeout(connectOkxTrade,3000); });
+    wsOkxTrade.on('error',(e)=>{ console.log('OKX XAU SWAP ERROR',e.message); });
   }catch(e){ setTimeout(connectOkxTrade,3000); }
 }
 connectBybitTrade();
 connectOkxTrade();
 
-// ===== ORDERBOOK FUTURES 200 LEVEL TIAP 60 DETIK - CUMA BUAT BID ASK JAUH =====
 async function fetchOne(url){ try{ let r=await fetch(url,{headers:{'User-Agent':'Mozilla/5.0'}}); if(!r.ok) return null; return await r.json(); }catch(e){ return null; } }
 async function fetchFarWalls(){
   try{
@@ -229,10 +225,11 @@ async function fetchFarWalls(){
       bybit.result.b.forEach(([p,s])=> allBids.push({price:parseFloat(p),size:parseFloat(s),source:'BYBIT PERP'}));
       bybit.result.a.forEach(([p,s])=> allAsks.push({price:parseFloat(p),size:parseFloat(s),source:'BYBIT PERP'}));
     }
-    let okx = await fetchOne('https://www.okx.com/api/v5/market/books?instId=XAUT-USDT-SWAP&sz=200');
+    // OKX FIX: XAU-USDT-SWAP
+    let okx = await fetchOne('https://www.okx.com/api/v5/market/books?instId=XAU-USDT-SWAP&sz=200');
     if(okx&&okx.data&&okx.data[0]){
-      okx.data[0].bids.forEach(([p,s])=> allBids.push({price:parseFloat(p),size:parseFloat(s),source:'OKX SWAP'}));
-      okx.data[0].asks.forEach(([p,s])=> allAsks.push({price:parseFloat(p),size:parseFloat(s),source:'OKX SWAP'}));
+      okx.data[0].bids.forEach(([p,s])=> allBids.push({price:parseFloat(p),size:parseFloat(s),source:'OKX XAU SWAP'}));
+      okx.data[0].asks.forEach(([p,s])=> allAsks.push({price:parseFloat(p),size:parseFloat(s),source:'OKX XAU SWAP'}));
     }
     function topFar(list, side){
       let bySrc={};
@@ -245,7 +242,7 @@ async function fetchFarWalls(){
       return out;
     }
     wallsFar = [...topFar(allBids,'BID'), ...topFar(allAsks,'ASK')];
-    console.log('Far walls FUTURES update - 200 level - 60 detik - total:', wallsFar.length);
+    console.log('Far walls FUTURES update - total:', wallsFar.length);
   }catch(e){ console.log('fetchFar gagal',e.message); }
 }
 fetchFarWalls();
@@ -265,7 +262,7 @@ app.get('/api/signal', (req,res)=>{
     history_sinyal: signalHistory,
     wallsFar,
     config: { trade_min: TRADE_MIN, sl_pips: SL_PIPS, tp_pips: TP_PIPS, lot: CFG.lot, simbol: CFG.simbol, isCent: CFG.isCent, mt5_connected: MT5.connected, mt5_price: MT5.lastPrice||0, market: 'FUTURES PERP' },
-    harga: { xaut: xautPrice, mt5: MT5.lastPrice||0, source: 'Recent Trade FUTURES Bybit PERP + OKX SWAP' },
+    harga: { xaut: xautPrice, mt5: MT5.lastPrice||0, source: 'Recent Trade FUTURES Bybit PERP + OKX XAU SWAP' },
     exchanges: { bybit_trade: wsTradeBybitOk?'WS-OK':'WS-OFF', okx_trade: wsTradeOkxOk?'WS-OK':'WS-OFF' },
     uptimeStart, uptime_menit: Math.floor((Date.now()-uptimeStart)/60000), last_update: lastUpdate,
   });
