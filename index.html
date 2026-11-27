@@ -50,8 +50,6 @@
 </head>
 <body>
 <div class="topbar"><h1>⚡ABEL FX</h1><span class="live"><span class="live-dot"></span>● LIVE 0.8s • FUTURES</span></div>
-
-<!-- 1. SINYAL AKTIF -->
 <div class="card" id="signalCard">
   <div class="card-head"><h2>🎯 1. Sinyal Aktif</h2><span id="setupId">-</span></div>
   <div class="signal WAIT" id="signalVal">WAIT</div>
@@ -59,8 +57,6 @@
   <div style="margin-top:10px;font-size:13px;color:#94a3b8">Trade Min: <b id="configTrade" style="color:#facc15">3 XAUT</b> • FUTURES PERP • Layering ON • Tanpa batas • Tanpa cooldown</div>
   <div class="harga-box"><div class="label">Harga XAUT FUTURES (Recent Trade)</div><div class="val" id="hargaXaut">-</div><div class="label" id="hargaMT5Sub">MT5 -</div></div>
 </div>
-
-<!-- 2. RECENT TRADE FUTURES -->
 <div class="card">
   <div class="card-head"><h2>📊 2. Recent Trade - FUTURES</h2><span style="font-size:11px;color:#94a3b8">Kuning = Lolos Filter • Realtime 0.8s</span></div>
   <div class="grid2">
@@ -68,15 +64,11 @@
     <div><h3 style="font-size:13px;margin:8px 0">OKX SWAP</h3><table class="trade-table"><thead><tr><th>Jam</th><th>Harga</th><th>Jumlah</th><th>Arah</th></tr></thead><tbody id="tradeOkx"></tbody></table></div>
   </div>
 </div>
-
-<!-- 3. HISTORY SINYAL -->
 <div class="card">
   <div class="card-head"><h2>📜 3. History Sinyal</h2><span id="historyCount" style="font-size:11px;color:#94a3b8">0 sinyal</span></div>
   <div style="font-size:12px;color:#94a3b8">Cuma trade FUTURES yang lolos filter (>= Trade Min) yang masuk sini. Tanpa winrate.</div>
   <div id="historyBody"></div>
 </div>
-
-<!-- 4. BID ASK JAUH FUTURES -->
 <div class="card">
   <div class="card-head"><h2>🐋 4. Bid Ask Jauh - FUTURES</h2><span style="font-size:11px;color:#94a3b8">200 level • Update 1 menit</span></div>
   <div class="grid2">
@@ -84,8 +76,6 @@
     <div><h3 style="font-size:13px">ASK Jauh</h3><div id="asksFar"></div></div>
   </div>
 </div>
-
-<!-- 5. DASHBOARD -->
 <div class="card">
   <div class="card-head"><h2>⚙️ 5. Dashboard Keseluruhan</h2></div>
   <div style="font-size:13px;line-height:1.8">
@@ -103,7 +93,6 @@
   </div>
   <div id="status" style="text-align:center;font-size:11px;color:#94a3b8;margin-top:8px"></div>
 </div>
-
 <script>
 const API_URL = 'https://abelbot.onrender.com/api/signal';
 const BASE_URL = API_URL.replace('/api/signal','');
