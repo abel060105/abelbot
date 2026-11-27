@@ -49,46 +49,47 @@
 </style>
 </head>
 <body>
-<div class="topbar"><h1>⚡ABEL FX</h1><span class="live"><span class="live-dot"></span>● LIVE 0.8s</span></div>
+<div class="topbar"><h1>⚡ABEL FX</h1><span class="live"><span class="live-dot"></span>● LIVE 0.8s • FUTURES</span></div>
 
 <!-- 1. SINYAL AKTIF -->
 <div class="card" id="signalCard">
   <div class="card-head"><h2>🎯 1. Sinyal Aktif</h2><span id="setupId">-</span></div>
   <div class="signal WAIT" id="signalVal">WAIT</div>
   <div id="activeDetail" style="font-size:14px;line-height:1.6">Belum ada trade gede yang lolos filter.</div>
-  <div style="margin-top:10px;font-size:13px;color:#94a3b8">Trade Min: <b id="configTrade" style="color:#facc15">3 XAUT</b> • Layering ON • Tanpa batas • Tanpa cooldown</div>
-  <div class="harga-box"><div class="label">Harga XAUT (Recent Trade)</div><div class="val" id="hargaXaut">-</div><div class="label" id="hargaMT5Sub">MT5 -</div></div>
+  <div style="margin-top:10px;font-size:13px;color:#94a3b8">Trade Min: <b id="configTrade" style="color:#facc15">3 XAUT</b> • FUTURES PERP • Layering ON • Tanpa batas • Tanpa cooldown</div>
+  <div class="harga-box"><div class="label">Harga XAUT FUTURES (Recent Trade)</div><div class="val" id="hargaXaut">-</div><div class="label" id="hargaMT5Sub">MT5 -</div></div>
 </div>
 
-<!-- 2. RECENT TRADE -->
+<!-- 2. RECENT TRADE FUTURES -->
 <div class="card">
-  <div class="card-head"><h2>📊 2. Recent Trade</h2><span style="font-size:11px;color:#94a3b8">Kuning = Lolos Filter • Realtime 0.8s</span></div>
+  <div class="card-head"><h2>📊 2. Recent Trade - FUTURES</h2><span style="font-size:11px;color:#94a3b8">Kuning = Lolos Filter • Realtime 0.8s</span></div>
   <div class="grid2">
-    <div><h3 style="font-size:13px;margin:8px 0">BYBIT</h3><table class="trade-table"><thead><tr><th>Jam</th><th>Harga</th><th>Jumlah</th><th>Arah</th></tr></thead><tbody id="tradeBybit"></tbody></table></div>
-    <div><h3 style="font-size:13px;margin:8px 0">OKX</h3><table class="trade-table"><thead><tr><th>Jam</th><th>Harga</th><th>Jumlah</th><th>Arah</th></tr></thead><tbody id="tradeOkx"></tbody></table></div>
+    <div><h3 style="font-size:13px;margin:8px 0">BYBIT PERP</h3><table class="trade-table"><thead><tr><th>Jam</th><th>Harga</th><th>Jumlah</th><th>Arah</th></tr></thead><tbody id="tradeBybit"></tbody></table></div>
+    <div><h3 style="font-size:13px;margin:8px 0">OKX SWAP</h3><table class="trade-table"><thead><tr><th>Jam</th><th>Harga</th><th>Jumlah</th><th>Arah</th></tr></thead><tbody id="tradeOkx"></tbody></table></div>
   </div>
 </div>
 
 <!-- 3. HISTORY SINYAL -->
 <div class="card">
   <div class="card-head"><h2>📜 3. History Sinyal</h2><span id="historyCount" style="font-size:11px;color:#94a3b8">0 sinyal</span></div>
-  <div style="font-size:12px;color:#94a3b8">Cuma trade yang lolos filter (>= Trade Min) yang masuk sini. Tanpa winrate.</div>
+  <div style="font-size:12px;color:#94a3b8">Cuma trade FUTURES yang lolos filter (>= Trade Min) yang masuk sini. Tanpa winrate.</div>
   <div id="historyBody"></div>
 </div>
 
-<!-- 4. BID ASK JAUH -->
+<!-- 4. BID ASK JAUH FUTURES -->
 <div class="card">
-  <div class="card-head"><h2>🐋 4. Bid Ask Jauh</h2><span style="font-size:11px;color:#94a3b8">200 level • Update 1 menit</span></div>
+  <div class="card-head"><h2>🐋 4. Bid Ask Jauh - FUTURES</h2><span style="font-size:11px;color:#94a3b8">200 level • Update 1 menit</span></div>
   <div class="grid2">
     <div><h3 style="font-size:13px">BID Jauh</h3><div id="bidsFar"></div></div>
     <div><h3 style="font-size:13px">ASK Jauh</h3><div id="asksFar"></div></div>
   </div>
 </div>
 
-<!-- 5. DASHBOARD KESELURUHAN -->
+<!-- 5. DASHBOARD -->
 <div class="card">
   <div class="card-head"><h2>⚙️ 5. Dashboard Keseluruhan</h2></div>
   <div style="font-size:13px;line-height:1.8">
+    <div>Market: <b>FUTURES PERP</b></div>
     <div>Trade Min: <b id="dashTrade">-</b></div>
     <div>XAUT: <b id="dashXaut">-</b></div>
     <div>MT5: <b id="dashMt5">-</b></div>
@@ -106,11 +107,10 @@
 <script>
 const API_URL = 'https://abelbot.onrender.com/api/signal';
 const BASE_URL = API_URL.replace('/api/signal','');
-let lastLoadTime = 0;
 let isLoading = false;
 async function testTelegram(){ try{ const r=await fetch(BASE_URL+'/api/test-telegram?t='+Date.now(),{cache:'no-store'}); const j=JSON.parse(await r.text()); alert('Telegram terkirim! Setup '+j.setup_id); load(); }catch(e){ alert('Gagal: '+e.message); } }
-async function testWs(){ try{ const r=await fetch(API_URL+'?t='+Date.now(),{cache:'no-store'}); const d=JSON.parse(await r.text()); alert('WS Trade\nBybit: '+d.exchanges.bybit_trade+'\nOKX: '+d.exchanges.okx_trade+'\nXAUT: $'+(d.harga?.xaut||0)); }catch(e){ alert('Gagal: '+e.message); } }
-async function unlock(){ alert('Unlock gak kepake di V14.1 - Sinyal tanpa batas, layering ON.'); }
+async function testWs(){ try{ const r=await fetch(API_URL+'?t='+Date.now(),{cache:'no-store'}); const d=JSON.parse(await r.text()); alert('WS FUTURES\nBybit PERP: '+d.exchanges.bybit_trade+'\nOKX SWAP: '+d.exchanges.okx_trade+'\nXAUT: $'+(d.harga?.xaut||0)); }catch(e){ alert('Gagal: '+e.message); } }
+async function unlock(){ alert('Unlock gak kepake - Sinyal tanpa batas, layering ON.'); }
 function renderTrades(el, list, tradeMin){
   if(!list.length){ document.getElementById(el).innerHTML='<tr><td colspan="4" style="color:#64748b">Belum ada trade</td></tr>'; return; }
   document.getElementById(el).innerHTML=list.slice(0,20).map(t=>{
@@ -125,7 +125,6 @@ async function load(){
   try{
     const r=await fetch(API_URL+'?t='+Date.now(),{cache:'no-store'});
     const d=JSON.parse(await r.text());
-    lastLoadTime = Date.now();
     const cfg=d.config||{}; const tradeMin=cfg.trade_min ?? 3;
     const price=d.harga?.xaut || 0; const mt5Price=d.harga?.mt5 || 0;
     document.getElementById('configTrade').innerText=tradeMin+' XAUT';
@@ -140,7 +139,7 @@ async function load(){
     if(a){
       sigEl.innerText=a.signal; sigEl.className='signal '+a.signal;
       document.getElementById('setupId').innerText=a.setup_id||'-';
-      document.getElementById('activeDetail').innerHTML=`<b>${a.signal} ${a.size.toFixed(2)} XAUT @ $${a.price.toFixed(2)}</b><br>Source: ${a.source} • Jam: ${a.time_str} WIB • Filter: >= ${tradeMin} XAUT - LOLOS ✅<br><span style="color:#94a3b8;font-size:12px">Layering ON - Entry aja, risk kecil.</span>`;
+      document.getElementById('activeDetail').innerHTML=`<b>${a.signal} ${a.size.toFixed(2)} XAUT @ $${a.price.toFixed(2)}</b><br>Source: ${a.source} • Jam: ${a.time_str} WIB • Filter: >= ${tradeMin} XAUT - LOLOS ✅<br><span style="color:#94a3b8;font-size:12px">FUTURES PERP • Layering ON</span>`;
     } else {
       sigEl.innerText='WAIT'; sigEl.className='signal WAIT';
       document.getElementById('setupId').innerText='-';
@@ -157,16 +156,14 @@ async function load(){
     let renderFar=(el, arr)=>{ document.getElementById(el).innerHTML=arr.length?arr.map(l=>`<div class="row"><div class="left ${l.side==='BID'?'BID':'ASK'}">${l.side} $${l.price.toFixed(2)}</div><div class="right">${l.size.toFixed(2)} XAUT<br><small>${l.sources}</small></div></div>`).join(''):'<div class="empty">Lagi loading orderbook 200 level...</div>'; };
     renderFar('bidsFar', far.filter(w=>w.side==='BID').sort((a,b)=>b.size-a.size));
     renderFar('asksFar', far.filter(w=>w.side==='ASK').sort((a,b)=>b.size-a.size));
-    document.getElementById('status').innerText='Update: '+new Date().toLocaleTimeString('id-ID')+' • Realtime 0.8s • Trade Min '+tradeMin+' XAUT • Orderbook 200 level / 1 menit';
+    document.getElementById('status').innerText='Update: '+new Date().toLocaleTimeString('id-ID')+' • Realtime 0.8s • FUTURES PERP • Trade Min '+tradeMin+' XAUT';
   }catch(e){ document.getElementById('status').innerText='Gagal load: '+e.message; }
   isLoading = false;
 }
 let deferredPrompt=null;
 window.addEventListener('beforeinstallprompt',(e)=>{ e.preventDefault(); deferredPrompt=e; document.getElementById('btnInstall').style.display='inline-block'; });
 document.getElementById('btnInstall').addEventListener('click', async ()=>{ if(deferredPrompt){ deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; } });
-// REALTIME: 800ms, anti-numpuk pake isLoading
 load(); setInterval(load,800);
-// Kalo tab lagi gak dibuka, pause biar gak boros, kalo dibuka lagi langsung refresh
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) load(); });
 if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('/sw.js').catch(()=>{}); }); }
 </script>
