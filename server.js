@@ -1,5 +1,5 @@
-// ABEL BOT - V14 - RECENT TRADE ONLY - TANPA TEMBOK ORDERBOOK
-// SINYAL = TRADE >= TRADE_MIN (default 5 XAUT). TANPA COOLDOWN, TANPA BATAS, LAYERING BOLEH, HEDGING BOLEH
+// ABEL BOT - V14.1 - RECENT TRADE ONLY - TRADE MIN 3 XAUT
+// SINYAL = TRADE >= TRADE_MIN (default 3 XAUT). TANPA COOLDOWN, TANPA BATAS, LAYERING BOLEH, HEDGING BOLEH
 // ORDERBOOK 200 LEVEL, UPDATE TIAP 60 DETIK, CUMA BUAT BID ASK JAUH DOANG
 // Render Env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, PORT
 const express = require('express');
@@ -19,7 +19,7 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
 const TELEGRAM_CHAT_IDS = (process.env.TELEGRAM_CHAT_IDS || TELEGRAM_CHAT_ID || '').split(',').map(s=>s.trim()).filter(Boolean);
 
 // ===== SETTING SATU-SATUNYA =====
-let TRADE_MIN = 5; // XAUT, ganti via /trade
+let TRADE_MIN = 3; // XAUT, ganti via /trade
 let SL_PIPS = 50;
 let TP_PIPS = 50;
 let CFG = { lot: 0.01, simbol: 'XAUUSD', isCent: false };
@@ -30,7 +30,7 @@ let WSClient = null;
 try{ WSClient = require('ws'); }catch(e){ console.log('ws belum install'); }
 
 // ===== DATA =====
-let recentTradesBybit = []; // {id, price, size, side, time}
+let recentTradesBybit = [];
 let recentTradesOkx = [];
 let signalHistory = []; // cuma yang lolos filter
 let activeSignal = null; // trade lolos terakhir
@@ -65,7 +65,7 @@ async function sendTelegramTo(chatId, msg){
 async function setMyCommands(){
   if(!TELEGRAM_TOKEN) return;
   const commands=[
-    {command:'trade',description:'Ganti minimal trade, misal /trade 5'},
+    {command:'trade',description:'Ganti minimal trade, misal /trade 3'},
     {command:'status',description:'Liat trade min sekarang'},
     {command:'help',description:'Liat command'},
   ];
@@ -74,7 +74,7 @@ async function setMyCommands(){
 setMyCommands();
 
 function statusText(){
-  return `🤖 ABEL BOT - V14 RECENT TRADE\n\nTrade Min: ${TRADE_MIN} XAUT\nSinyal Aktif: ${activeSignal ? activeSignal.signal+' '+activeSignal.size.toFixed(2)+' XAUT @ $'+activeSignal.price.toFixed(2)+' - '+activeSignal.source : 'WAIT - Belum ada trade gede'}\nXAUT: $${xautPrice?xautPrice.toFixed(2):'-'}\nMT5: ${MT5.connected?'Nyambung ✅':'Belum nyambung - RDP belum jalan'}\nTotal Sinyal Lolos: ${signalHistory.length}\n\nLayering: ON - Tanpa batas, tanpa cooldown\nBuy + Sell berlawanan tetep di-entry semua.`;
+  return `🤖 ABEL BOT - V14.1 RECENT TRADE\n\nTrade Min: ${TRADE_MIN} XAUT\nSinyal Aktif: ${activeSignal ? activeSignal.signal+' '+activeSignal.size.toFixed(2)+' XAUT @ $'+activeSignal.price.toFixed(2)+' - '+activeSignal.source : 'WAIT - Belum ada trade gede'}\nXAUT: $${xautPrice?xautPrice.toFixed(2):'-'}\nMT5: ${MT5.connected?'Nyambung ✅':'Belum nyambung - RDP belum jalan'}\nTotal Sinyal Lolos: ${signalHistory.length}\n\nLayering: ON - Tanpa batas, tanpa cooldown\nBuy + Sell berlawanan tetep di-entry semua.`;
 }
 
 async function handleTelegramCommand(chatId, textRaw){
@@ -82,7 +82,7 @@ async function handleTelegramCommand(chatId, textRaw){
   let cv=convo[chatId];
   if(cv && cv.step==='TRADE'){
     let v=parseNum(text);
-    if(isNaN(v)||v<=0){ await sendTelegramTo(chatId,`Ketik angka bro, contoh: 5`); return; }
+    if(isNaN(v)||v<=0){ await sendTelegramTo(chatId,`Ketik angka bro, contoh: 3`); return; }
     TRADE_MIN=v; delete convo[chatId];
     await sendTelegramTo(chatId,`✅ Trade Min diganti ke ${v} XAUT\n\nSinyal berikutnya: trade >= ${v} XAUT langsung kirim ke Tele + masuk History.`);
     return;
@@ -90,17 +90,17 @@ async function handleTelegramCommand(chatId, textRaw){
   let m=text.match(/^\/?([a-z_]+)\s*(.*)$/i); if(!m) return;
   let cmd=m[1].toLowerCase(); let arg=(m[2]||'').trim();
   if(cmd==='start'){ await sendTelegramTo(chatId,statusText()+`\n\nCommand: /trade /status /help`); return; }
-  if(cmd==='help'){ await sendTelegramTo(chatId,`📋 ABEL BOT V14\n\n/trade 5 - Ganti minimal trade (XAUT)\n/status - Liat setting sekarang\n\nSinyal = trade >= ${TRADE_MIN} XAUT\nTanpa cooldown, tanpa batas, layering boleh.`); return; }
+  if(cmd==='help'){ await sendTelegramTo(chatId,`📋 ABEL BOT V14.1\n\n/trade 3 - Ganti minimal trade (XAUT)\n/status - Liat setting sekarang\n\nSinyal = trade >= ${TRADE_MIN} XAUT\nTanpa cooldown, tanpa batas, layering boleh.`); return; }
   if(cmd==='status'){ await sendTelegramTo(chatId,statusText()); return; }
   if(cmd==='trade'){
-    if(!arg){ convo[chatId]={step:'TRADE'}; await sendTelegramTo(chatId,`Trade Min sekarang: ${TRADE_MIN} XAUT\n\nMau ganti ke berapa? Contoh: 5`); return; }
-    let v=parseNum(arg); if(isNaN(v)||v<=0){ await sendTelegramTo(chatId,`Contoh: /trade 5`); return; }
+    if(!arg){ convo[chatId]={step:'TRADE'}; await sendTelegramTo(chatId,`Trade Min sekarang: ${TRADE_MIN} XAUT\n\nMau ganti ke berapa? Contoh: 3`); return; }
+    let v=parseNum(arg); if(isNaN(v)||v<=0){ await sendTelegramTo(chatId,`Contoh: /trade 3`); return; }
     TRADE_MIN=v;
     await sendTelegramTo(chatId,`✅ Trade Min diganti ke ${v} XAUT\n\nVercel auto ke-sync.`);
     return;
   }
-  if(['jarak','size','betah','ratio'].includes(cmd)){ await sendTelegramTo(chatId,`Command /${cmd} udah dihapus bro. Sekarang cuma /trade.\n\nContoh: /trade 5`); return; }
-  await sendTelegramTo(chatId,`Command /${cmd} gak aktif. Yang aktif:\n/trade 5\n/status`);
+  if(['jarak','size','betah','ratio'].includes(cmd)){ await sendTelegramTo(chatId,`Command /${cmd} udah dihapus bro. Sekarang cuma /trade.\n\nContoh: /trade 3`); return; }
+  await sendTelegramTo(chatId,`Command /${cmd} gak aktif. Yang aktif:\n/trade 3\n/status`);
 }
 
 app.post('/webhook', async (req,res)=>{
@@ -232,7 +232,6 @@ async function fetchFarWalls(){
       okx.data[0].bids.forEach(([p,s])=> allBids.push({price:parseFloat(p),size:parseFloat(s),source:'OKX'}));
       okx.data[0].asks.forEach(([p,s])=> allAsks.push({price:parseFloat(p),size:parseFloat(s),source:'OKX'}));
     }
-    // Merge per harga, ambil 3 terbesar per sisi per source = BID/ASK Jauh
     function topFar(list, side){
       let bySrc={};
       list.forEach(o=>{ if(!bySrc[o.source]) bySrc[o.source]=[]; bySrc[o.source].push(o); });
@@ -251,7 +250,7 @@ fetchFarWalls();
 setInterval(fetchFarWalls, 60000); // 1 MENIT, LONGGAR
 
 // ===== API =====
-app.get('/', (req,res)=> res.send('ABEL BOT V14 OK - /api/signal - RECENT TRADE ONLY - Trade Min '+TRADE_MIN+' XAUT'));
+app.get('/', (req,res)=> res.send('ABEL BOT V14.1 OK - /api/signal - RECENT TRADE ONLY - Trade Min '+TRADE_MIN+' XAUT'));
 app.get('/api/signal', (req,res)=>{
   res.set('Cache-Control','no-store');
   res.json({
@@ -282,5 +281,5 @@ app.post('/api/mt5/price', (req,res)=>{
 });
 app.get('/api/mt5/price', (req,res)=>{ res.json({ok:true, connected: MT5.connected, price: MT5.lastPrice, bid: MT5.lastBid, ask: MT5.lastAsk, balance: MT5.balance, equity: MT5.equity, positions: MT5.positions, last_seen: MT5.lastSeen}); });
 app.get('/api/history', (req,res)=>{ res.json({ history: signalHistory, total: signalHistory.length, uptimeStart }); });
-app.get('/api/test-telegram', async (req,res)=>{ let sid=generateSetupId(); await sendTelegram(`🎯 BUY NOW - Setup ${sid} (TRADE GEDE TEST)\n\nTrade: BUY 5.20 XAUT @ $3831.50 - BYBIT\nFilter: >= ${TRADE_MIN} XAUT - LOLOS ✅\n\nEntry: $3831.50\nSL: $3826.50 (-50 pips)\nTP: $3836.50 (+50 pips)\n\nLayering ON.`); res.json({ok:true, setup_id:sid}); });
-app.listen(PORT, ()=> console.log('ABEL BOT V14 jalan di port '+PORT+' - RECENT TRADE ONLY - Trade Min '+TRADE_MIN));
+app.get('/api/test-telegram', async (req,res)=>{ let sid=generateSetupId(); await sendTelegram(`🎯 BUY NOW - Setup ${sid} (TRADE GEDE TEST)\n\nTrade: BUY 3.20 XAUT @ $3831.50 - BYBIT\nFilter: >= ${TRADE_MIN} XAUT - LOLOS ✅\n\nEntry: $3831.50\nSL: $3826.50 (-50 pips)\nTP: $3836.50 (+50 pips)\n\nLayering ON.`); res.json({ok:true, setup_id:sid}); });
+app.listen(PORT, ()=> console.log('ABEL BOT V14.1 jalan di port '+PORT+' - RECENT TRADE ONLY - Trade Min '+TRADE_MIN));
