@@ -1,6 +1,6 @@
-// ABEL BOT - V14.1 - RECENT TRADE ONLY - TRADE MIN 3 XAUT
-// SINYAL = TRADE >= TRADE_MIN (default 3 XAUT). TANPA COOLDOWN, TANPA BATAS, LAYERING BOLEH, HEDGING BOLEH
-// ORDERBOOK 200 LEVEL, UPDATE TIAP 60 DETIK, CUMA BUAT BID ASK JAUH DOANG
+// ABEL BOT - FUTURES PERP - RECENT TRADE ONLY
+// SINYAL = TRADE >= TRADE_MIN (default 3 XAUT). TANPA COOLDOWN, TANPA BATAS, LAYERING BOLEH
+// BYBIT PERP (linear) + OKX SWAP. ORDERBOOK 200 LEVEL TIAP 60 DETIK BUAT BID ASK JAUH DOANG
 // Render Env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, PORT
 const express = require('express');
 const app = express();
@@ -18,8 +18,7 @@ const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
 const TELEGRAM_CHAT_IDS = (process.env.TELEGRAM_CHAT_IDS || TELEGRAM_CHAT_ID || '').split(',').map(s=>s.trim()).filter(Boolean);
 
-// ===== SETTING SATU-SATUNYA =====
-let TRADE_MIN = 3; // XAUT, ganti via /trade
+let TRADE_MIN = 3;
 let SL_PIPS = 50;
 let TP_PIPS = 50;
 let CFG = { lot: 0.01, simbol: 'XAUUSD', isCent: false };
@@ -29,13 +28,12 @@ let convo = {};
 let WSClient = null;
 try{ WSClient = require('ws'); }catch(e){ console.log('ws belum install'); }
 
-// ===== DATA =====
 let recentTradesBybit = [];
 let recentTradesOkx = [];
-let signalHistory = []; // cuma yang lolos filter
-let activeSignal = null; // trade lolos terakhir
+let signalHistory = [];
+let activeSignal = null;
 let xautPrice = 0;
-let wallsFar = []; // BID/ASK Jauh doang, dari orderbook 200 level tiap 60 detik
+let wallsFar = [];
 let uptimeStart = Date.now(), lastUpdate = null;
 let wsTradeBybitOk = false, wsTradeOkxOk = false, wsLastTradeBybit = 0, wsLastTradeOkx = 0;
 
@@ -51,7 +49,6 @@ function generateSetupId(){
 }
 function fmtWIB(ts){ return new Date(ts).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
 
-// ===== TELEGRAM =====
 async function sendTelegram(msg){
   if(!TELEGRAM_TOKEN || !TELEGRAM_CHAT_IDS.length) return;
   await Promise.all(TELEGRAM_CHAT_IDS.map(async (chat_id)=>{
@@ -74,7 +71,7 @@ async function setMyCommands(){
 setMyCommands();
 
 function statusText(){
-  return `🤖 ABEL BOT - V14.1 RECENT TRADE\n\nTrade Min: ${TRADE_MIN} XAUT\nSinyal Aktif: ${activeSignal ? activeSignal.signal+' '+activeSignal.size.toFixed(2)+' XAUT @ $'+activeSignal.price.toFixed(2)+' - '+activeSignal.source : 'WAIT - Belum ada trade gede'}\nXAUT: $${xautPrice?xautPrice.toFixed(2):'-'}\nMT5: ${MT5.connected?'Nyambung ✅':'Belum nyambung - RDP belum jalan'}\nTotal Sinyal Lolos: ${signalHistory.length}\n\nLayering: ON - Tanpa batas, tanpa cooldown\nBuy + Sell berlawanan tetep di-entry semua.`;
+  return `🤖 ABEL BOT\n\nTrade Min: ${TRADE_MIN} XAUT\nSinyal Aktif: ${activeSignal ? activeSignal.signal+' '+activeSignal.size.toFixed(2)+' XAUT @ $'+activeSignal.price.toFixed(2)+' - '+activeSignal.source : 'WAIT - Belum ada trade gede'}\nXAUT: $${xautPrice?xautPrice.toFixed(2):'-'}\nMT5: ${MT5.connected?'Nyambung ✅':'Belum nyambung - RDP belum jalan'}\nTotal Sinyal Lolos: ${signalHistory.length}\n\nLayering: ON - Tanpa batas, tanpa cooldown\nBuy + Sell berlawanan tetep di-entry semua.`;
 }
 
 async function handleTelegramCommand(chatId, textRaw){
@@ -90,7 +87,7 @@ async function handleTelegramCommand(chatId, textRaw){
   let m=text.match(/^\/?([a-z_]+)\s*(.*)$/i); if(!m) return;
   let cmd=m[1].toLowerCase(); let arg=(m[2]||'').trim();
   if(cmd==='start'){ await sendTelegramTo(chatId,statusText()+`\n\nCommand: /trade /status /help`); return; }
-  if(cmd==='help'){ await sendTelegramTo(chatId,`📋 ABEL BOT V14.1\n\n/trade 3 - Ganti minimal trade (XAUT)\n/status - Liat setting sekarang\n\nSinyal = trade >= ${TRADE_MIN} XAUT\nTanpa cooldown, tanpa batas, layering boleh.`); return; }
+  if(cmd==='help'){ await sendTelegramTo(chatId,`📋 ABEL BOT\n\n/trade 3 - Ganti minimal trade (XAUT)\n/status - Liat setting sekarang\n\nSinyal = trade >= ${TRADE_MIN} XAUT (FUTURES PERP)\nTanpa cooldown, tanpa batas, layering boleh.`); return; }
   if(cmd==='status'){ await sendTelegramTo(chatId,statusText()); return; }
   if(cmd==='trade'){
     if(!arg){ convo[chatId]={step:'TRADE'}; await sendTelegramTo(chatId,`Trade Min sekarang: ${TRADE_MIN} XAUT\n\nMau ganti ke berapa? Contoh: 3`); return; }
@@ -129,7 +126,6 @@ async function telegramPolling(){
 }
 if(TELEGRAM_TOKEN) telegramPolling();
 
-// ===== RECENT TRADE WS - INI INTINYA =====
 let seenTradeIds = new Set();
 function pushTrade(list, t){
   list.unshift(t);
@@ -143,13 +139,11 @@ async function handleTrade(source, price, size, side, tradeId, ts){
   seenTradeIds.add(key);
   if(seenTradeIds.size>5000){ seenTradeIds.clear(); }
   let t = { id: tradeId, price, size, side: side==='BUY'?'BUY':'SELL', source, time: ts||Date.now(), time_str: fmtWIB(ts||Date.now()) };
-  if(source==='BYBIT') pushTrade(recentTradesBybit, t);
+  if(source==='BYBIT PERP') pushTrade(recentTradesBybit, t);
   else pushTrade(recentTradesOkx, t);
 
-  // FILTER SATU-SATUNYA
   if(size < TRADE_MIN) return;
 
-  // LOLOS -> LANGSUNG SINYAL, TANPA BATAS, TANPA COOLDOWN, LAYERING BOLEH
   let setupId = generateSetupId();
   let signal = side==='BUY' ? 'BUY' : 'SELL';
   let sl = signal==='BUY' ? price - (SL_PIPS/10) : price + (SL_PIPS/10);
@@ -160,18 +154,18 @@ async function handleTrade(source, price, size, side, tradeId, ts){
   if(signalHistory.length>200) signalHistory=signalHistory.slice(0,200);
   lastUpdate = Date.now();
 
-  await sendTelegram(`🎯 ${signal} NOW - Setup ${setupId} (TRADE GEDE)\n\nTrade: ${side} ${size.toFixed(2)} XAUT @ $${price.toFixed(2)} - ${source}\nJam: ${t.time_str} WIB\nFilter: >= ${TRADE_MIN} XAUT - LOLOS ✅\n\nEntry: $${price.toFixed(2)}\nSL: $${sl.toFixed(2)} (-${SL_PIPS} pips)\nTP: $${tp.toFixed(2)} (+${TP_PIPS} pips)\n\nLayering ON - Entry aja, risk kecil.\nHOLD BAGI YANG MAMPU🔥`);
+  await sendTelegram(`🎯 ${signal} NOW - Setup ${setupId} (TRADE GEDE FUTURES)\n\nTrade: ${side} ${size.toFixed(2)} XAUT @ $${price.toFixed(2)} - ${source}\nJam: ${t.time_str} WIB\nFilter: >= ${TRADE_MIN} XAUT - LOLOS ✅\n\nEntry: $${price.toFixed(2)}\nSL: $${sl.toFixed(2)} (-${SL_PIPS} pips)\nTP: $${tp.toFixed(2)} (+${TP_PIPS} pips)\n\nLayering ON - Entry aja, risk kecil.\nHOLD BAGI YANG MAMPU🔥`);
 }
 
-// Bybit Trade WS
+// ===== BYBIT FUTURES PERP - LINEAR =====
 let wsBybitTrade=null;
 function connectBybitTrade(){
   if(!WSClient) return;
   if(wsBybitTrade){ try{ wsBybitTrade.removeAllListeners(); wsBybitTrade.terminate(); }catch(e){} }
-  console.log('Connect Bybit TRADE WS');
+  console.log('Connect Bybit FUTURES PERP WS');
   try{
-    wsBybitTrade=new WSClient('wss://stream.bybit.com/v5/public/spot');
-    wsBybitTrade.on('open',()=>{ console.log('Bybit TRADE OPEN'); wsBybitTrade.send(JSON.stringify({op:'subscribe',args:['publicTrade.XAUTUSDT']})); setInterval(()=>{ try{ if(wsBybitTrade&&wsBybitTrade.readyState===1) wsBybitTrade.send(JSON.stringify({op:'ping'})); }catch(e){} },20000); });
+    wsBybitTrade=new WSClient('wss://stream.bybit.com/v5/public/linear');
+    wsBybitTrade.on('open',()=>{ console.log('Bybit PERP OPEN'); wsBybitTrade.send(JSON.stringify({op:'subscribe',args:['publicTrade.XAUTUSDT']})); setInterval(()=>{ try{ if(wsBybitTrade&&wsBybitTrade.readyState===1) wsBybitTrade.send(JSON.stringify({op:'ping'})); }catch(e){} },20000); });
     wsBybitTrade.on('message',(data)=>{
       try{
         let j=JSON.parse(data.toString());
@@ -179,24 +173,24 @@ function connectBybitTrade(){
           wsTradeBybitOk=true; wsLastTradeBybit=Date.now();
           j.data.forEach(d=>{
             let side = (d.S==='Buy') ? 'BUY' : 'SELL';
-            handleTrade('BYBIT', parseFloat(d.p), parseFloat(d.v), side, d.i, parseInt(d.T));
+            handleTrade('BYBIT PERP', parseFloat(d.p), parseFloat(d.v), side, d.i, parseInt(d.T));
           });
         }
       }catch(e){}
     });
-    wsBybitTrade.on('close',()=>{ console.log('Bybit TRADE CLOSE'); wsTradeBybitOk=false; setTimeout(connectBybitTrade,3000); });
-    wsBybitTrade.on('error',(e)=>{ console.log('Bybit TRADE ERROR',e.message); });
+    wsBybitTrade.on('close',()=>{ console.log('Bybit PERP CLOSE'); wsTradeBybitOk=false; setTimeout(connectBybitTrade,3000); });
+    wsBybitTrade.on('error',(e)=>{ console.log('Bybit PERP ERROR',e.message); });
   }catch(e){ setTimeout(connectBybitTrade,3000); }
 }
-// OKX Trade WS
+// ===== OKX FUTURES - SWAP =====
 let wsOkxTrade=null;
 function connectOkxTrade(){
   if(!WSClient) return;
   if(wsOkxTrade){ try{ wsOkxTrade.removeAllListeners(); wsOkxTrade.terminate(); }catch(e){} }
-  console.log('Connect OKX TRADE WS');
+  console.log('Connect OKX SWAP WS');
   try{
     wsOkxTrade=new WSClient('wss://ws.okx.com:8443/ws/v5/public');
-    wsOkxTrade.on('open',()=>{ console.log('OKX TRADE OPEN'); wsOkxTrade.send(JSON.stringify({op:'subscribe',args:[{channel:'trades',instId:'XAUT-USDT'}]})); });
+    wsOkxTrade.on('open',()=>{ console.log('OKX SWAP OPEN'); wsOkxTrade.send(JSON.stringify({op:'subscribe',args:[{channel:'trades',instId:'XAUT-USDT-SWAP'}]})); });
     wsOkxTrade.on('message',(data)=>{
       try{
         let j=JSON.parse(data.toString());
@@ -204,33 +198,33 @@ function connectOkxTrade(){
           wsTradeOkxOk=true; wsLastTradeOkx=Date.now();
           j.data.forEach(d=>{
             let side = (d.side==='buy') ? 'BUY' : 'SELL';
-            handleTrade('OKX', parseFloat(d.px), parseFloat(d.sz), side, d.tradeId, parseInt(d.ts));
+            handleTrade('OKX SWAP', parseFloat(d.px), parseFloat(d.sz), side, d.tradeId, parseInt(d.ts));
           });
         }
       }catch(e){}
     });
-    wsOkxTrade.on('close',()=>{ console.log('OKX TRADE CLOSE'); wsTradeOkxOk=false; setTimeout(connectOkxTrade,3000); });
-    wsOkxTrade.on('error',(e)=>{ console.log('OKX TRADE ERROR',e.message); });
+    wsOkxTrade.on('close',()=>{ console.log('OKX SWAP CLOSE'); wsTradeOkxOk=false; setTimeout(connectOkxTrade,3000); });
+    wsOkxTrade.on('error',(e)=>{ console.log('OKX SWAP ERROR',e.message); });
   }catch(e){ setTimeout(connectOkxTrade,3000); }
 }
 connectBybitTrade();
 connectOkxTrade();
 
-// ===== ORDERBOOK 200 LEVEL TIAP 60 DETIK - CUMA BUAT BID ASK JAUH =====
+// ===== ORDERBOOK FUTURES 200 LEVEL TIAP 60 DETIK - CUMA BUAT BID ASK JAUH =====
 async function fetchOne(url){ try{ let r=await fetch(url,{headers:{'User-Agent':'Mozilla/5.0'}}); if(!r.ok) return null; return await r.json(); }catch(e){ return null; } }
 async function fetchFarWalls(){
   try{
     let allBids=[], allAsks=[];
-    let bybit = await fetchOne('https://api.bytick.com/v5/market/orderbook?category=spot&symbol=XAUTUSDT&limit=200');
-    if(!bybit||!bybit.result||!bybit.result.b) bybit = await fetchOne('https://api.bybit.com/v5/market/orderbook?category=spot&symbol=XAUTUSDT&limit=200');
+    let bybit = await fetchOne('https://api.bytick.com/v5/market/orderbook?category=linear&symbol=XAUTUSDT&limit=200');
+    if(!bybit||!bybit.result||!bybit.result.b) bybit = await fetchOne('https://api.bybit.com/v5/market/orderbook?category=linear&symbol=XAUTUSDT&limit=200');
     if(bybit&&bybit.result&&bybit.result.b){
-      bybit.result.b.forEach(([p,s])=> allBids.push({price:parseFloat(p),size:parseFloat(s),source:'BYBIT'}));
-      bybit.result.a.forEach(([p,s])=> allAsks.push({price:parseFloat(p),size:parseFloat(s),source:'BYBIT'}));
+      bybit.result.b.forEach(([p,s])=> allBids.push({price:parseFloat(p),size:parseFloat(s),source:'BYBIT PERP'}));
+      bybit.result.a.forEach(([p,s])=> allAsks.push({price:parseFloat(p),size:parseFloat(s),source:'BYBIT PERP'}));
     }
-    let okx = await fetchOne('https://www.okx.com/api/v5/market/books?instId=XAUT-USDT&sz=200');
+    let okx = await fetchOne('https://www.okx.com/api/v5/market/books?instId=XAUT-USDT-SWAP&sz=200');
     if(okx&&okx.data&&okx.data[0]){
-      okx.data[0].bids.forEach(([p,s])=> allBids.push({price:parseFloat(p),size:parseFloat(s),source:'OKX'}));
-      okx.data[0].asks.forEach(([p,s])=> allAsks.push({price:parseFloat(p),size:parseFloat(s),source:'OKX'}));
+      okx.data[0].bids.forEach(([p,s])=> allBids.push({price:parseFloat(p),size:parseFloat(s),source:'OKX SWAP'}));
+      okx.data[0].asks.forEach(([p,s])=> allAsks.push({price:parseFloat(p),size:parseFloat(s),source:'OKX SWAP'}));
     }
     function topFar(list, side){
       let bySrc={};
@@ -243,14 +237,13 @@ async function fetchFarWalls(){
       return out;
     }
     wallsFar = [...topFar(allBids,'BID'), ...topFar(allAsks,'ASK')];
-    console.log('Far walls update - 200 level - 60 detik - total:', wallsFar.length);
+    console.log('Far walls FUTURES update - 200 level - 60 detik - total:', wallsFar.length);
   }catch(e){ console.log('fetchFar gagal',e.message); }
 }
 fetchFarWalls();
-setInterval(fetchFarWalls, 60000); // 1 MENIT, LONGGAR
+setInterval(fetchFarWalls, 60000);
 
-// ===== API =====
-app.get('/', (req,res)=> res.send('ABEL BOT V14.1 OK - /api/signal - RECENT TRADE ONLY - Trade Min '+TRADE_MIN+' XAUT'));
+app.get('/', (req,res)=> res.send('ABEL BOT OK - /api/signal - FUTURES PERP - Trade Min '+TRADE_MIN+' XAUT'));
 app.get('/api/signal', (req,res)=>{
   res.set('Cache-Control','no-store');
   res.json({
@@ -263,8 +256,8 @@ app.get('/api/signal', (req,res)=>{
     history: signalHistory,
     history_sinyal: signalHistory,
     wallsFar,
-    config: { trade_min: TRADE_MIN, sl_pips: SL_PIPS, tp_pips: TP_PIPS, lot: CFG.lot, simbol: CFG.simbol, isCent: CFG.isCent, mt5_connected: MT5.connected, mt5_price: MT5.lastPrice||0 },
-    harga: { xaut: xautPrice, mt5: MT5.lastPrice||0, source: 'Recent Trade WS Bybit+OKX' },
+    config: { trade_min: TRADE_MIN, sl_pips: SL_PIPS, tp_pips: TP_PIPS, lot: CFG.lot, simbol: CFG.simbol, isCent: CFG.isCent, mt5_connected: MT5.connected, mt5_price: MT5.lastPrice||0, market: 'FUTURES PERP' },
+    harga: { xaut: xautPrice, mt5: MT5.lastPrice||0, source: 'Recent Trade FUTURES Bybit PERP + OKX SWAP' },
     exchanges: { bybit_trade: wsTradeBybitOk?'WS-OK':'WS-OFF', okx_trade: wsTradeOkxOk?'WS-OK':'WS-OFF' },
     uptimeStart, uptime_menit: Math.floor((Date.now()-uptimeStart)/60000), last_update: lastUpdate,
   });
@@ -281,5 +274,5 @@ app.post('/api/mt5/price', (req,res)=>{
 });
 app.get('/api/mt5/price', (req,res)=>{ res.json({ok:true, connected: MT5.connected, price: MT5.lastPrice, bid: MT5.lastBid, ask: MT5.lastAsk, balance: MT5.balance, equity: MT5.equity, positions: MT5.positions, last_seen: MT5.lastSeen}); });
 app.get('/api/history', (req,res)=>{ res.json({ history: signalHistory, total: signalHistory.length, uptimeStart }); });
-app.get('/api/test-telegram', async (req,res)=>{ let sid=generateSetupId(); await sendTelegram(`🎯 BUY NOW - Setup ${sid} (TRADE GEDE TEST)\n\nTrade: BUY 3.20 XAUT @ $3831.50 - BYBIT\nFilter: >= ${TRADE_MIN} XAUT - LOLOS ✅\n\nEntry: $3831.50\nSL: $3826.50 (-50 pips)\nTP: $3836.50 (+50 pips)\n\nLayering ON.`); res.json({ok:true, setup_id:sid}); });
-app.listen(PORT, ()=> console.log('ABEL BOT V14.1 jalan di port '+PORT+' - RECENT TRADE ONLY - Trade Min '+TRADE_MIN));
+app.get('/api/test-telegram', async (req,res)=>{ let sid=generateSetupId(); await sendTelegram(`🎯 BUY NOW - Setup ${sid} (TRADE GEDE FUTURES)\n\nTrade: BUY 3.20 XAUT @ $3831.50 - BYBIT PERP\nFilter: >= ${TRADE_MIN} XAUT - LOLOS ✅\n\nEntry: $3831.50\nSL: $3826.50 (-50 pips)\nTP: $3836.50 (+50 pips)\n\nLayering ON.`); res.json({ok:true, setup_id:sid}); });
+app.listen(PORT, ()=> console.log('ABEL BOT jalan di port '+PORT+' - FUTURES PERP - Trade Min '+TRADE_MIN));
