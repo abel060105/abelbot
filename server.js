@@ -1,8 +1,8 @@
-// ABEL BOT - FINAL - MANUAL INPUT ONLY
+// ABEL BOT - FINAL + PANDUAN KETIK
 // /status /help /sinyalpakai /settingbybit /settingokx
 // Semua setting ketik manual, angka ditampilin persis ketikan lo
 // /status TANPA harga XAUT
-// Sinyal template persis punya lo
+// Panduan: titik = koma desimal. 3.000 = 3, 3000 = 3000. 50.000 = 50, 50000 = 50000
 const express = require('express');
 const app = express();
 app.use(express.json());
@@ -53,8 +53,8 @@ let okxAggTimer = null;
 let totalSignalsEver = 0;
 let lastRecapAt = 0;
 
-// Parse: "3.000" -> 3, "3000" -> 3000, "3,5" -> 3.5, "50000" -> 50000
-// Titik dianggap koma desimal, bukan ribuan. Jadi 3.000 = 3.
+// Parse: "3.000" -> 3, "3000" -> 3000, "3,5" -> 3.5, "50000" -> 50000, "50.000" -> 50
+// Titik dianggap koma desimal, bukan ribuan. Jadi 3.000 = 3, 3000 = 3000.
 function parseNum(str){
   if(str===undefined||str===null) return NaN;
   let s = String(str).trim().replace(',', '.').replace(/[^0-9.\-]/g,'');
@@ -67,7 +67,6 @@ function generateSetupId(){
   return '#'+id;
 }
 function fmtWIB(ts){ return new Date(ts).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
-function fmtSize(v){ return String(v); }
 function fmtDateID(ts){ return new Date(ts).toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'}) + ' ' + fmtWIB(ts) + ' WIB'; }
 function sinyalPakaiText(){ return `Bybit ${SIGNAL_BYBIT_ON?'ON ✅':'OFF ❌'} | OKX ${SIGNAL_OKX_ON?'ON ✅':'OFF ❌'}`; }
 
@@ -187,7 +186,7 @@ async function setMyCommands(){
   if(!TELEGRAM_TOKEN) return;
   const commands=[
     {command:'status',description:'Status'},
-    {command:'help',description:'Help'},
+    {command:'help',description:'Help + panduan ketik'},
     {command:'sinyalpakai',description:'ON/OFF sinyal'},
     {command:'settingbybit',description:'Setting Bybit'},
     {command:'settingokx',description:'Setting OKX'},
@@ -198,10 +197,11 @@ setMyCommands();
 
 // STATUS TANPA HARGA XAUT - cuma settingan
 function statusText(){
-  let nextRecap = RECAP_EVERY - (totalSignalsEver % RECAP_EVERY);
-  if(totalSignalsEver>0 && totalSignalsEver % RECAP_EVERY===0) nextRecap = RECAP_EVERY;
   return `Bybit: ${TRADE_MIN_RAW}\nOKX: ${TRADE_MIN_OKX_RAW}, ${OKX_AGG_SEC_RAW}s\nSinyal: ${sinyalPakaiText()}\nTotal: ${totalSignalsEver}\nChannel: ${TELEGRAM_CHANNEL_ID ? TELEGRAM_CHANNEL_ID+' ✅' : 'Belum di-set'}`;
 }
+
+// PANDUAN KETIK - ditampilin di /help + di tiap setting
+const PANDUAN_KETIK = `Panduan ketik:\n3.000 = 3\n3000 = 3000\n50.000 = 50\n50000 = 50000\nMau ribuan, ketik tanpa titik.`;
 
 function parseSinyalPakai(text){
   let t = String(text||'').toLowerCase().trim();
@@ -219,7 +219,6 @@ async function handleTelegramCommand(chatId, textRaw){
   let cmd = m ? m[1].toLowerCase() : '';
   let arg = m ? (m[2]||'').trim() : '';
 
-  // Kalo ketik /command baru, batalin nunggu input lama
   let cv = convo[chatId];
   if(cv && isCommand){
     delete convo[chatId];
@@ -236,10 +235,9 @@ async function handleTelegramCommand(chatId, textRaw){
       return;
     }
     if(cv.step==='SETTINGBYBIT'){
-      // Simpen RAW persis ketikan, numeric buat filter
       let raw = text.split(/[\s,]+/)[0];
       let v = parseNum(raw);
-      if(isNaN(v)||v<=0){ await sendTelegramTo(chatId,`Ketik angka, contoh: 3.000`); return; }
+      if(isNaN(v)||v<=0){ await sendTelegramTo(chatId,`Ketik angka, contoh: 3.000\n${PANDUAN_KETIK}`); return; }
       TRADE_MIN_RAW = raw;
       TRADE_MIN = v;
       delete convo[chatId];
@@ -248,9 +246,9 @@ async function handleTelegramCommand(chatId, textRaw){
     }
     if(cv.step==='SETTINGOKX'){
       let parts = text.split(/[\s,]+/).filter(Boolean);
-      if(!parts.length){ await sendTelegramTo(chatId,`Ketik: Delta Agg\nContoh: 50000 5`); return; }
+      if(!parts.length){ await sendTelegramTo(chatId,`Ketik: Delta Agg\nContoh: 50000 5\n${PANDUAN_KETIK}`); return; }
       let v0 = parseNum(parts[0]);
-      if(isNaN(v0)||v0<=0){ await sendTelegramTo(chatId,`Ketik: Delta Agg\nContoh: 50000 5`); return; }
+      if(isNaN(v0)||v0<=0){ await sendTelegramTo(chatId,`Ketik: Delta Agg\nContoh: 50000 5\n${PANDUAN_KETIK}`); return; }
       TRADE_MIN_OKX_RAW = parts[0];
       TRADE_MIN_OKX = v0;
       if(parts[1]){
@@ -265,21 +263,20 @@ async function handleTelegramCommand(chatId, textRaw){
 
   if(!isCommand) return;
   if(cmd==='start' || cmd==='status'){ await sendTelegramTo(chatId,statusText()); return; }
-  if(cmd==='help'){ await sendTelegramTo(chatId,`Command:\n/status\n/help\n/sinyalpakai -> ketik 1/2/3\n/settingbybit -> ketik angka\n/settingokx -> ketik Delta Agg`); return; }
+  if(cmd==='help'){ await sendTelegramTo(chatId,`Command:\n/status\n/help\n/sinyalpakai -> ketik 1/2/3\n/settingbybit -> ketik angka\n/settingokx -> ketik Delta Agg\n\n${PANDUAN_KETIK}`); return; }
   if(cmd==='sinyalpakai' || cmd==='sinyal'){
-    // MANUAL ONLY - arg di belakang command diabaikan, tetep tanya dulu
     convo[chatId]={step:'SINYALPAKAI'};
     await sendTelegramTo(chatId,`Sinyal: ${sinyalPakaiText()}\nKetik: 1=Bybit 2=OKX 3=Dua-duanya`);
     return;
   }
   if(cmd==='settingbybit'){
     convo[chatId]={step:'SETTINGBYBIT'};
-    await sendTelegramTo(chatId,`Bybit: ${TRADE_MIN_RAW}\nKetik angka baru:`);
+    await sendTelegramTo(chatId,`Bybit: ${TRADE_MIN_RAW}\nKetik angka baru:\nContoh: 3.000\n\n${PANDUAN_KETIK}`);
     return;
   }
   if(cmd==='settingokx'){
     convo[chatId]={step:'SETTINGOKX'};
-    await sendTelegramTo(chatId,`OKX: ${TRADE_MIN_OKX_RAW}, ${OKX_AGG_SEC_RAW}s\nKetik: Delta Agg\nContoh: 50000 5`);
+    await sendTelegramTo(chatId,`OKX: ${TRADE_MIN_OKX_RAW}, ${OKX_AGG_SEC_RAW}s\nKetik: Delta Agg\nContoh: 50000 5\n\n${PANDUAN_KETIK}`);
     return;
   }
   if(cmd==='rekap'){
@@ -291,7 +288,7 @@ async function handleTelegramCommand(chatId, textRaw){
     await sendTelegramTo(chatId,`✅ Rekap udah dikirim ke Channel.`);
     return;
   }
-  await sendTelegramTo(chatId,`Command gak aktif.\n/status\n/help\n/sinyalpakai\n/settingbybit\n/settingokx`);
+  await sendTelegramTo(chatId,`Command gak aktif.\n/status\n/help\n/sinyalpakai\n/settingbybit\n/settingokx\n\n${PANDUAN_KETIK}`);
 }
 
 app.post('/webhook', async (req,res)=>{
@@ -336,7 +333,6 @@ async function emitSignal(signal, price, size, source, extra){
   let sl = signal==='BUY' ? price - (SL_PIPS/10) : price + (SL_PIPS/10);
   let tp = signal==='BUY' ? price + (TP_PIPS/10) : price - (TP_PIPS/10);
   let now = Date.now();
-  // Simpen RAW setting yang dipake buat sinyal ini, biar di rekap juga ngikut ketikan lo
   let trade_min_raw_used = source==='BYBIT PERP' ? TRADE_MIN_RAW : TRADE_MIN_OKX_RAW;
   let trade_min_used = source==='BYBIT PERP' ? TRADE_MIN : TRADE_MIN_OKX;
   activeSignal = { setup_id: setupId, signal, price, size, source, time: now, time_str: fmtWIB(now), sl, tp, sl_pips: SL_PIPS, tp_pips: TP_PIPS, trade_min_used, trade_min_raw: trade_min_raw_used, ...extra };
@@ -345,7 +341,6 @@ async function emitSignal(signal, price, size, source, extra){
   if(signalHistory.length>200) signalHistory=signalHistory.slice(0,200);
   totalSignalsEver++;
   lastUpdate = Date.now();
-  // SINYAL PERSIS TEMPLATE LO - gak ada tambahan teks
   await sendTelegram(`🎯 ${signal} NOW - Setup ${setupId}\n\nENTRY: $${price.toFixed(2)} (NOW)\nSL: $${sl.toFixed(2)} (-${SL_PIPS} PIPS)\nTP: $${tp.toFixed(2)} (+${TP_PIPS} PIPS)\n\nSESUAIKAN RISK💰\nHOLD JIKA MAMPU🔥`);
   if(totalSignalsEver % RECAP_EVERY === 0 && totalSignalsEver !== lastRecapAt){
     lastRecapAt = totalSignalsEver;
