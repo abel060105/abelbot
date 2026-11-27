@@ -45,6 +45,7 @@
   .row .right{text-align:right;font-size:13px;font-weight:700}
   .empty{color:#64748b;font-size:12px;padding:10px 0}
   .hist-item{border-bottom:1px solid #1e293b;padding:10px 0;font-size:13px}
+  .agg-box{background:#0b1118;border:1px solid #334155;border-radius:10px;padding:10px;margin-top:10px;font-size:13px;line-height:1.6}
   @media(max-width:700px){.grid2{grid-template-columns:1fr}.signal{font-size:38px}}
 </style>
 </head>
@@ -54,19 +55,20 @@
   <div class="card-head"><h2>🎯 1. Sinyal Aktif</h2><span id="setupId">-</span></div>
   <div class="signal WAIT" id="signalVal">WAIT</div>
   <div id="activeDetail" style="font-size:14px;line-height:1.6">Belum ada trade gede yang lolos filter.</div>
-  <div style="margin-top:10px;font-size:13px;color:#94a3b8">Size Bybit: <b id="configTrade" style="color:#facc15">3.000 XAUT</b> • Size OKX: <b id="configTradeOkx" style="color:#facc15">5000.000 XAU</b> • FUTURES PERP • Layering ON</div>
+  <div style="margin-top:10px;font-size:13px;color:#94a3b8">Size Bybit: <b id="configTrade" style="color:#facc15">3.000 XAUT</b> • Size OKX Delta: <b id="configTradeOkx" style="color:#facc15">5000.000 XAU</b> • FUTURES PERP • Layering ON • Tanpa cooldown</div>
   <div class="harga-box"><div class="label">Harga XAUT FUTURES (Recent Trade)</div><div class="val" id="hargaXaut">-</div><div class="label" id="hargaMT5Sub">MT5 -</div></div>
+  <div class="agg-box" id="aggBox">OKX Delta 5s: lagi ngumpulin...</div>
 </div>
 <div class="card">
-  <div class="card-head"><h2>📊 2. Recent Trade - FUTURES</h2><span style="font-size:11px;color:#94a3b8">Kuning = Lolos Filter • Realtime 0.8s</span></div>
+  <div class="card-head"><h2>📊 2. Recent Trade - FUTURES</h2><span style="font-size:11px;color:#94a3b8">Bybit kuning = lolos • OKX gak kuning per-trade, sinyalnya dari Delta</span></div>
   <div class="grid2">
-    <div><h3 style="font-size:13px;margin:8px 0">BYBIT PERP</h3><table class="trade-table"><thead><tr><th>Jam</th><th>Harga</th><th>Jumlah</th><th>Arah</th></tr></thead><tbody id="tradeBybit"></tbody></table></div>
-    <div><h3 style="font-size:13px;margin:8px 0">OKX XAU SWAP</h3><table class="trade-table"><thead><tr><th>Jam</th><th>Harga</th><th>Jumlah</th><th>Arah</th></tr></thead><tbody id="tradeOkx"></tbody></table></div>
+    <div><h3 style="font-size:13px;margin:8px 0">BYBIT PERP - Per-Trade</h3><table class="trade-table"><thead><tr><th>Jam</th><th>Harga</th><th>Jumlah</th><th>Arah</th></tr></thead><tbody id="tradeBybit"></tbody></table></div>
+    <div><h3 style="font-size:13px;margin:8px 0">OKX XAU SWAP - Agregasi 5s</h3><table class="trade-table"><thead><tr><th>Jam</th><th>Harga</th><th>Jumlah</th><th>Arah</th></tr></thead><tbody id="tradeOkx"></tbody></table></div>
   </div>
 </div>
 <div class="card">
   <div class="card-head"><h2>📜 3. History Sinyal</h2><span id="historyCount" style="font-size:11px;color:#94a3b8">0 sinyal</span></div>
-  <div style="font-size:12px;color:#94a3b8">Cuma trade FUTURES yang lolos filter yang masuk sini. Bybit >= Size Bybit, OKX >= Size OKX. Tanpa winrate.</div>
+  <div style="font-size:12px;color:#94a3b8">Bybit = per-trade >= Size Bybit. OKX = Delta 5s >= Size OKX. Tanpa winrate.</div>
   <div id="historyBody"></div>
 </div>
 <div class="card">
@@ -81,7 +83,7 @@
   <div style="font-size:13px;line-height:1.8">
     <div>Market: <b>FUTURES PERP</b></div>
     <div>Size Bybit: <b id="dashTrade">-</b></div>
-    <div>Size OKX: <b id="dashTradeOkx">-</b></div>
+    <div>Size OKX Delta: <b id="dashTradeOkx">-</b></div>
     <div>XAUT: <b id="dashXaut">-</b></div>
     <div>MT5: <b id="dashMt5">-</b></div>
     <div>Status WS: <b id="dashWs">-</b></div>
@@ -101,10 +103,10 @@ let isLoading = false;
 async function testTelegram(){ try{ const r=await fetch(BASE_URL+'/api/test-telegram?t='+Date.now(),{cache:'no-store'}); const j=JSON.parse(await r.text()); alert('Telegram terkirim! Setup '+j.setup_id); load(); }catch(e){ alert('Gagal: '+e.message); } }
 async function testWs(){ try{ const r=await fetch(API_URL+'?t='+Date.now(),{cache:'no-store'}); const d=JSON.parse(await r.text()); alert('WS FUTURES\nBybit PERP: '+d.exchanges.bybit_trade+'\nOKX XAU SWAP: '+d.exchanges.okx_trade+'\nXAUT: $'+(d.harga?.xaut||0)); }catch(e){ alert('Gagal: '+e.message); } }
 async function unlock(){ alert('Unlock gak kepake - Sinyal tanpa batas, layering ON.'); }
-function renderTrades(el, list, tradeMin){
+function renderTrades(el, list, tradeMin, useStar){
   if(!list.length){ document.getElementById(el).innerHTML='<tr><td colspan="4" style="color:#64748b">Belum ada trade</td></tr>'; return; }
   document.getElementById(el).innerHTML=list.slice(0,20).map(t=>{
-    let lolos = t.size >= tradeMin;
+    let lolos = useStar && t.size >= tradeMin;
     let color = t.side==='BUY' ? '#00e676' : '#ff5252';
     return `<tr class="${lolos?'lolos':''}"><td>${t.time_str||''}</td><td>$${t.price.toFixed(2)}</td><td><b>${t.size.toFixed(3)}</b> ${lolos?'⭐':''}</td><td style="color:${color};font-weight:900">${t.side}</td></tr>`;
   }).join('');
@@ -115,12 +117,12 @@ async function load(){
   try{
     const r=await fetch(API_URL+'?t='+Date.now(),{cache:'no-store'});
     const d=JSON.parse(await r.text());
-    const cfg=d.config||{}; const tradeMin=cfg.trade_min ?? 3; const tradeMinOkx=cfg.trade_min_okx ?? 5000;
+    const cfg=d.config||{}; const tradeMin=cfg.trade_min ?? 3; const tradeMinOkx=cfg.trade_min_okx ?? 5000; const aggSec=cfg.okx_agg_sec ?? 5;
     const price=d.harga?.xaut || 0; const mt5Price=d.harga?.mt5 || 0;
     document.getElementById('configTrade').innerText=tradeMin.toFixed(3)+' XAUT';
     document.getElementById('configTradeOkx').innerText=tradeMinOkx.toFixed(3)+' XAU';
     document.getElementById('dashTrade').innerText=tradeMin.toFixed(3)+' XAUT';
-    document.getElementById('dashTradeOkx').innerText=tradeMinOkx.toFixed(3)+' XAU';
+    document.getElementById('dashTradeOkx').innerText=tradeMinOkx.toFixed(3)+' XAU (Delta '+aggSec+'s)';
     document.getElementById('dashXaut').innerText=price?'$'+price.toFixed(2):'-';
     document.getElementById('dashMt5').innerText=mt5Price?'$'+mt5Price.toFixed(2)+' (RDP)':'Belum nyambung - RDP belum jalan';
     document.getElementById('dashWs').innerText=(d.exchanges?.bybit_trade||'-')+' / '+(d.exchanges?.okx_trade||'-');
@@ -131,24 +133,26 @@ async function load(){
     if(a){
       sigEl.innerText=a.signal; sigEl.className='signal '+a.signal;
       document.getElementById('setupId').innerText=a.setup_id||'-';
-      document.getElementById('activeDetail').innerHTML=`<b>${a.signal} ${a.size.toFixed(3)} XAUT @ $${a.price.toFixed(2)}</b><br>Source: ${a.source} • Jam: ${a.time_str} WIB • Filter: >= ${(a.trade_min_used||tradeMin).toFixed(3)} - LOLOS ✅<br><span style="color:#94a3b8;font-size:12px">FUTURES PERP • Layering ON</span>`;
+      document.getElementById('activeDetail').innerHTML=`<b>${a.signal} ${a.size.toFixed(3)} XAUT @ $${a.price.toFixed(2)}</b><br>Source: ${a.source} • Jam: ${a.time_str} WIB • Filter: >= ${(a.trade_min_used||tradeMin).toFixed(3)} - LOLOS ✅<br><span style="color:#94a3b8;font-size:12px">${a.agg||'FUTURES PERP • Layering ON'}</span>`;
     } else {
       sigEl.innerText='WAIT'; sigEl.className='signal WAIT';
       document.getElementById('setupId').innerText='-';
       document.getElementById('activeDetail').innerText='Belum ada trade gede yang lolos filter.';
     }
-    renderTrades('tradeBybit', d.recent_bybit||[], tradeMin);
-    renderTrades('tradeOkx', d.recent_okx||[], tradeMinOkx);
+    let agg=d.okx_agg;
+    if(agg){ document.getElementById('aggBox').innerHTML=`<b>OKX Delta ${agg.window_sec}s (live):</b> Buy ${agg.buy.toFixed(3)} - Sell ${agg.sell.toFixed(3)} = <b style="color:${agg.delta>=0?'#00e676':'#ff5252'}">${agg.delta>=0?'+':''}${agg.delta.toFixed(3)}</b> • ${agg.count} trade • Threshold: ${agg.threshold.toFixed(3)}`; }
+    renderTrades('tradeBybit', d.recent_bybit||[], tradeMin, true);
+    renderTrades('tradeOkx', d.recent_okx||[], tradeMinOkx, false);
     let hist=d.history||[];
     document.getElementById('historyCount').innerText=hist.length+' sinyal';
     document.getElementById('historyBody').innerHTML=hist.length ? hist.slice(0,30).map(h=>{
-      return `<div class="hist-item"><span class="badge ${h.signal==='BUY'?'buy':'sell'}">${h.signal}</span> <b>${h.size.toFixed(3)} XAUT @ $${h.price.toFixed(2)}</b> - ${h.source} - ${h.time_str} WIB - Setup ${h.setup_id||''}</div>`;
+      return `<div class="hist-item"><span class="badge ${h.signal==='BUY'?'buy':'sell'}">${h.signal}</span> <b>${h.size.toFixed(3)} XAUT @ $${h.price.toFixed(2)}</b> - ${h.source} - ${h.time_str} WIB - Setup ${h.setup_id||''}<br><small style="color:#94a3b8">${h.agg||''}</small></div>`;
     }).join('') : '<div class="empty">Belum ada history - belum ada trade yang lolos filter.</div>';
     let far=d.wallsFar||[];
     let renderFar=(el, arr)=>{ document.getElementById(el).innerHTML=arr.length?arr.map(l=>`<div class="row"><div class="left ${l.side==='BID'?'BID':'ASK'}">${l.side} $${l.price.toFixed(2)}</div><div class="right">${l.size.toFixed(3)} XAUT<br><small>${l.sources}</small></div></div>`).join(''):'<div class="empty">Lagi loading orderbook 200 level...</div>'; };
     renderFar('bidsFar', far.filter(w=>w.side==='BID').sort((a,b)=>b.size-a.size));
     renderFar('asksFar', far.filter(w=>w.side==='ASK').sort((a,b)=>b.size-a.size));
-    document.getElementById('status').innerText='Update: '+new Date().toLocaleTimeString('id-ID')+' • Realtime 0.8s • FUTURES PERP • Size Bybit '+tradeMin.toFixed(3)+' • Size OKX '+tradeMinOkx.toFixed(3);
+    document.getElementById('status').innerText='Update: '+new Date().toLocaleTimeString('id-ID')+' • Realtime 0.8s • FUTURES PERP • Size Bybit '+tradeMin.toFixed(3)+' • Size OKX Delta '+tradeMinOkx.toFixed(3);
   }catch(e){ document.getElementById('status').innerText='Gagal load: '+e.message; }
   isLoading = false;
 }
