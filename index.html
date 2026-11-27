@@ -54,7 +54,7 @@
   <div class="card-head"><h2>🎯 1. Sinyal Aktif</h2><span id="setupId">-</span></div>
   <div class="signal WAIT" id="signalVal">WAIT</div>
   <div id="activeDetail" style="font-size:14px;line-height:1.6">Belum ada trade gede yang lolos filter.</div>
-  <div style="margin-top:10px;font-size:13px;color:#94a3b8">Trade Min: <b id="configTrade" style="color:#facc15">3 XAUT</b> • FUTURES PERP • Layering ON • Tanpa batas • Tanpa cooldown</div>
+  <div style="margin-top:10px;font-size:13px;color:#94a3b8">Size Bybit: <b id="configTrade" style="color:#facc15">3.000 XAUT</b> • Size OKX: <b id="configTradeOkx" style="color:#facc15">5000.000 XAU</b> • FUTURES PERP • Layering ON</div>
   <div class="harga-box"><div class="label">Harga XAUT FUTURES (Recent Trade)</div><div class="val" id="hargaXaut">-</div><div class="label" id="hargaMT5Sub">MT5 -</div></div>
 </div>
 <div class="card">
@@ -66,7 +66,7 @@
 </div>
 <div class="card">
   <div class="card-head"><h2>📜 3. History Sinyal</h2><span id="historyCount" style="font-size:11px;color:#94a3b8">0 sinyal</span></div>
-  <div style="font-size:12px;color:#94a3b8">Cuma trade FUTURES yang lolos filter (>= Trade Min) yang masuk sini. Tanpa winrate.</div>
+  <div style="font-size:12px;color:#94a3b8">Cuma trade FUTURES yang lolos filter yang masuk sini. Bybit >= Size Bybit, OKX >= Size OKX. Tanpa winrate.</div>
   <div id="historyBody"></div>
 </div>
 <div class="card">
@@ -80,7 +80,8 @@
   <div class="card-head"><h2>⚙️ 5. Dashboard Keseluruhan</h2></div>
   <div style="font-size:13px;line-height:1.8">
     <div>Market: <b>FUTURES PERP</b></div>
-    <div>Trade Min: <b id="dashTrade">-</b></div>
+    <div>Size Bybit: <b id="dashTrade">-</b></div>
+    <div>Size OKX: <b id="dashTradeOkx">-</b></div>
     <div>XAUT: <b id="dashXaut">-</b></div>
     <div>MT5: <b id="dashMt5">-</b></div>
     <div>Status WS: <b id="dashWs">-</b></div>
@@ -114,10 +115,12 @@ async function load(){
   try{
     const r=await fetch(API_URL+'?t='+Date.now(),{cache:'no-store'});
     const d=JSON.parse(await r.text());
-    const cfg=d.config||{}; const tradeMin=cfg.trade_min ?? 3;
+    const cfg=d.config||{}; const tradeMin=cfg.trade_min ?? 3; const tradeMinOkx=cfg.trade_min_okx ?? 5000;
     const price=d.harga?.xaut || 0; const mt5Price=d.harga?.mt5 || 0;
-    document.getElementById('configTrade').innerText=tradeMin+' XAUT';
-    document.getElementById('dashTrade').innerText=tradeMin+' XAUT';
+    document.getElementById('configTrade').innerText=tradeMin.toFixed(3)+' XAUT';
+    document.getElementById('configTradeOkx').innerText=tradeMinOkx.toFixed(3)+' XAU';
+    document.getElementById('dashTrade').innerText=tradeMin.toFixed(3)+' XAUT';
+    document.getElementById('dashTradeOkx').innerText=tradeMinOkx.toFixed(3)+' XAU';
     document.getElementById('dashXaut').innerText=price?'$'+price.toFixed(2):'-';
     document.getElementById('dashMt5').innerText=mt5Price?'$'+mt5Price.toFixed(2)+' (RDP)':'Belum nyambung - RDP belum jalan';
     document.getElementById('dashWs').innerText=(d.exchanges?.bybit_trade||'-')+' / '+(d.exchanges?.okx_trade||'-');
@@ -128,24 +131,24 @@ async function load(){
     if(a){
       sigEl.innerText=a.signal; sigEl.className='signal '+a.signal;
       document.getElementById('setupId').innerText=a.setup_id||'-';
-      document.getElementById('activeDetail').innerHTML=`<b>${a.signal} ${a.size.toFixed(2)} XAUT @ $${a.price.toFixed(2)}</b><br>Source: ${a.source} • Jam: ${a.time_str} WIB • Filter: >= ${tradeMin} XAUT - LOLOS ✅<br><span style="color:#94a3b8;font-size:12px">FUTURES PERP • Layering ON</span>`;
+      document.getElementById('activeDetail').innerHTML=`<b>${a.signal} ${a.size.toFixed(3)} XAUT @ $${a.price.toFixed(2)}</b><br>Source: ${a.source} • Jam: ${a.time_str} WIB • Filter: >= ${(a.trade_min_used||tradeMin).toFixed(3)} - LOLOS ✅<br><span style="color:#94a3b8;font-size:12px">FUTURES PERP • Layering ON</span>`;
     } else {
       sigEl.innerText='WAIT'; sigEl.className='signal WAIT';
       document.getElementById('setupId').innerText='-';
-      document.getElementById('activeDetail').innerText='Belum ada trade gede yang lolos filter (>= '+tradeMin+' XAUT).';
+      document.getElementById('activeDetail').innerText='Belum ada trade gede yang lolos filter.';
     }
     renderTrades('tradeBybit', d.recent_bybit||[], tradeMin);
-    renderTrades('tradeOkx', d.recent_okx||[], tradeMin);
+    renderTrades('tradeOkx', d.recent_okx||[], tradeMinOkx);
     let hist=d.history||[];
     document.getElementById('historyCount').innerText=hist.length+' sinyal';
     document.getElementById('historyBody').innerHTML=hist.length ? hist.slice(0,30).map(h=>{
-      return `<div class="hist-item"><span class="badge ${h.signal==='BUY'?'buy':'sell'}">${h.signal}</span> <b>${h.size.toFixed(2)} XAUT @ $${h.price.toFixed(2)}</b> - ${h.source} - ${h.time_str} WIB - Setup ${h.setup_id||''}</div>`;
+      return `<div class="hist-item"><span class="badge ${h.signal==='BUY'?'buy':'sell'}">${h.signal}</span> <b>${h.size.toFixed(3)} XAUT @ $${h.price.toFixed(2)}</b> - ${h.source} - ${h.time_str} WIB - Setup ${h.setup_id||''}</div>`;
     }).join('') : '<div class="empty">Belum ada history - belum ada trade yang lolos filter.</div>';
     let far=d.wallsFar||[];
-    let renderFar=(el, arr)=>{ document.getElementById(el).innerHTML=arr.length?arr.map(l=>`<div class="row"><div class="left ${l.side==='BID'?'BID':'ASK'}">${l.side} $${l.price.toFixed(2)}</div><div class="right">${l.size.toFixed(2)} XAUT<br><small>${l.sources}</small></div></div>`).join(''):'<div class="empty">Lagi loading orderbook 200 level...</div>'; };
+    let renderFar=(el, arr)=>{ document.getElementById(el).innerHTML=arr.length?arr.map(l=>`<div class="row"><div class="left ${l.side==='BID'?'BID':'ASK'}">${l.side} $${l.price.toFixed(2)}</div><div class="right">${l.size.toFixed(3)} XAUT<br><small>${l.sources}</small></div></div>`).join(''):'<div class="empty">Lagi loading orderbook 200 level...</div>'; };
     renderFar('bidsFar', far.filter(w=>w.side==='BID').sort((a,b)=>b.size-a.size));
     renderFar('asksFar', far.filter(w=>w.side==='ASK').sort((a,b)=>b.size-a.size));
-    document.getElementById('status').innerText='Update: '+new Date().toLocaleTimeString('id-ID')+' • Realtime 0.8s • FUTURES PERP • Trade Min '+tradeMin+' XAUT';
+    document.getElementById('status').innerText='Update: '+new Date().toLocaleTimeString('id-ID')+' • Realtime 0.8s • FUTURES PERP • Size Bybit '+tradeMin.toFixed(3)+' • Size OKX '+tradeMinOkx.toFixed(3);
   }catch(e){ document.getElementById('status').innerText='Gagal load: '+e.message; }
   isLoading = false;
 }
