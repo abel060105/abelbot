@@ -1,6 +1,7 @@
 // ABEL BOT - FUTURES PERP - RECENT TRADE ONLY
+// BYBIT PERP (linear) + OKX SWAP. TANPA BINANCE - BINANCE BLOCK IP US RENDER
 // SINYAL = TRADE >= TRADE_MIN (default 3 XAUT). TANPA COOLDOWN, TANPA BATAS, LAYERING BOLEH
-// BYBIT PERP (linear) + OKX SWAP. ORDERBOOK 200 LEVEL TIAP 60 DETIK BUAT BID ASK JAUH DOANG
+// ORDERBOOK 200 LEVEL TIAP 60 DETIK BUAT BID ASK JAUH DOANG
 // Render Env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, PORT
 const express = require('express');
 const app = express();
@@ -165,12 +166,12 @@ function connectBybitTrade(){
   console.log('Connect Bybit FUTURES PERP WS');
   try{
     wsBybitTrade=new WSClient('wss://stream.bybit.com/v5/public/linear');
-    wsBybitTrade.on('open',()=>{ console.log('Bybit PERP OPEN'); wsBybitTrade.send(JSON.stringify({op:'subscribe',args:['publicTrade.XAUTUSDT']})); setInterval(()=>{ try{ if(wsBybitTrade&&wsBybitTrade.readyState===1) wsBybitTrade.send(JSON.stringify({op:'ping'})); }catch(e){} },20000); });
+    wsBybitTrade.on('open',()=>{ console.log('Bybit PERP OPEN'); wsTradeBybitOk=true; wsBybitTrade.send(JSON.stringify({op:'subscribe',args:['publicTrade.XAUTUSDT']})); setInterval(()=>{ try{ if(wsBybitTrade&&wsBybitTrade.readyState===1) wsBybitTrade.send(JSON.stringify({op:'ping'})); }catch(e){} },20000); });
     wsBybitTrade.on('message',(data)=>{
       try{
         let j=JSON.parse(data.toString());
         if(j.topic==='publicTrade.XAUTUSDT' && j.data){
-          wsTradeBybitOk=true; wsLastTradeBybit=Date.now();
+          wsLastTradeBybit=Date.now();
           j.data.forEach(d=>{
             let side = (d.S==='Buy') ? 'BUY' : 'SELL';
             handleTrade('BYBIT PERP', parseFloat(d.p), parseFloat(d.v), side, d.i, parseInt(d.T));
@@ -182,7 +183,7 @@ function connectBybitTrade(){
     wsBybitTrade.on('error',(e)=>{ console.log('Bybit PERP ERROR',e.message); });
   }catch(e){ setTimeout(connectBybitTrade,3000); }
 }
-// ===== OKX FUTURES - SWAP =====
+// ===== OKX FUTURES - SWAP - PATCH: OK LANGSUNG PAS OPEN, BUKAN NUNGGU TRADE =====
 let wsOkxTrade=null;
 function connectOkxTrade(){
   if(!WSClient) return;
@@ -190,12 +191,19 @@ function connectOkxTrade(){
   console.log('Connect OKX SWAP WS');
   try{
     wsOkxTrade=new WSClient('wss://ws.okx.com:8443/ws/v5/public');
-    wsOkxTrade.on('open',()=>{ console.log('OKX SWAP OPEN'); wsOkxTrade.send(JSON.stringify({op:'subscribe',args:[{channel:'trades',instId:'XAUT-USDT-SWAP'}]})); });
+    wsOkxTrade.on('open',()=>{
+      console.log('OKX SWAP OPEN');
+      wsTradeOkxOk=true;
+      wsOkxTrade.send(JSON.stringify({op:'subscribe',args:[{channel:'trades',instId:'XAUT-USDT-SWAP'}]}));
+      setInterval(()=>{ try{ if(wsOkxTrade&&wsOkxTrade.readyState===1) wsOkxTrade.send('ping'); }catch(e){} },25000);
+    });
     wsOkxTrade.on('message',(data)=>{
       try{
-        let j=JSON.parse(data.toString());
+        let txt=data.toString();
+        if(txt==='pong') return;
+        let j=JSON.parse(txt);
         if(j.data && j.data[0] && j.arg && j.arg.channel==='trades'){
-          wsTradeOkxOk=true; wsLastTradeOkx=Date.now();
+          wsLastTradeOkx=Date.now();
           j.data.forEach(d=>{
             let side = (d.side==='buy') ? 'BUY' : 'SELL';
             handleTrade('OKX SWAP', parseFloat(d.px), parseFloat(d.sz), side, d.tradeId, parseInt(d.ts));
