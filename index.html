@@ -50,7 +50,7 @@
 </head>
 <body>
 <div class="topbar"><h1>⚡ABEL FX</h1><span class="live"><span class="live-dot"></span>● LIVE 0.8s • FUTURES</span></div>
-<div class="card" id="signalCard">
+<div class="card">
   <div class="card-head"><h2>🎯 1. Sinyal Aktif</h2><span id="setupId">-</span></div>
   <div class="signal WAIT" id="signalVal">WAIT</div>
   <div id="activeDetail" style="font-size:14px;line-height:1.6">Belum ada trade gede yang lolos filter.</div>
@@ -61,7 +61,7 @@
   <div class="card-head"><h2>📊 2. Recent Trade - FUTURES</h2><span style="font-size:11px;color:#94a3b8">Kuning = Lolos Filter • Realtime 0.8s</span></div>
   <div class="grid2">
     <div><h3 style="font-size:13px;margin:8px 0">BYBIT PERP</h3><table class="trade-table"><thead><tr><th>Jam</th><th>Harga</th><th>Jumlah</th><th>Arah</th></tr></thead><tbody id="tradeBybit"></tbody></table></div>
-    <div><h3 style="font-size:13px;margin:8px 0">OKX SWAP</h3><table class="trade-table"><thead><tr><th>Jam</th><th>Harga</th><th>Jumlah</th><th>Arah</th></tr></thead><tbody id="tradeOkx"></tbody></table></div>
+    <div><h3 style="font-size:13px;margin:8px 0">OKX XAU SWAP</h3><table class="trade-table"><thead><tr><th>Jam</th><th>Harga</th><th>Jumlah</th><th>Arah</th></tr></thead><tbody id="tradeOkx"></tbody></table></div>
   </div>
 </div>
 <div class="card">
@@ -98,7 +98,7 @@ const API_URL = 'https://abelbot.onrender.com/api/signal';
 const BASE_URL = API_URL.replace('/api/signal','');
 let isLoading = false;
 async function testTelegram(){ try{ const r=await fetch(BASE_URL+'/api/test-telegram?t='+Date.now(),{cache:'no-store'}); const j=JSON.parse(await r.text()); alert('Telegram terkirim! Setup '+j.setup_id); load(); }catch(e){ alert('Gagal: '+e.message); } }
-async function testWs(){ try{ const r=await fetch(API_URL+'?t='+Date.now(),{cache:'no-store'}); const d=JSON.parse(await r.text()); alert('WS FUTURES\nBybit PERP: '+d.exchanges.bybit_trade+'\nOKX SWAP: '+d.exchanges.okx_trade+'\nXAUT: $'+(d.harga?.xaut||0)); }catch(e){ alert('Gagal: '+e.message); } }
+async function testWs(){ try{ const r=await fetch(API_URL+'?t='+Date.now(),{cache:'no-store'}); const d=JSON.parse(await r.text()); alert('WS FUTURES\nBybit PERP: '+d.exchanges.bybit_trade+'\nOKX XAU SWAP: '+d.exchanges.okx_trade+'\nXAUT: $'+(d.harga?.xaut||0)); }catch(e){ alert('Gagal: '+e.message); } }
 async function unlock(){ alert('Unlock gak kepake - Sinyal tanpa batas, layering ON.'); }
 function renderTrades(el, list, tradeMin){
   if(!list.length){ document.getElementById(el).innerHTML='<tr><td colspan="4" style="color:#64748b">Belum ada trade</td></tr>'; return; }
