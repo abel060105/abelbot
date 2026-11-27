@@ -1,6 +1,6 @@
-// ABEL BOT - FUTURES PERP - FIX FILTER BEDA EXCHANGE
-// BYBIT PERP: XAUTUSDT, min 3 XAUT | OKX XAU SWAP: XAU-USDT-SWAP, min 100 XAU
-// KENAPA BEDA? OKX itu pasar institusi, 1 trade = 138 oz = $500k. Bybit itu retail, 1 trade = 0.08 oz = $320.
+// ABEL BOT - FUTURES PERP - FILTER OKX 5000 + COMMAND SIZE
+// BYBIT: XAUTUSDT, Size Bybit 3 | OKX: XAU-USDT-SWAP, Size OKX 5000
+// COMMAND BARU: /sizebybit /sizeokx /status /help - /trade & /tradeokx UDAH DIHAPUS
 const express = require('express');
 const app = express();
 app.use(express.json());
@@ -17,8 +17,8 @@ const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
 const TELEGRAM_CHAT_IDS = (process.env.TELEGRAM_CHAT_IDS || TELEGRAM_CHAT_ID || '').split(',').map(s=>s.trim()).filter(Boolean);
 
-let TRADE_MIN = 3; // Buat BYBIT PERP
-let TRADE_MIN_OKX = 100; // Buat OKX XAU SWAP - beda kelas, jangan disamain!
+let TRADE_MIN = 3; // Size Bybit
+let TRADE_MIN_OKX = 5000; // Size OKX - FILTER 5000.000
 let SL_PIPS = 50;
 let TP_PIPS = 50;
 let CFG = { lot: 0.01, simbol: 'XAUUSD', isCent: false };
@@ -48,6 +48,7 @@ function generateSetupId(){
   return '#'+id;
 }
 function fmtWIB(ts){ return new Date(ts).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+function fmtSize(v){ return v.toFixed(3); } // Format x.000 - 5000.000
 
 async function sendTelegram(msg){
   if(!TELEGRAM_TOKEN || !TELEGRAM_CHAT_IDS.length) return;
@@ -62,57 +63,60 @@ async function sendTelegramTo(chatId, msg){
 async function setMyCommands(){
   if(!TELEGRAM_TOKEN) return;
   const commands=[
-    {command:'trade',description:'Ganti min Bybit, misal /trade 3'},
-    {command:'tradeokx',description:'Ganti min OKX, misal /tradeokx 100'},
-    {command:'status',description:'Liat trade min sekarang'},
-    {command:'help',description:'Liat command'},
+    {command:'sizebybit',description:'Size Bybit - misal /sizebybit 3'},
+    {command:'sizeokx',description:'Size OKX - misal /sizeokx 5000'},
+    {command:'status',description:'Status'},
+    {command:'help',description:'Help'},
   ];
   try{ await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/setMyCommands`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({commands})}); }catch(e){}
 }
 setMyCommands();
 
 function statusText(){
-  return `🤖 ABEL BOT\n\nTrade Min Bybit: ${TRADE_MIN} XAUT\nTrade Min OKX: ${TRADE_MIN_OKX} XAU\nSinyal Aktif: ${activeSignal ? activeSignal.signal+' '+activeSignal.size.toFixed(2)+' XAUT @ $'+activeSignal.price.toFixed(2)+' - '+activeSignal.source : 'WAIT - Belum ada trade gede'}\nXAUT: $${xautPrice?xautPrice.toFixed(2):'-'}\nMT5: ${MT5.connected?'Nyambung ✅':'Belum nyambung - RDP belum jalan'}\nTotal Sinyal Lolos: ${signalHistory.length}\n\nLayering: ON - Tanpa batas, tanpa cooldown\nBuy + Sell berlawanan tetep di-entry semua.`;
+  return `🤖 ABEL BOT\n\nSize Bybit: ${fmtSize(TRADE_MIN)} XAUT\nSize OKX: ${fmtSize(TRADE_MIN_OKX)} XAU\nSinyal Aktif: ${activeSignal ? activeSignal.signal+' '+fmtSize(activeSignal.size)+' XAUT @ $'+activeSignal.price.toFixed(2)+' - '+activeSignal.source : 'WAIT - Belum ada trade gede'}\nXAUT: $${xautPrice?xautPrice.toFixed(2):'-'}\nMT5: ${MT5.connected?'Nyambung ✅':'Belum nyambung - RDP belum jalan'}\nTotal Sinyal Lolos: ${signalHistory.length}\n\nLayering: ON - Tanpa batas, tanpa cooldown\nBuy + Sell berlawanan tetep di-entry semua.`;
 }
 
 async function handleTelegramCommand(chatId, textRaw){
   let text=String(textRaw||'').trim();
   let cv=convo[chatId];
-  if(cv && cv.step==='TRADE'){
+  if(cv && cv.step==='SIZEBYBIT'){
     let v=parseNum(text);
     if(isNaN(v)||v<=0){ await sendTelegramTo(chatId,`Ketik angka bro, contoh: 3`); return; }
     TRADE_MIN=v; delete convo[chatId];
-    await sendTelegramTo(chatId,`✅ Trade Min Bybit diganti ke ${v} XAUT\nOKX tetep ${TRADE_MIN_OKX} XAU.`);
+    await sendTelegramTo(chatId,`✅ Size Bybit diganti ke ${fmtSize(v)} XAUT\nSize OKX tetep ${fmtSize(TRADE_MIN_OKX)} XAU.`);
     return;
   }
-  if(cv && cv.step==='TRADEOKX'){
+  if(cv && cv.step==='SIZEOKX'){
     let v=parseNum(text);
-    if(isNaN(v)||v<=0){ await sendTelegramTo(chatId,`Ketik angka bro, contoh: 100`); return; }
+    if(isNaN(v)||v<=0){ await sendTelegramTo(chatId,`Ketik angka bro, contoh: 5000`); return; }
     TRADE_MIN_OKX=v; delete convo[chatId];
-    await sendTelegramTo(chatId,`✅ Trade Min OKX diganti ke ${v} XAU\nBybit tetep ${TRADE_MIN} XAUT.`);
+    await sendTelegramTo(chatId,`✅ Size OKX diganti ke ${fmtSize(v)} XAU\nSize Bybit tetep ${fmtSize(TRADE_MIN)} XAUT.`);
     return;
   }
   let m=text.match(/^\/?([a-z_]+)\s*(.*)$/i); if(!m) return;
   let cmd=m[1].toLowerCase(); let arg=(m[2]||'').trim();
-  if(cmd==='start'){ await sendTelegramTo(chatId,statusText()+`\n\nCommand: /trade /tradeokx /status /help`); return; }
-  if(cmd==='help'){ await sendTelegramTo(chatId,`📋 ABEL BOT\n\n/trade 3 - Ganti min Bybit (XAUT)\n/tradeokx 100 - Ganti min OKX (XAU)\n/status - Liat setting sekarang\n\nBybit = retail, 3 XAUT = $10k\nOKX = institusi, 100 XAU = $363k\nTanpa cooldown, tanpa batas, layering boleh.`); return; }
+  if(cmd==='start'){ await sendTelegramTo(chatId,statusText()+`\n\nCommand: Size bybit / Size okx / Status / Help`); return; }
+  if(cmd==='help'){ await sendTelegramTo(chatId,`📋 ABEL BOT\n\nSize bybit - /sizebybit 3 - Ganti Size Bybit\nSize okx - /sizeokx 5000 - Ganti Size OKX\nStatus - /status - Liat setting sekarang\nHelp - /help - Liat command\n\nBybit = retail, 3.000 = $10k\nOKX = institusi, 5000.000 = $18jt\nFormat OKX: x.000 - 100.000, 1000.000, 5000.000\nTanpa cooldown, tanpa batas, layering boleh.`); return; }
   if(cmd==='status'){ await sendTelegramTo(chatId,statusText()); return; }
-  if(cmd==='trade'){
-    if(!arg){ convo[chatId]={step:'TRADE'}; await sendTelegramTo(chatId,`Trade Min Bybit sekarang: ${TRADE_MIN} XAUT\n\nMau ganti ke berapa? Contoh: 3`); return; }
-    let v=parseNum(arg); if(isNaN(v)||v<=0){ await sendTelegramTo(chatId,`Contoh: /trade 3`); return; }
+  if(cmd==='sizebybit'){
+    if(!arg){ convo[chatId]={step:'SIZEBYBIT'}; await sendTelegramTo(chatId,`Size Bybit sekarang: ${fmtSize(TRADE_MIN)} XAUT\n\nMau ganti ke berapa? Contoh: 3`); return; }
+    let v=parseNum(arg); if(isNaN(v)||v<=0){ await sendTelegramTo(chatId,`Contoh: /sizebybit 3`); return; }
     TRADE_MIN=v;
-    await sendTelegramTo(chatId,`✅ Trade Min Bybit diganti ke ${v} XAUT`);
+    await sendTelegramTo(chatId,`✅ Size Bybit diganti ke ${fmtSize(v)} XAUT`);
     return;
   }
-  if(cmd==='tradeokx'){
-    if(!arg){ convo[chatId]={step:'TRADEOKX'}; await sendTelegramTo(chatId,`Trade Min OKX sekarang: ${TRADE_MIN_OKX} XAU\n\nMau ganti ke berapa? Contoh: 100`); return; }
-    let v=parseNum(arg); if(isNaN(v)||v<=0){ await sendTelegramTo(chatId,`Contoh: /tradeokx 100`); return; }
+  if(cmd==='sizeokx'){
+    if(!arg){ convo[chatId]={step:'SIZEOKX'}; await sendTelegramTo(chatId,`Size OKX sekarang: ${fmtSize(TRADE_MIN_OKX)} XAU\n\nMau ganti ke berapa? Contoh: 5000`); return; }
+    let v=parseNum(arg); if(isNaN(v)||v<=0){ await sendTelegramTo(chatId,`Contoh: /sizeokx 5000`); return; }
     TRADE_MIN_OKX=v;
-    await sendTelegramTo(chatId,`✅ Trade Min OKX diganti ke ${v} XAU`);
+    await sendTelegramTo(chatId,`✅ Size OKX diganti ke ${fmtSize(v)} XAU`);
     return;
   }
-  if(['jarak','size','betah','ratio'].includes(cmd)){ await sendTelegramTo(chatId,`Command /${cmd} udah dihapus bro. Sekarang cuma /trade dan /tradeokx.`); return; }
-  await sendTelegramTo(chatId,`Command /${cmd} gak aktif. Yang aktif:\n/trade 3\n/tradeokx 100\n/status`);
+  // Alias lama - biar gak error kalo lo masih ketik /trade
+  if(cmd==='trade'){ await sendTelegramTo(chatId,`Command /trade udah diganti bro.\nPake ini:\nSize bybit -> /sizebybit 3\nSize okx -> /sizeokx 5000`); return; }
+  if(cmd==='tradeokx'){ await sendTelegramTo(chatId,`Command /tradeokx udah diganti bro.\nPake ini:\nSize okx -> /sizeokx 5000`); return; }
+  if(['jarak','size','betah','ratio'].includes(cmd)){ await sendTelegramTo(chatId,`Command /${cmd} gak aktif. Yang aktif:\nSize bybit -> /sizebybit 3\nSize okx -> /sizeokx 5000\nStatus -> /status`); return; }
+  await sendTelegramTo(chatId,`Command /${cmd} gak aktif. Yang aktif:\nSize bybit -> /sizebybit 3\nSize okx -> /sizeokx 5000\nStatus -> /status`);
 }
 
 app.post('/webhook', async (req,res)=>{
@@ -156,11 +160,8 @@ async function handleTrade(source, price, size, side, tradeId, ts){
   let t = { id: tradeId, price, size, side: side==='BUY'?'BUY':'SELL', source, time: ts||Date.now(), time_str: fmtWIB(ts||Date.now()) };
   if(source==='BYBIT PERP') pushTrade(recentTradesBybit, t);
   else pushTrade(recentTradesOkx, t);
-
-  // FILTER BEDA PER EXCHANGE - INI KUNCINYA
   let minForThis = source==='BYBIT PERP' ? TRADE_MIN : TRADE_MIN_OKX;
   if(size < minForThis) return;
-
   let setupId = generateSetupId();
   let signal = side==='BUY' ? 'BUY' : 'SELL';
   let sl = signal==='BUY' ? price - (SL_PIPS/10) : price + (SL_PIPS/10);
@@ -171,7 +172,7 @@ async function handleTrade(source, price, size, side, tradeId, ts){
   if(signalHistory.length>200) signalHistory=signalHistory.slice(0,200);
   lastUpdate = Date.now();
   let usdValue = (size*price).toLocaleString('en-US',{maximumFractionDigits:0});
-  await sendTelegram(`🎯 ${signal} NOW - Setup ${setupId} (TRADE GEDE FUTURES)\n\nTrade: ${side} ${size.toFixed(2)} XAUT @ $${price.toFixed(2)} - ${source}\nNilai: $${usdValue}\nJam: ${t.time_str} WIB\nFilter: >= ${minForThis} XAUT - LOLOS ✅\n\nEntry: $${price.toFixed(2)}\nSL: $${sl.toFixed(2)} (-${SL_PIPS} pips)\nTP: $${tp.toFixed(2)} (+${TP_PIPS} pips)\n\nLayering ON - Entry aja, risk kecil.\nHOLD BAGI YANG MAMPU🔥`);
+  await sendTelegram(`🎯 ${signal} NOW - Setup ${setupId} (TRADE GEDE FUTURES)\n\nTrade: ${side} ${fmtSize(size)} XAUT @ $${price.toFixed(2)} - ${source}\nNilai: $${usdValue}\nJam: ${t.time_str} WIB\nFilter: >= ${fmtSize(minForThis)} XAUT - LOLOS ✅\n\nEntry: $${price.toFixed(2)}\nSL: $${sl.toFixed(2)} (-${SL_PIPS} pips)\nTP: $${tp.toFixed(2)} (+${TP_PIPS} pips)\n\nLayering ON - Entry aja, risk kecil.\nHOLD BAGI YANG MAMPU🔥`);
 }
 
 let wsBybitTrade=null;
@@ -264,7 +265,7 @@ async function fetchFarWalls(){
 fetchFarWalls();
 setInterval(fetchFarWalls, 60000);
 
-app.get('/', (req,res)=> res.send('ABEL BOT OK - /api/signal - FUTURES PERP - Bybit Min '+TRADE_MIN+' OKX Min '+TRADE_MIN_OKX));
+app.get('/', (req,res)=> res.send('ABEL BOT OK - /api/signal - FUTURES PERP - Size Bybit '+TRADE_MIN+' Size OKX '+TRADE_MIN_OKX));
 app.get('/api/signal', (req,res)=>{
   res.set('Cache-Control','no-store');
   res.json({
@@ -295,5 +296,5 @@ app.post('/api/mt5/price', (req,res)=>{
 });
 app.get('/api/mt5/price', (req,res)=>{ res.json({ok:true, connected: MT5.connected, price: MT5.lastPrice, bid: MT5.lastBid, ask: MT5.lastAsk, balance: MT5.balance, equity: MT5.equity, positions: MT5.positions, last_seen: MT5.lastSeen}); });
 app.get('/api/history', (req,res)=>{ res.json({ history: signalHistory, total: signalHistory.length, uptimeStart }); });
-app.get('/api/test-telegram', async (req,res)=>{ let sid=generateSetupId(); await sendTelegram(`🎯 BUY NOW - Setup ${sid} (TRADE GEDE FUTURES)\n\nTrade: BUY 150.00 XAUT @ $3637.20 - OKX XAU SWAP\nNilai: $545,580\nFilter: >= ${TRADE_MIN_OKX} XAUT - LOLOS ✅\n\nEntry: $3637.20\nSL: $3632.20 (-50 pips)\nTP: $3642.20 (+50 pips)\n\nLayering ON.`); res.json({ok:true, setup_id:sid}); });
-app.listen(PORT, ()=> console.log('ABEL BOT jalan di port '+PORT+' - FUTURES PERP - Bybit Min '+TRADE_MIN+' OKX Min '+TRADE_MIN_OKX));
+app.get('/api/test-telegram', async (req,res)=>{ let sid=generateSetupId(); await sendTelegram(`🎯 BUY NOW - Setup ${sid} (TRADE GEDE FUTURES)\n\nTrade: BUY 5000.000 XAUT @ $3636.50 - OKX XAU SWAP\nNilai: $18,182,500\nFilter: >= 5000.000 XAUT - LOLOS ✅\n\nEntry: $3636.50\nSL: $3631.50 (-50 pips)\nTP: $3641.50 (+50 pips)\n\nLayering ON.`); res.json({ok:true, setup_id:sid}); });
+app.listen(PORT, ()=> console.log('ABEL BOT jalan di port '+PORT+' - FUTURES PERP - Size Bybit '+TRADE_MIN+' Size OKX '+TRADE_MIN_OKX));
