@@ -37,6 +37,7 @@
   .trade-table th{color:#94a3b8;font-size:11px;text-align:left;padding:6px;border-bottom:1px solid #334155}
   .trade-table td{padding:6px;border-bottom:1px solid #1e293b}
   .trade-table tr.lolos{background:rgba(250,204,21,.12)}
+  .trade-table tr.highlight td{color:#facc15;font-weight:900}
   .badge{font-size:11px;font-weight:900;padding:4px 8px;border-radius:20px}
   .badge.buy{background:#14532d;color:#00e676}.badge.sell{background:#7f1d1d;color:#ff5252}
   .row{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #1e293b}
@@ -46,6 +47,7 @@
   .empty{color:#64748b;font-size:12px;padding:10px 0}
   .hist-item{border-bottom:1px solid #1e293b;padding:10px 0;font-size:13px}
   .agg-box{background:#0b1118;border:1px solid #334155;border-radius:10px;padding:10px;margin-top:10px;font-size:13px;line-height:1.6}
+  .guide-note{background:#0b1118;border:1px solid #facc15;border-radius:10px;padding:10px;margin-top:10px;font-size:12px;line-height:1.6;color:#fde68a}
   @media(max-width:700px){.grid2{grid-template-columns:1fr}.signal{font-size:38px}}
 </style>
 </head>
@@ -55,7 +57,7 @@
   <div class="card-head"><h2>🎯 1. Sinyal Aktif</h2><span id="setupId">-</span></div>
   <div class="signal WAIT" id="signalVal">WAIT</div>
   <div id="activeDetail" style="font-size:14px;line-height:1.6">Belum ada trade gede yang lolos filter.</div>
-  <div style="margin-top:10px;font-size:13px;color:#94a3b8">Size Bybit: <b id="configTrade" style="color:#facc15">3.000 XAUT</b> • Size OKX Delta: <b id="configTradeOkx" style="color:#facc15">5000.000 XAU</b> • FUTURES PERP • Layering ON • Tanpa cooldown</div>
+  <div style="margin-top:10px;font-size:13px;color:#94a3b8">Size Bybit: <b id="configTrade" style="color:#facc15">3.000 XAUT</b> • Size OKX Delta: <b id="configTradeOkx" style="color:#facc15">50000.000 XAU</b> • Agg: <b id="configAgg" style="color:#facc15">5s</b> • Sinyal: <b id="configSinyal" style="color:#facc15">Bybit ON | OKX ON</b> • FUTURES PERP • Layering ON • Tanpa cooldown</div>
   <div class="harga-box"><div class="label">Harga XAUT FUTURES (Recent Trade)</div><div class="val" id="hargaXaut">-</div><div class="label" id="hargaMT5Sub">MT5 -</div></div>
   <div class="agg-box" id="aggBox">OKX Delta 5s: lagi ngumpulin...</div>
 </div>
@@ -63,12 +65,29 @@
   <div class="card-head"><h2>📊 2. Recent Trade - FUTURES</h2><span style="font-size:11px;color:#94a3b8">Bybit kuning = lolos • OKX gak kuning per-trade, sinyalnya dari Delta</span></div>
   <div class="grid2">
     <div><h3 style="font-size:13px;margin:8px 0">BYBIT PERP - Per-Trade</h3><table class="trade-table"><thead><tr><th>Jam</th><th>Harga</th><th>Jumlah</th><th>Arah</th></tr></thead><tbody id="tradeBybit"></tbody></table></div>
-    <div><h3 style="font-size:13px;margin:8px 0">OKX XAU SWAP - Agregasi 5s</h3><table class="trade-table"><thead><tr><th>Jam</th><th>Harga</th><th>Jumlah</th><th>Arah</th></tr></thead><tbody id="tradeOkx"></tbody></table></div>
+    <div><h3 style="font-size:13px;margin:8px 0">OKX XAU SWAP - Agregasi</h3><table class="trade-table"><thead><tr><th>Jam</th><th>Harga</th><th>Jumlah</th><th>Arah</th></tr></thead><tbody id="tradeOkx"></tbody></table></div>
   </div>
 </div>
 <div class="card">
+  <div class="card-head"><h2>💰 2B. Panduan Baca Nilai Dollar</h2><span style="font-size:11px;color:#94a3b8">Harga live • Rumus: Size x Harga = Nilai $</span></div>
+  <div style="font-size:12px;color:#94a3b8">Kalo di Recent Trade lo liat <b style="color:#fff">0.500</b>, tinggal liat tabel ini, itu nilainya berapa $. Gak perlu ngitung lagi.</div>
+  <div class="grid2">
+    <div>
+      <h3 style="font-size:13px;margin:10px 0">BYBIT PERP - Size Kecil (Retail)</h3>
+      <table class="trade-table"><thead><tr><th>Size</th><th>Nilai $</th><th>Artinya</th></tr></thead><tbody id="guideBybit"></tbody></table>
+      <div style="font-size:11px;color:#64748b;margin-top:6px">Bybit itu retail. 1.000 XAUT aja udah $3.6rb, udah gede buat Bybit.</div>
+    </div>
+    <div>
+      <h3 style="font-size:13px;margin:10px 0">OKX XAU SWAP - Size Gede (Institusi)</h3>
+      <table class="trade-table"><thead><tr><th>Size / Delta</th><th>Nilai $</th><th>Artinya</th></tr></thead><tbody id="guideOkx"></tbody></table>
+      <div style="font-size:11px;color:#64748b;margin-top:6px">OKX itu institusi. 1.000 aja udah $3.6jt. Filter sinyal OKX sekarang 50.000 = $181jt.</div>
+    </div>
+  </div>
+  <div class="guide-note">💡 Cara baca cepat:<br>• Bybit <b>0.100 = receh</b>, <b>1.000 = udah lumayan</b>, <b>3.000 = filter sinyal</b><br>• OKX <b>1.000 = $3.6jt</b>, <b>100.000 = $363jt</b>, <b>5000.000 = $18.1jt</b><br>• Kalo Delta OKX 50.000 = <b id="guideDelta50k">-</b>, itu baru sinyal.</div>
+</div>
+<div class="card">
   <div class="card-head"><h2>📜 3. History Sinyal</h2><span id="historyCount" style="font-size:11px;color:#94a3b8">0 sinyal</span></div>
-  <div style="font-size:12px;color:#94a3b8">Bybit = per-trade >= Size Bybit. OKX = Delta 5s >= Size OKX. Tanpa winrate.</div>
+  <div style="font-size:12px;color:#94a3b8">Bybit = per-trade >= Size Bybit. OKX = Delta Agg >= Size OKX Delta. Tanpa winrate.</div>
   <div id="historyBody"></div>
 </div>
 <div class="card">
@@ -84,9 +103,12 @@
     <div>Market: <b>FUTURES PERP</b></div>
     <div>Size Bybit: <b id="dashTrade">-</b></div>
     <div>Size OKX Delta: <b id="dashTradeOkx">-</b></div>
+    <div>Agregasi OKX: <b id="dashAgg">-</b></div>
+    <div>Sinyal Pakai: <b id="dashSinyal">-</b></div>
     <div>XAUT: <b id="dashXaut">-</b></div>
     <div>MT5: <b id="dashMt5">-</b></div>
     <div>Status WS: <b id="dashWs">-</b></div>
+    <div>Rekap PDF: <b>Per 100 sinyal -> Channel</b></div>
   </div>
   <div class="btn-center">
     <button class="btn-dark" onclick="testTelegram()">Tes Telegram</button>
@@ -100,9 +122,36 @@
 const API_URL = 'https://abelbot.onrender.com/api/signal';
 const BASE_URL = API_URL.replace('/api/signal','');
 let isLoading = false;
-async function testTelegram(){ try{ const r=await fetch(BASE_URL+'/api/test-telegram?t='+Date.now(),{cache:'no-store'}); const j=JSON.parse(await r.text()); alert('Telegram terkirim! Setup '+j.setup_id); load(); }catch(e){ alert('Gagal: '+e.message); } }
+async function testTelegram(){ try{ const r=await fetch(BASE_URL+'/api/test-telegram?t='+Date.now(),{cache:'no-store'}); const j=JSON.parse(await r.text()); alert('Telegram terkirim! Setup '+j.setup_id+' (ke Pribadi + Channel)'); load(); }catch(e){ alert('Gagal: '+e.message); } }
 async function testWs(){ try{ const r=await fetch(API_URL+'?t='+Date.now(),{cache:'no-store'}); const d=JSON.parse(await r.text()); alert('WS FUTURES\nBybit PERP: '+d.exchanges.bybit_trade+'\nOKX XAU SWAP: '+d.exchanges.okx_trade+'\nXAUT: $'+(d.harga?.xaut||0)); }catch(e){ alert('Gagal: '+e.message); } }
 async function unlock(){ alert('Unlock gak kepake - Sinyal tanpa batas, layering ON.'); }
+function fmtUSD(v){ return '$' + Math.round(v).toLocaleString('en-US'); }
+function renderGuide(price){
+  if(!price) return;
+  let bybitRows = [
+    {size:0.1, label:'Receh, retail kecil'},
+    {size:0.5, label:'Retail biasa'},
+    {size:1.0, label:'Udah lumayan di Bybit'},
+    {size:3.0, label:'Filter sinyal Bybit'},
+  ];
+  document.getElementById('guideBybit').innerHTML = bybitRows.map(r=>{
+    return `<tr class="${r.size===3?'highlight':''}"><td><b>${r.size.toFixed(3)}</b></td><td><b>${fmtUSD(r.size*price)}</b></td><td>${r.label}</td></tr>`;
+  }).join('');
+  let okxRows = [
+    {size:1, label:'Kecil di OKX'},
+    {size:10, label:'Menengah'},
+    {size:100, label:'Gede'},
+    {size:500, label:'Whale kecil'},
+    {size:1000, label:'Whale'},
+    {size:5000, label:'Monster'},
+    {size:50000, label:'Filter sinyal OKX Delta'},
+  ];
+  document.getElementById('guideOkx').innerHTML = okxRows.map(r=>{
+    return `<tr class="${r.size===50000?'highlight':''}"><td><b>${r.size.toFixed(3)}</b></td><td><b>${fmtUSD(r.size*price)}</b></td><td>${r.label}</td></tr>`;
+  }).join('');
+  let el = document.getElementById('guideDelta50k');
+  if(el) el.innerText = fmtUSD(50000*price);
+}
 function renderTrades(el, list, tradeMin, useStar){
   if(!list.length){ document.getElementById(el).innerHTML='<tr><td colspan="4" style="color:#64748b">Belum ada trade</td></tr>'; return; }
   document.getElementById(el).innerHTML=list.slice(0,20).map(t=>{
@@ -117,42 +166,48 @@ async function load(){
   try{
     const r=await fetch(API_URL+'?t='+Date.now(),{cache:'no-store'});
     const d=JSON.parse(await r.text());
-    const cfg=d.config||{}; const tradeMin=cfg.trade_min ?? 3; const tradeMinOkx=cfg.trade_min_okx ?? 5000; const aggSec=cfg.okx_agg_sec ?? 5;
+    const cfg=d.config||{}; const tradeMin=cfg.trade_min ?? 3; const tradeMinOkx=cfg.trade_min_okx ?? 50000; const aggSec=cfg.okx_agg_sec ?? 5;
     const price=d.harga?.xaut || 0; const mt5Price=d.harga?.mt5 || 0;
+    let sinyalTxt = `Bybit ${cfg.signal_bybit_on?'ON':'OFF'} | OKX ${cfg.signal_okx_on?'ON':'OFF'}`;
     document.getElementById('configTrade').innerText=tradeMin.toFixed(3)+' XAUT';
     document.getElementById('configTradeOkx').innerText=tradeMinOkx.toFixed(3)+' XAU';
+    document.getElementById('configAgg').innerText=aggSec+'s';
+    document.getElementById('configSinyal').innerText=sinyalTxt;
     document.getElementById('dashTrade').innerText=tradeMin.toFixed(3)+' XAUT';
-    document.getElementById('dashTradeOkx').innerText=tradeMinOkx.toFixed(3)+' XAU (Delta '+aggSec+'s)';
+    document.getElementById('dashTradeOkx').innerText=tradeMinOkx.toFixed(3)+' XAU (Delta)';
+    document.getElementById('dashAgg').innerText=aggSec+'s';
+    document.getElementById('dashSinyal').innerText=sinyalTxt;
     document.getElementById('dashXaut').innerText=price?'$'+price.toFixed(2):'-';
     document.getElementById('dashMt5').innerText=mt5Price?'$'+mt5Price.toFixed(2)+' (RDP)':'Belum nyambung - RDP belum jalan';
     document.getElementById('dashWs').innerText=(d.exchanges?.bybit_trade||'-')+' / '+(d.exchanges?.okx_trade||'-');
     document.getElementById('hargaXaut').innerText=price?'$'+price.toFixed(2):'-';
     document.getElementById('hargaMT5Sub').innerText='MT5 '+(mt5Price?'$'+mt5Price.toFixed(2):'Belum nyambung');
+    renderGuide(price);
     let a=d.active_signal;
     let sigEl=document.getElementById('signalVal');
     if(a){
       sigEl.innerText=a.signal; sigEl.className='signal '+a.signal;
       document.getElementById('setupId').innerText=a.setup_id||'-';
-      document.getElementById('activeDetail').innerHTML=`<b>${a.signal} ${a.size.toFixed(3)} XAUT @ $${a.price.toFixed(2)}</b><br>Source: ${a.source} • Jam: ${a.time_str} WIB • Filter: >= ${(a.trade_min_used||tradeMin).toFixed(3)} - LOLOS ✅<br><span style="color:#94a3b8;font-size:12px">${a.agg||'FUTURES PERP • Layering ON'}</span>`;
+      document.getElementById('activeDetail').innerHTML=`<b>${a.signal} ${a.size.toFixed(3)} XAUT @ $${a.price.toFixed(2)}</b><br>Source: ${a.source} • Jam: ${a.time_str} WIB • Filter: >= ${(a.trade_min_used||tradeMin).toFixed(3)} - LOLOS ✅<br>Nilai: <b>${fmtUSD(a.size*a.price)}</b><br><span style="color:#94a3b8;font-size:12px">${a.agg||'FUTURES PERP • Layering ON'}</span>`;
     } else {
       sigEl.innerText='WAIT'; sigEl.className='signal WAIT';
       document.getElementById('setupId').innerText='-';
       document.getElementById('activeDetail').innerText='Belum ada trade gede yang lolos filter.';
     }
     let agg=d.okx_agg;
-    if(agg){ document.getElementById('aggBox').innerHTML=`<b>OKX Delta ${agg.window_sec}s (live):</b> Buy ${agg.buy.toFixed(3)} - Sell ${agg.sell.toFixed(3)} = <b style="color:${agg.delta>=0?'#00e676':'#ff5252'}">${agg.delta>=0?'+':''}${agg.delta.toFixed(3)}</b> • ${agg.count} trade • Threshold: ${agg.threshold.toFixed(3)}`; }
+    if(agg){ document.getElementById('aggBox').innerHTML=`<b>OKX Delta ${agg.window_sec}s (live):</b> Buy ${agg.buy.toFixed(3)} - Sell ${agg.sell.toFixed(3)} = <b style="color:${agg.delta>=0?'#00e676':'#ff5252'}">${agg.delta>=0?'+':''}${agg.delta.toFixed(3)}</b> • ${agg.count} trade • Threshold: ${agg.threshold.toFixed(3)} • Nilai Delta: <b>${fmtUSD(Math.abs(agg.delta)*price)}</b>`; }
     renderTrades('tradeBybit', d.recent_bybit||[], tradeMin, true);
     renderTrades('tradeOkx', d.recent_okx||[], tradeMinOkx, false);
     let hist=d.history||[];
     document.getElementById('historyCount').innerText=hist.length+' sinyal';
     document.getElementById('historyBody').innerHTML=hist.length ? hist.slice(0,30).map(h=>{
-      return `<div class="hist-item"><span class="badge ${h.signal==='BUY'?'buy':'sell'}">${h.signal}</span> <b>${h.size.toFixed(3)} XAUT @ $${h.price.toFixed(2)}</b> - ${h.source} - ${h.time_str} WIB - Setup ${h.setup_id||''}<br><small style="color:#94a3b8">${h.agg||''}</small></div>`;
+      return `<div class="hist-item"><span class="badge ${h.signal==='BUY'?'buy':'sell'}">${h.signal}</span> <b>${h.size.toFixed(3)} XAUT @ $${h.price.toFixed(2)}</b> - ${h.source} - ${h.time_str} WIB - Setup ${h.setup_id||''} - Nilai: <b>${fmtUSD(h.size*h.price)}</b><br><small style="color:#94a3b8">${h.agg||''}</small></div>`;
     }).join('') : '<div class="empty">Belum ada history - belum ada trade yang lolos filter.</div>';
     let far=d.wallsFar||[];
     let renderFar=(el, arr)=>{ document.getElementById(el).innerHTML=arr.length?arr.map(l=>`<div class="row"><div class="left ${l.side==='BID'?'BID':'ASK'}">${l.side} $${l.price.toFixed(2)}</div><div class="right">${l.size.toFixed(3)} XAUT<br><small>${l.sources}</small></div></div>`).join(''):'<div class="empty">Lagi loading orderbook 200 level...</div>'; };
     renderFar('bidsFar', far.filter(w=>w.side==='BID').sort((a,b)=>b.size-a.size));
     renderFar('asksFar', far.filter(w=>w.side==='ASK').sort((a,b)=>b.size-a.size));
-    document.getElementById('status').innerText='Update: '+new Date().toLocaleTimeString('id-ID')+' • Realtime 0.8s • FUTURES PERP • Size Bybit '+tradeMin.toFixed(3)+' • Size OKX Delta '+tradeMinOkx.toFixed(3);
+    document.getElementById('status').innerText='Update: '+new Date().toLocaleTimeString('id-ID')+' • Realtime 0.8s • FUTURES PERP • Size Bybit '+tradeMin.toFixed(3)+' • Delta OKX '+tradeMinOkx.toFixed(3)+' • Agg '+aggSec+'s';
   }catch(e){ document.getElementById('status').innerText='Gagal load: '+e.message; }
   isLoading = false;
 }
